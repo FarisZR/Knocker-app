@@ -2,16 +2,14 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useMemo } from "react";
-import {
-  FlatList,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { ProfileCard } from "@/components/ProfileCard";
 import { Snackbar } from "@/components/Snackbar";
 import { useColors } from "@/hooks/useColors";
@@ -61,21 +59,27 @@ export default function HomeScreen() {
         { backgroundColor: colors.background, paddingTop: topPad },
       ]}
     >
-      <View style={styles.header}>
+      <Animated.View
+        entering={FadeIn.duration(300)}
+        style={styles.header}
+      >
         <Text style={[styles.kicker, { color: colors.mutedForeground }]}>
           {profiles.length === 0
             ? "No profiles yet"
             : `${profiles.length} profile${profiles.length === 1 ? "" : "s"} · ${activeCount} active`}
         </Text>
         <Text style={[styles.title, { color: colors.foreground }]}>Knocker</Text>
-      </View>
+      </Animated.View>
 
       {!loaded ? (
         <View style={styles.empty}>
           <Text style={{ color: colors.mutedForeground }}>Loading…</Text>
         </View>
       ) : profiles.length === 0 ? (
-        <View style={styles.empty}>
+        <Animated.View
+          entering={FadeIn.duration(400).delay(100)}
+          style={styles.empty}
+        >
           <Feather name="zap" size={48} color={colors.primary} />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
             Add your first profile
@@ -84,12 +88,10 @@ export default function HomeScreen() {
             Set the endpoint URL and API key for your Caddy Knocker server.
             We'll handle the rest.
           </Text>
-          <Pressable
+          <AnimatedPressable
             onPress={onNew}
-            style={({ pressed }) => [
-              styles.emptyCta,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
-            ]}
+            scaleTo={0.94}
+            style={[styles.emptyCta, { backgroundColor: colors.primary }]}
           >
             <Feather name="plus" size={18} color={colors.primaryForeground} />
             <Text
@@ -97,13 +99,15 @@ export default function HomeScreen() {
             >
               New profile
             </Text>
-          </Pressable>
-        </View>
+          </AnimatedPressable>
+        </Animated.View>
       ) : (
         <FlatList
           data={profiles}
           keyExtractor={(p) => p.id}
-          renderItem={({ item }) => <ProfileCard profile={item} />}
+          renderItem={({ item, index }) => (
+            <ProfileCard profile={item} index={index} />
+          )}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -116,70 +120,84 @@ export default function HomeScreen() {
 
       {profiles.length > 0 ? (
         <View
-          style={[
-            styles.fabStack,
-            { right: 16, bottom: bottomPad + 16 },
-          ]}
+          style={[styles.fabStack, { right: 16, bottom: bottomPad + 16 }]}
           pointerEvents="box-none"
         >
-          <Pressable
-            onPress={onNew}
-            style={({ pressed }) => [
-              styles.fabSecondary,
-              {
-                borderColor: colors.border,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
+          <Animated.View
+            entering={FadeInDown.delay(60).duration(280).springify().damping(16)}
           >
-            <Feather name="plus" size={16} color={colors.onSurfaceVariant} />
-            <Text
-              style={[styles.fabSecondaryText, { color: colors.onSurfaceVariant }]}
+            <AnimatedPressable
+              onPress={onNew}
+              scaleTo={0.93}
+              style={[styles.fabSecondary, { borderColor: colors.border }]}
             >
-              New profile
-            </Text>
-          </Pressable>
-
-          {pinned.map((p) => (
-            <Pressable
-              key={p.id}
-              onPress={() => onKnockPinned(p.id)}
-              style={({ pressed }) => [
-                styles.fabPinned,
-                {
-                  backgroundColor: colors.primaryContainer,
-                  opacity: pressed ? 0.85 : 1,
-                },
-              ]}
-            >
-              <Feather name="bookmark" size={13} color={colors.onPrimaryContainer} />
-              <Feather name="zap" size={16} color={colors.onPrimaryContainer} />
+              <Feather name="plus" size={16} color={colors.onSurfaceVariant} />
               <Text
-                style={[styles.fabPinnedText, { color: colors.onPrimaryContainer }]}
-                numberOfLines={1}
+                style={[styles.fabSecondaryText, { color: colors.onSurfaceVariant }]}
               >
-                Knock {p.name || "profile"}
+                New profile
               </Text>
-            </Pressable>
+            </AnimatedPressable>
+          </Animated.View>
+
+          {pinned.map((p, i) => (
+            <Animated.View
+              key={p.id}
+              entering={FadeInDown.delay(100 + i * 60)
+                .duration(300)
+                .springify()
+                .damping(16)}
+            >
+              <AnimatedPressable
+                onPress={() => onKnockPinned(p.id)}
+                scaleTo={0.92}
+                style={[
+                  styles.fabPinned,
+                  { backgroundColor: colors.primaryContainer },
+                ]}
+              >
+                <Feather
+                  name="bookmark"
+                  size={13}
+                  color={colors.onPrimaryContainer}
+                />
+                <Feather
+                  name="zap"
+                  size={16}
+                  color={colors.onPrimaryContainer}
+                />
+                <Text
+                  style={[
+                    styles.fabPinnedText,
+                    { color: colors.onPrimaryContainer },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Knock {p.name || "profile"}
+                </Text>
+              </AnimatedPressable>
+            </Animated.View>
           ))}
 
-          <Pressable
-            onPress={onKnockAll}
-            style={({ pressed }) => [
-              styles.fabPrimary,
-              {
-                backgroundColor: colors.primary,
-                opacity: pressed ? 0.85 : 1,
-              },
-            ]}
+          <Animated.View
+            entering={FadeInDown.delay(140 + pinned.length * 60)
+              .duration(320)
+              .springify()
+              .damping(15)}
           >
-            <Feather name="zap" size={22} color={colors.primaryForeground} />
-            <Text
-              style={[styles.fabPrimaryText, { color: colors.primaryForeground }]}
+            <AnimatedPressable
+              onPress={onKnockAll}
+              scaleTo={0.94}
+              style={[styles.fabPrimary, { backgroundColor: colors.primary }]}
             >
-              Knock all
-            </Text>
-          </Pressable>
+              <Feather name="zap" size={22} color={colors.primaryForeground} />
+              <Text
+                style={[styles.fabPrimaryText, { color: colors.primaryForeground }]}
+              >
+                Knock all
+              </Text>
+            </AnimatedPressable>
+          </Animated.View>
         </View>
       ) : null}
 

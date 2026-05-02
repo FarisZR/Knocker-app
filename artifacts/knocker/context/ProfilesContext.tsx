@@ -80,12 +80,16 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           whitelistedEntry: result.whitelistedEntry,
           expiresAt: result.expiresAt,
         });
+        const minutes = Math.round(result.expiresInSeconds / 60);
+        const baseDetail = result.whitelistedEntry
+          ? `${result.whitelistedEntry} · ${minutes}m`
+          : `${minutes}m`;
         showSnackbar({
           text: `Knocked ${profile.name || "profile"}`,
-          detail: result.whitelistedEntry
-            ? `${result.whitelistedEntry} · ${Math.round(result.expiresInSeconds / 60)}m`
-            : undefined,
-          tone: "success",
+          detail: result.ttlCapped
+            ? `${baseDetail} · TTL capped by server`
+            : baseDetail,
+          tone: result.ttlCapped ? "info" : "success",
         });
       } else {
         await updateOne(id, {
@@ -136,17 +140,26 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     await persist(next);
     const successes = settled.filter((s) => s.r.ok).length;
     const failures = settled.length - successes;
+    const cappedCount = settled.filter((s) => s.r.ok && s.r.ttlCapped).length;
     const failedNames = settled
       .filter((s) => !s.r.ok)
       .map((s) => s.p.name || "unnamed")
       .join(", ");
+    const detailParts: string[] = [];
+    if (failures > 0) {
+      detailParts.push(
+        `${failures} failed${failedNames ? ` · ${failedNames}` : ""}`,
+      );
+    }
+    if (cappedCount > 0) {
+      detailParts.push(
+        `${cappedCount} TTL capped by server`,
+      );
+    }
     showSnackbar({
       text: `Knocked ${successes} profile${successes === 1 ? "" : "s"}`,
-      detail:
-        failures > 0
-          ? `${failures} failed${failedNames ? ` · ${failedNames}` : ""}`
-          : undefined,
-      tone: failures > 0 ? "error" : "success",
+      detail: detailParts.length > 0 ? detailParts.join(" · ") : undefined,
+      tone: failures > 0 ? "error" : cappedCount > 0 ? "info" : "success",
       retry:
         failures > 0
           ? () => {

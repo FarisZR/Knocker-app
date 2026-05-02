@@ -2,14 +2,25 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  FadeInDown,
+  LinearTransition,
+} from "react-native-reanimated";
 
+import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
 import { formatCountdown, formatHostname } from "@/lib/format";
 import type { Profile } from "@/lib/profiles";
 
-export function ProfileCard({ profile }: { profile: Profile }) {
+export function ProfileCard({
+  profile,
+  index = 0,
+}: {
+  profile: Profile;
+  index?: number;
+}) {
   const colors = useColors();
   const { knockOne } = useProfiles();
   const [now, setNow] = useState(Date.now());
@@ -40,88 +51,97 @@ export function ProfileCard({ profile }: { profile: Profile }) {
   };
 
   const onOpen = () => router.push(`/profile/${profile.id}`);
+  const disabled = !profile.endpointUrl || !profile.apiKey;
 
   return (
-    <Pressable
-      onPress={onOpen}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
-      ]}
+    <Animated.View
+      entering={FadeInDown.delay(index * 40)
+        .duration(300)
+        .springify()
+        .damping(18)}
+      layout={LinearTransition.springify().damping(20)}
     >
-      <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <Text
-            style={[styles.title, { color: colors.foreground }]}
-            numberOfLines={1}
-          >
-            {profile.name || "Untitled profile"}
-          </Text>
-          {profile.pinnedToHome ? (
-            <Feather name="bookmark" size={11} color={colors.primary} />
-          ) : null}
-          {profile.autoRenew ? (
-            <Feather name="zap" size={11} color={colors.primary} />
-          ) : null}
-        </View>
-        <View style={styles.metaRow}>
-          <Feather name="globe" size={10} color={colors.mutedForeground} />
-          <Text
-            style={[styles.meta, { color: colors.mutedForeground }]}
-            numberOfLines={1}
-          >
-            {formatHostname(profile.endpointUrl) || "no endpoint"}
-          </Text>
-        </View>
-        <View style={styles.statusRow}>
-          {isActive ? (
-            <>
-              <Feather name="check-circle" size={13} color={colors.success} />
-              <Text style={[styles.statusText, { color: colors.success }]}>
-                Whitelisted
-              </Text>
-              <Text style={[styles.dot, { color: colors.border }]}>·</Text>
-              <Text style={[styles.statusText, { color: colors.onSurfaceVariant }]}>
-                {formatCountdown(profile.expiresAt, now)}
-              </Text>
-            </>
-          ) : isError ? (
-            <>
-              <Feather name="alert-circle" size={13} color={colors.destructive} />
-              <Text
-                style={[styles.statusText, { color: colors.destructive }]}
-                numberOfLines={1}
-              >
-                {profile.lastError || "Failed"}
-              </Text>
-            </>
-          ) : (
-            <>
-              <Feather name="clock" size={13} color={colors.mutedForeground} />
-              <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-                Idle
-              </Text>
-            </>
-          )}
-        </View>
-      </View>
-
-      <Pressable
-        onPress={onKnock}
-        disabled={knocking || !profile.endpointUrl || !profile.apiKey}
-        hitSlop={8}
-        style={({ pressed }) => [
-          styles.knockBtn,
-          {
-            backgroundColor: colors.primary,
-            opacity:
-              !profile.endpointUrl || !profile.apiKey ? 0.4 : pressed ? 0.7 : 1,
-          },
-        ]}
+      <AnimatedPressable
+        onPress={onOpen}
+        scaleTo={0.98}
+        style={[styles.card, { backgroundColor: colors.surface }]}
       >
-        <Feather name="zap" size={20} color={colors.primaryForeground} />
-      </Pressable>
-    </Pressable>
+        <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <Text
+              style={[styles.title, { color: colors.foreground }]}
+              numberOfLines={1}
+            >
+              {profile.name || "Untitled profile"}
+            </Text>
+            {profile.pinnedToHome ? (
+              <Feather name="bookmark" size={11} color={colors.primary} />
+            ) : null}
+            {profile.autoRenew ? (
+              <Feather name="zap" size={11} color={colors.primary} />
+            ) : null}
+          </View>
+          <View style={styles.metaRow}>
+            <Feather name="globe" size={10} color={colors.mutedForeground} />
+            <Text
+              style={[styles.meta, { color: colors.mutedForeground }]}
+              numberOfLines={1}
+            >
+              {formatHostname(profile.endpointUrl) || "no endpoint"}
+            </Text>
+          </View>
+          <View style={styles.statusRow}>
+            {isActive ? (
+              <>
+                <Feather name="check-circle" size={13} color={colors.success} />
+                <Text style={[styles.statusText, { color: colors.success }]}>
+                  Whitelisted
+                </Text>
+                <Text style={[styles.dot, { color: colors.border }]}>·</Text>
+                <Text
+                  style={[styles.statusText, { color: colors.onSurfaceVariant }]}
+                >
+                  {formatCountdown(profile.expiresAt, now)}
+                </Text>
+              </>
+            ) : isError ? (
+              <>
+                <Feather name="alert-circle" size={13} color={colors.destructive} />
+                <Text
+                  style={[styles.statusText, { color: colors.destructive }]}
+                  numberOfLines={1}
+                >
+                  {profile.lastError || "Failed"}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Feather name="clock" size={13} color={colors.mutedForeground} />
+                <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
+                  Idle
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+
+        <AnimatedPressable
+          onPress={onKnock}
+          disabled={knocking || disabled}
+          hitSlop={8}
+          scaleTo={0.88}
+          style={[
+            styles.knockBtn,
+            {
+              backgroundColor: colors.primary,
+              opacity: disabled ? 0.4 : 1,
+            },
+          ]}
+        >
+          <Feather name="zap" size={20} color={colors.primaryForeground} />
+        </AnimatedPressable>
+      </AnimatedPressable>
+    </Animated.View>
   );
 }
 

@@ -5,6 +5,10 @@ export interface KnockSuccess {
   whitelistedEntry: string;
   expiresAt: number;
   expiresInSeconds: number;
+  /** Seconds requested in the body, or null if we sent no ttl. */
+  requestedTtlSeconds: number | null;
+  /** True when the server returned a TTL shorter than what we asked for. */
+  ttlCapped: boolean;
 }
 
 export interface KnockFailure {
@@ -25,8 +29,10 @@ export async function knock(profile: Profile): Promise<KnockResult> {
   if (profile.ipOverride && profile.ipOverride.trim().length > 0) {
     body.ip_address = profile.ipOverride.trim();
   }
-  if (profile.ttlSeconds && profile.ttlSeconds > 0) {
-    body.ttl = profile.ttlSeconds;
+  const requestedTtl =
+    profile.ttlSeconds && profile.ttlSeconds > 0 ? profile.ttlSeconds : null;
+  if (requestedTtl !== null) {
+    body.ttl = requestedTtl;
   }
 
   const controller = new AbortController();
@@ -55,11 +61,18 @@ export async function knock(profile: Profile): Promise<KnockResult> {
     }
 
     const data = await res.json();
+    const expiresInSeconds = Number(data.expires_in_seconds ?? 0);
+    // Treat a 5s slack as "applied as requested" to absorb network round-trip.
+    const ttlCapped =
+      requestedTtl !== null && expiresInSeconds > 0 && expiresInSeconds < requestedTtl - 5;
+
     return {
       ok: true,
       whitelistedEntry: String(data.whitelisted_entry ?? ""),
       expiresAt: Number(data.expires_at ?? 0) * 1000,
-      expiresInSeconds: Number(data.expires_in_seconds ?? 0),
+      expiresInSeconds,
+      requestedTtlSeconds: requestedTtl,
+      ttlCapped,
     };
   } catch (err: unknown) {
     const message =
