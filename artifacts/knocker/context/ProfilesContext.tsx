@@ -11,6 +11,7 @@ import React, {
 import { knock, type KnockResult } from "@/lib/knock";
 import { scheduleRenewals } from "@/lib/autoRenew";
 import {
+  deleteProfileSecret,
   loadProfiles,
   saveProfiles,
   type Profile,
@@ -169,6 +170,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const remove = useCallback(
     async (id: string) => {
       await persist(profilesRef.current.filter((x) => x.id !== id));
+      await deleteProfileSecret(id);
     },
     [persist],
   );

@@ -122,7 +122,7 @@ export default function ProfileEditScreen() {
             <TextInput
               value={draft.endpointUrl}
               onChangeText={(t) => patch({ endpointUrl: t })}
-              placeholder="https://knock.example.com"
+              placeholder="https://knock.example.com (HTTPS required)"
               placeholderTextColor={colors.mutedForeground}
               style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
               autoCapitalize="none"
