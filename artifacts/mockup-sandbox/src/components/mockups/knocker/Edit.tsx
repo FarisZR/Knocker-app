@@ -145,11 +145,20 @@ export function Edit() {
             />
           </Section>
 
-          <Section title="Automation">
-            <Row label="Knock on boot" sub="Fire silently when device starts" action={<Toggle on={true} />} />
-            <Row label="Knock in background" sub="Re-knock every 30 minutes" action={<Toggle on={true} />} />
+          <Section title="Triggers">
+            <Row label="Knock when app opens" sub="Fire silently on launch" action={<Toggle on={true} />} />
+            <Row label="Knock on device boot" sub="Fire once after BOOT_COMPLETED" action={<Toggle on={true} />} />
             <Row
-              label="Quick Settings tile"
+              label="Auto-renew before expiry"
+              sub="Re-knock 5 min before TTL ends"
+              action={<Toggle on={true} />}
+              last
+            />
+          </Section>
+
+          <Section title="Quick Settings">
+            <Row
+              label="Tile assignment"
               sub="Tile #1 · Home"
               action={<ChevronRight size={20} style={{ color: "var(--md-on-surface-muted)" }} />}
               last

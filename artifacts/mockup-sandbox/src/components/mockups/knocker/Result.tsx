@@ -130,10 +130,10 @@ export function Result() {
           </div>
           <div className="space-y-3">
             {[
-              { t: "Just now", d: "Auto-knock on launch", ok: true },
-              { t: "30 min ago", d: "Background re-knock", ok: true },
-              { t: "1 h ago", d: "Background re-knock", ok: true },
-              { t: "Today, 09:14", d: "Quick Settings tile", ok: true },
+              { t: "Just now", d: "Knock on app open", ok: true },
+              { t: "23h 55m ago", d: "Auto-renew (TTL − 5m)", ok: true },
+              { t: "Yesterday, 18:02", d: "Quick Settings tile", ok: true },
+              { t: "Yesterday, 09:14", d: "Knock on boot", ok: true },
             ].map((r, i) => (
               <div key={i} className="flex items-center gap-3">
                 <CheckCircle2 size={16} strokeWidth={2.5} style={{ color: "var(--md-success)" }} />
