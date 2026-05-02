@@ -19,6 +19,10 @@ import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
 import { isValidUrl } from "@/lib/format";
 import { newProfile, type Profile } from "@/lib/profiles";
+import {
+  isNativeAvailable as isKnockerNativeAvailable,
+  TILE_SLOT_COUNT,
+} from "knocker-native";
 
 export default function ProfileEditScreen() {
   const colors = useColors();
@@ -233,8 +237,28 @@ export default function ProfileEditScreen() {
             value={draft.pinnedToHome}
             onChange={(v) => patch({ pinnedToHome: v })}
             colors={colors}
-            last
+            last={!isKnockerNativeAvailable}
           />
+          {isKnockerNativeAvailable ? (
+            <View style={[styles.field, { paddingTop: 14 }]}>
+              <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
+                Quick Settings tile
+              </Text>
+              <Text
+                style={[styles.fieldSub, { color: colors.mutedForeground }]}
+              >
+                Pin a tile (1–{TILE_SLOT_COUNT}) so you can knock from the
+                pull-down panel even when the app is closed.
+              </Text>
+              <TileSlotPicker
+                value={draft.tileSlot}
+                profiles={profiles}
+                currentId={draft.id}
+                onChange={(slot) => patch({ tileSlot: slot })}
+                colors={colors}
+              />
+            </View>
+          ) : null}
         </Section>
 
         {!isNew ? (
@@ -346,6 +370,96 @@ function Field({
         </Text>
       ) : null}
       {children}
+    </View>
+  );
+}
+
+function TileSlotPicker({
+  value,
+  profiles,
+  currentId,
+  onChange,
+  colors,
+}: {
+  value: number | null;
+  profiles: Profile[];
+  currentId: string;
+  onChange: (slot: number | null) => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const slots = Array.from({ length: TILE_SLOT_COUNT }, (_, i) => i + 1);
+  const ownerOf = (slot: number) =>
+    profiles.find((p) => p.tileSlot === slot && p.id !== currentId);
+  return (
+    <View style={styles.tileSlotRow}>
+      <Pressable
+        onPress={() => onChange(null)}
+        style={({ pressed }) => [
+          styles.tileSlotChip,
+          {
+            borderColor: colors.border,
+            backgroundColor:
+              value === null ? colors.primary : "transparent",
+            opacity: pressed ? 0.7 : 1,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.tileSlotChipText,
+            {
+              color:
+                value === null ? colors.primaryForeground : colors.foreground,
+            },
+          ]}
+        >
+          Off
+        </Text>
+      </Pressable>
+      {slots.map((slot) => {
+        const conflict = ownerOf(slot);
+        const isActive = value === slot;
+        return (
+          <Pressable
+            key={slot}
+            onPress={() => onChange(isActive ? null : slot)}
+            style={({ pressed }) => [
+              styles.tileSlotChip,
+              {
+                borderColor: conflict ? colors.destructive : colors.border,
+                backgroundColor: isActive ? colors.primary : "transparent",
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.tileSlotChipText,
+                {
+                  color: isActive
+                    ? colors.primaryForeground
+                    : conflict
+                      ? colors.destructive
+                      : colors.foreground,
+                },
+              ]}
+            >
+              {slot}
+            </Text>
+            {conflict ? (
+              <Text
+                style={[
+                  styles.tileSlotChipSub,
+                  { color: colors.mutedForeground },
+                ]}
+                numberOfLines={1}
+              >
+                {conflict.name || "used"}
+              </Text>
+            ) : null}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -469,4 +583,25 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   btnPrimaryText: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  tileSlotRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  tileSlotChip: {
+    minWidth: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  tileSlotChipText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  tileSlotChipSub: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+    maxWidth: 90,
+  },
 });

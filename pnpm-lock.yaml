@@ -218,6 +218,9 @@ importers:
       expo-secure-store:
         specifier: ~15.0.8
         version: 15.0.8(expo@54.0.34)
+      knocker-native:
+        specifier: file:./modules/knocker-native
+        version: file:artifacts/knocker/modules/knocker-native(expo-modules-core@3.0.30(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
     devDependencies:
       '@babel/core':
         specifier: ^7.25.2
@@ -3976,6 +3979,12 @@ packages:
   kleur@3.0.3:
     resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
     engines: {node: '>=6'}
+
+  knocker-native@file:artifacts/knocker/modules/knocker-native:
+    resolution: {directory: artifacts/knocker/modules/knocker-native, type: directory}
+    peerDependencies:
+      expo-modules-core: '*'
+      react-native: '*'
 
   lan-network@0.1.7:
     resolution: {integrity: sha512-mnIlAEMu4OyEvUNdzco9xpuB9YVcPkQec+QsgycBCtPZvEqWPCDPfbAE4OJMdBBWpZWtpCn1xw9jJYlwjWI5zQ==}
@@ -9863,6 +9872,11 @@ snapshots:
       json-buffer: 3.0.1
 
   kleur@3.0.3: {}
+
+  knocker-native@file:artifacts/knocker/modules/knocker-native(expo-modules-core@3.0.30(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)):
+    dependencies:
+      expo-modules-core: 3.0.30(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+      react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
 
   lan-network@0.1.7: {}
 

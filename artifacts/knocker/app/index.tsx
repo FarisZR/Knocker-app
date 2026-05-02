@@ -10,6 +10,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AnimatedPressable } from "@/components/AnimatedPressable";
+import { DevBuildBanner } from "@/components/DevBuildBanner";
 import { ProfileCard } from "@/components/ProfileCard";
 import { Snackbar } from "@/components/Snackbar";
 import { useColors } from "@/hooks/useColors";
@@ -70,6 +71,8 @@ export default function HomeScreen() {
         </Text>
         <Text style={[styles.title, { color: colors.foreground }]}>Knocker</Text>
       </Animated.View>
+
+      <DevBuildBanner />
 
       {!loaded ? (
         <View style={styles.empty}>

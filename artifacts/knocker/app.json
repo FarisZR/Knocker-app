@@ -36,7 +36,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./modules/knocker-native/app.plugin.js"
     ],
     "experiments": {
       "typedRoutes": true,
