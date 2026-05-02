@@ -197,22 +197,20 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reschedule renewals whenever profiles change.
-  // Track which profiles we have already fired in this app session to avoid
-  // a tight loop: scheduleRenewals -> fire -> persist -> effect -> scheduleRenewals.
-  const firedRef = useRef<Set<string>>(new Set());
+  // Reschedule renewals whenever profiles change. Gate is keyed by
+  // (profileId, expiresAt) so a single expiry value can only trigger one
+  // auto-renew. A failed renewal leaves expiresAt unchanged and will NOT
+  // re-fire — this avoids: schedule -> fire -> fail -> persist -> effect ->
+  // schedule -> fire... loop. Only when a successful knock advances
+  // expiresAt is the next renewal allowed.
+  const firedRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
     if (!loaded) return;
-    // Reset the gate when a profile gets a fresh future expiresAt
-    const now = Date.now();
-    for (const p of profiles) {
-      if (p.expiresAt && p.expiresAt > now + 1000) {
-        firedRef.current.delete(p.id);
-      }
-    }
     scheduleRenewals(profiles, (id) => {
-      if (firedRef.current.has(id)) return;
-      firedRef.current.add(id);
+      const profile = profilesRef.current.find((p) => p.id === id);
+      if (!profile || !profile.expiresAt) return;
+      if (firedRef.current.get(id) === profile.expiresAt) return;
+      firedRef.current.set(id, profile.expiresAt);
       void knockOne(id);
     });
   }, [profiles, loaded, knockOne]);

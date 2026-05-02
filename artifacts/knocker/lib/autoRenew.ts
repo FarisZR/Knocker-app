@@ -1,20 +1,9 @@
-/**
- * In-app foreground auto-renew scheduler.
- *
- * Limitation: this only fires while the app is in the foreground. True
- * background auto-renew across app kills requires the native AlarmManager
- * exact-alarm module (see modules/knocker-native/, dev-client build only).
- *
- * For each profile with autoRenew=true and expiresAt set, schedules a
- * single setTimeout to fire (expiresAt - safetyWindow) and trigger the
- * provided callback. Timers are reset every time schedule() is called.
- */
-
 import type { Profile } from "./profiles";
 
 type Timer = ReturnType<typeof setTimeout>;
 
 const timers = new Map<string, Timer>();
+const MAX_DELAY_MS = 2_147_000_000;
 
 export function scheduleRenewals(
   profiles: Profile[],
@@ -33,8 +22,7 @@ export function scheduleRenewals(
       fire(p.id);
       continue;
     }
-    const cap = 2_147_000_000;
-    if (delay > cap) continue;
+    if (delay > MAX_DELAY_MS) continue;
     const timer = setTimeout(() => {
       timers.delete(p.id);
       fire(p.id);
