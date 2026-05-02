@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Knocker",
+    "slug": "knocker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "knocker",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0e0e10"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "dev.faris.knocker",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0e0e10"
+      },
+      "permissions": ["INTERNET", "SCHEDULE_EXACT_ALARM", "USE_EXACT_ALARM"]
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
