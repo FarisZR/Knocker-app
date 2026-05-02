@@ -147,7 +147,6 @@ export function Edit() {
 
           <Section title="Triggers">
             <Row label="Knock when app opens" sub="Fire silently on launch" action={<Toggle on={true} />} />
-            <Row label="Knock on device boot" sub="Fire once after BOOT_COMPLETED" action={<Toggle on={true} />} />
             <Row
               label="Auto-renew before expiry"
               sub="Re-knock 5 min before TTL ends"
