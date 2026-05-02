@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 
 import { useColors } from "@/hooks/useColors";
 import { useProfiles, type SnackbarState } from "@/context/ProfilesContext";
@@ -26,7 +27,10 @@ export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
     tone === "success" ? colors.success : tone === "error" ? colors.destructive : colors.primary;
 
   return (
-    <View
+    <Animated.View
+      key={snackbar.id}
+      entering={FadeInDown.duration(220).springify().damping(18)}
+      exiting={FadeOutDown.duration(180)}
       style={[
         styles.wrap,
         { bottom: bottomOffset, backgroundColor: colors.foreground },
@@ -62,7 +66,7 @@ export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
           <Feather name="x" size={18} color={colors.background} style={{ opacity: 0.7 }} />
         </Pressable>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
