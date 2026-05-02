@@ -216,8 +216,8 @@ importers:
   artifacts/knocker:
     dependencies:
       expo-secure-store:
-        specifier: ^55.0.13
-        version: 55.0.13(expo@54.0.34)
+        specifier: ~15.0.8
+        version: 15.0.8(expo@54.0.34)
     devDependencies:
       '@babel/core':
         specifier: ^7.25.2
@@ -3445,8 +3445,8 @@ packages:
       react-server-dom-webpack:
         optional: true
 
-  expo-secure-store@55.0.13:
-    resolution: {integrity: sha512-I6r0JNO1Fd4o0Gu7Ixiic7s89lqgdUHq17uBH9y1f/AntoyKn71TdtYJH82RgfsBbu5qNVzrwImmvlANyOlITQ==}
+  expo-secure-store@15.0.8:
+    resolution: {integrity: sha512-lHnzvRajBu4u+P99+0GEMijQMFCOYpWRO4dWsXSuMt77+THPIGjzNvVKrGSl6mMrLsfVaKL8BpwYZLGlgA+zAw==}
     peerDependencies:
       expo: '*'
 
@@ -9274,7 +9274,7 @@ snapshots:
       - '@types/react-dom'
       - supports-color
 
-  expo-secure-store@55.0.13(expo@54.0.34):
+  expo-secure-store@15.0.8(expo@54.0.34):
     dependencies:
       expo: 54.0.34(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
 
