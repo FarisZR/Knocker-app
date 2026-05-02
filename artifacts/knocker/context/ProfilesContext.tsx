@@ -16,6 +16,11 @@ import {
   saveProfiles,
   type Profile,
 } from "@/lib/profiles";
+import {
+  isNativeAvailable as isKnockerNativeAvailable,
+  syncProfiles as syncProfilesToNative,
+  type NativeProfileSnapshot,
+} from "knocker-native";
 
 export interface SnackbarState {
   id: number;
@@ -48,6 +53,21 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const persist = useCallback(async (next: Profile[]) => {
     setProfiles(next);
     await saveProfiles(next);
+    if (isKnockerNativeAvailable) {
+      const snapshot: NativeProfileSnapshot[] = next.map((p) => ({
+        id: p.id,
+        name: p.name,
+        endpointUrl: p.endpointUrl,
+        apiKey: p.apiKey,
+        ttlSeconds: p.ttlSeconds,
+        ipOverride: p.ipOverride,
+        autoRenew: p.autoRenew,
+        autoRenewSafetyWindowSec: p.autoRenewSafetyWindowSec,
+        tileSlot: p.tileSlot,
+        expiresAt: p.expiresAt,
+      }));
+      void syncProfilesToNative(snapshot);
+    }
   }, []);
 
   const updateOne = useCallback(
@@ -197,6 +217,23 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       profilesRef.current = list;
       setProfiles(list);
       setLoaded(true);
+      // Push the freshly loaded snapshot into the native store so tiles &
+      // alarms have current data even if no edit happens this session.
+      if (isKnockerNativeAvailable) {
+        const snapshot: NativeProfileSnapshot[] = list.map((p) => ({
+          id: p.id,
+          name: p.name,
+          endpointUrl: p.endpointUrl,
+          apiKey: p.apiKey,
+          ttlSeconds: p.ttlSeconds,
+          ipOverride: p.ipOverride,
+          autoRenew: p.autoRenew,
+          autoRenewSafetyWindowSec: p.autoRenewSafetyWindowSec,
+          tileSlot: p.tileSlot,
+          expiresAt: p.expiresAt,
+        }));
+        void syncProfilesToNative(snapshot);
+      }
       // Knock on app open — fire after ref is updated
       for (const p of list) {
         if (p.knockOnOpen) {
