@@ -1,6 +1,6 @@
 import "./_group.css";
 import { StatusBar, NavBar } from "./_chrome";
-import { Search, MoreVertical, Plus, CheckCircle2, Globe, Zap, ChevronRight, AlertCircle, Clock } from "lucide-react";
+import { Search, MoreVertical, Plus, CheckCircle2, Globe, Zap, AlertCircle, Clock, Pin } from "lucide-react";
 
 /**
  * Shows the same Home screen with the result snackbar popped up over it
@@ -34,27 +34,28 @@ export function Result() {
         {/* List (dimmed slightly under the snackbar) */}
         <div className="flex-1 overflow-hidden px-4 pt-2 pb-4 space-y-2">
           {[
-            { n: "Home Server", h: "knock.home.faris.dev", ip: "98.142.10.41", t: "24h 00m", just: true },
-            { n: "Work VPN", h: "vpn.acme.io", ip: "98.142.10.41", t: "1h 00m", just: true },
-            { n: "NAS · Media", h: "nas.faris.dev", ip: "98.142.10.41", t: "24h 00m", just: true },
-            { n: "Lab Cluster", h: "lab.internal.dev", err: "401 — invalid API key" },
+            { n: "Home Server", h: "knock.home.faris.dev", t: "24h 00m", just: true, pinned: true },
+            { n: "Work VPN",    h: "vpn.acme.io",          t: "1h 00m",  just: true },
+            { n: "NAS · Media", h: "nas.faris.dev",        t: "24h 00m", just: true },
+            { n: "Lab Cluster", h: "lab.internal.dev",     err: "401 — invalid API key" },
           ].map((p) => (
-            <div key={p.n} style={{ background: "var(--md-surface)", borderRadius: 24, padding: "16px 18px" }}>
-              <div className="flex items-center justify-between gap-3">
+            <div key={p.n} style={{ background: "var(--md-surface)", borderRadius: 24, padding: "14px 14px 14px 18px" }}>
+              <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[16.5px] font-semibold tracking-tight truncate flex items-center gap-2">
+                  <div className="text-[16px] font-semibold tracking-tight truncate flex items-center gap-2">
                     {p.n}
+                    {p.pinned && <span style={{ color: "var(--md-primary)" }}><Pin size={11} strokeWidth={2.5} fill="currentColor" /></span>}
                     {p.just && (
                       <span style={{ background: "var(--md-primary-container)", color: "var(--md-primary)", borderRadius: 6, padding: "1px 6px", fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }}>
                         JUST NOW
                       </span>
                     )}
                   </div>
-                  <div className="text-[12px] mt-0.5 flex items-center gap-1.5" style={{ color: "var(--md-on-surface-muted)" }}>
-                    <Globe size={11} strokeWidth={2} />
+                  <div className="text-[11.5px] mt-0.5 flex items-center gap-1.5" style={{ color: "var(--md-on-surface-muted)" }}>
+                    <Globe size={10} strokeWidth={2} />
                     <span className="truncate">{p.h}</span>
                   </div>
-                  <div className="mt-2 flex items-center gap-2 text-[12px]">
+                  <div className="mt-1.5 flex items-center gap-2 text-[11.5px]">
                     {p.err ? (
                       <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: "var(--md-error)" }}>
                         <AlertCircle size={14} strokeWidth={2.5} />
@@ -72,7 +73,9 @@ export function Result() {
                     )}
                   </div>
                 </div>
-                <ChevronRight size={18} style={{ color: "var(--md-on-surface-muted)", flexShrink: 0 }} />
+                <button aria-label={`Knock ${p.n}`} style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", borderRadius: 999, width: 44, height: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", flexShrink: 0 }}>
+                  <Zap size={20} strokeWidth={2.5} fill="currentColor" />
+                </button>
               </div>
             </div>
           ))}
@@ -80,9 +83,14 @@ export function Result() {
 
         {/* Stacked FABs */}
         <div style={{ position: "absolute", right: 18, bottom: 56, display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-end" }}>
-          <button style={{ background: "transparent", color: "var(--md-on-surface-variant)", borderRadius: 18, padding: "12px 18px", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid var(--md-outline)" }}>
-            <Plus size={18} strokeWidth={2.5} />
+          <button style={{ background: "transparent", color: "var(--md-on-surface-variant)", borderRadius: 18, padding: "10px 16px", fontSize: 12.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--md-outline)" }}>
+            <Plus size={16} strokeWidth={2.5} />
             New profile
+          </button>
+          <button style={{ background: "var(--md-primary-container)", color: "var(--md-on-primary-container)", borderRadius: 18, padding: "13px 18px", fontSize: 13.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8, border: "none", boxShadow: "0 4px 14px rgba(0,0,0,0.4)" }}>
+            <Pin size={13} strokeWidth={2.5} fill="currentColor" />
+            <Zap size={16} strokeWidth={2.5} fill="currentColor" />
+            Knock Home Server
           </button>
           <button style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", borderRadius: 22, padding: "18px 26px", fontSize: 16, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 10, boxShadow: "0 6px 20px rgba(252,211,77,0.25), 0 4px 14px rgba(0,0,0,0.45)", border: "none" }}>
             <Zap size={22} strokeWidth={2.5} fill="currentColor" />

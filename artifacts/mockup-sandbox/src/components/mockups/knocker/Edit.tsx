@@ -155,9 +155,14 @@ export function Edit() {
             />
           </Section>
 
-          <Section title="Quick Settings">
+          <Section title="Quick access">
             <Row
-              label="Tile assignment"
+              label="Pin to home"
+              sub="Adds a dedicated knock button above Knock all"
+              action={<Toggle on={true} />}
+            />
+            <Row
+              label="Quick Settings tile"
               sub="Tile #1 · Home"
               action={<ChevronRight size={20} style={{ color: "var(--md-on-surface-muted)" }} />}
               last
