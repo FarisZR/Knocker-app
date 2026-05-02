@@ -25,7 +25,7 @@ export function isValidUrl(s: string): boolean {
   if (!s) return false;
   try {
     const u = new URL(s);
-    return u.protocol === "http:" || u.protocol === "https:";
+    return u.protocol === "https:";
   } catch {
     return false;
   }
