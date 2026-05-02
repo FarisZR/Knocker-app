@@ -1,183 +1,129 @@
 import "./_group.css";
 import { StatusBar, NavBar } from "./_chrome";
-import { DoorOpen, CheckCircle2, Zap } from "lucide-react";
+import { Search, MoreVertical, Plus, CheckCircle2, Globe, Zap, ChevronRight, AlertCircle, Clock } from "lucide-react";
 
+/**
+ * Shows the same Home screen with the result snackbar popped up over it
+ * after a Knock-all action. The result is a brief popup, never a full page —
+ * the app stays on the list so the user can immediately back out.
+ */
 export function Result() {
   return (
     <div className="knocker-md3">
       <div className="knocker-frame">
         <StatusBar />
 
-        {/* App opens, immediately knocks for active profile */}
+        {/* App bar */}
         <div className="px-5 pt-3 pb-2 flex-shrink-0">
-          <div className="text-[14px] font-medium" style={{ color: "var(--md-on-surface-muted)" }}>
-            Auto-knocked on launch
+          <div className="flex items-center justify-between">
+            <span className="text-[14px] font-medium" style={{ color: "var(--md-on-surface-muted)" }}>
+              4 profiles · 4 active
+            </span>
+            <div className="flex items-center gap-1">
+              <button className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: "var(--md-on-surface-variant)" }}>
+                <Search size={20} strokeWidth={2} />
+              </button>
+              <button className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: "var(--md-on-surface-variant)" }}>
+                <MoreVertical size={20} strokeWidth={2} />
+              </button>
+            </div>
           </div>
           <h1 className="text-[32px] font-normal tracking-tight mt-2 leading-tight">Knocker</h1>
         </div>
 
-        {/* Hero status card — large, central, MD3 expressive */}
-        <div className="px-4 pt-4">
-          <div
-            style={{
-              background: "var(--md-primary-container)",
-              borderRadius: 32,
-              padding: "26px 22px 22px",
-              position: "relative",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                right: -40,
-                top: -40,
-                width: 180,
-                height: 180,
-                borderRadius: "50%",
-                background: "rgba(252,211,77,0.12)",
-              }}
-            />
-            <div className="flex items-start gap-3 relative">
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 16,
-                  background: "var(--md-primary)",
-                  color: "var(--md-on-primary)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <DoorOpen size={26} strokeWidth={2.2} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: "var(--md-primary)" }}>
-                  Home Server
+        {/* List (dimmed slightly under the snackbar) */}
+        <div className="flex-1 overflow-hidden px-4 pt-2 pb-4 space-y-2">
+          {[
+            { n: "Home Server", h: "knock.home.faris.dev", ip: "98.142.10.41", t: "24h 00m", just: true },
+            { n: "Work VPN", h: "vpn.acme.io", ip: "98.142.10.41", t: "1h 00m", just: true },
+            { n: "NAS · Media", h: "nas.faris.dev", ip: "98.142.10.41", t: "24h 00m", just: true },
+            { n: "Lab Cluster", h: "lab.internal.dev", err: "401 — invalid API key" },
+          ].map((p) => (
+            <div key={p.n} style={{ background: "var(--md-surface)", borderRadius: 24, padding: "16px 18px" }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[16.5px] font-semibold tracking-tight truncate flex items-center gap-2">
+                    {p.n}
+                    {p.just && (
+                      <span style={{ background: "var(--md-primary-container)", color: "var(--md-primary)", borderRadius: 6, padding: "1px 6px", fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }}>
+                        JUST NOW
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[12px] mt-0.5 flex items-center gap-1.5" style={{ color: "var(--md-on-surface-muted)" }}>
+                    <Globe size={11} strokeWidth={2} />
+                    <span className="truncate">{p.h}</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-[12px]">
+                    {p.err ? (
+                      <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: "var(--md-error)" }}>
+                        <AlertCircle size={14} strokeWidth={2.5} />
+                        {p.err}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: "var(--md-success)" }}>
+                          <CheckCircle2 size={14} strokeWidth={2.5} />
+                          Whitelisted
+                        </span>
+                        <span style={{ color: "var(--md-outline)" }}>·</span>
+                        <span style={{ color: "var(--md-on-surface-variant)" }}>{p.t}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="text-[22px] font-medium tracking-tight mt-1 leading-tight" style={{ color: "var(--md-on-surface)" }}>
-                  IP whitelisted
-                </div>
-                <div className="text-[13px] mt-2" style={{ color: "var(--md-on-surface-variant)" }}>
-                  knock.home.faris.dev
-                </div>
+                <ChevronRight size={18} style={{ color: "var(--md-on-surface-muted)", flexShrink: 0 }} />
               </div>
             </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3 relative">
-              <div>
-                <div className="text-[11px] font-medium" style={{ color: "var(--md-on-surface-muted)" }}>
-                  Whitelisted IP
-                </div>
-                <div className="text-[15px] font-semibold mt-0.5 font-mono" style={{ color: "var(--md-primary)" }}>
-                  98.142.10.41
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] font-medium" style={{ color: "var(--md-on-surface-muted)" }}>
-                  Expires in
-                </div>
-                <div className="text-[15px] font-semibold mt-0.5" style={{ color: "var(--md-on-surface)" }}>
-                  23h 59m 58s
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 flex gap-2 relative">
-              <button
-                style={{
-                  flex: 1,
-                  background: "var(--md-primary)",
-                  color: "var(--md-on-primary)",
-                  borderRadius: 999,
-                  padding: "11px 18px",
-                  fontSize: 13.5,
-                  fontWeight: 600,
-                  border: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                }}
-              >
-                <Zap size={14} strokeWidth={2.5} fill="currentColor" />
-                Knock again
-              </button>
-              <button
-                style={{
-                  background: "transparent",
-                  color: "var(--md-on-primary-container)",
-                  borderRadius: 999,
-                  padding: "11px 18px",
-                  fontSize: 13.5,
-                  fontWeight: 600,
-                  border: "1px solid var(--md-outline)",
-                }}
-              >
-                Switch profile
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Activity timeline */}
-        <div className="px-5 pt-6 pb-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] mb-3" style={{ color: "var(--md-on-surface-muted)" }}>
-            Recent activity
-          </div>
-          <div className="space-y-3">
-            {[
-              { t: "Just now", d: "Knock on app open", ok: true },
-              { t: "23h 55m ago", d: "Auto-renew (TTL − 5m)", ok: true },
-              { t: "Yesterday, 18:02", d: "Quick Settings tile", ok: true },
-              { t: "Yesterday, 09:14", d: "Knock on boot", ok: true },
-            ].map((r, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <CheckCircle2 size={16} strokeWidth={2.5} style={{ color: "var(--md-success)" }} />
-                <div className="flex-1 text-[13.5px]">{r.d}</div>
-                <div className="text-[12px]" style={{ color: "var(--md-on-surface-muted)" }}>
-                  {r.t}
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* Stacked FABs */}
+        <div style={{ position: "absolute", right: 18, bottom: 56, display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-end" }}>
+          <button style={{ background: "transparent", color: "var(--md-on-surface-variant)", borderRadius: 18, padding: "12px 18px", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid var(--md-outline)" }}>
+            <Plus size={18} strokeWidth={2.5} />
+            New profile
+          </button>
+          <button style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", borderRadius: 22, padding: "18px 26px", fontSize: 16, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 10, boxShadow: "0 6px 20px rgba(252,211,77,0.25), 0 4px 14px rgba(0,0,0,0.45)", border: "none" }}>
+            <Zap size={22} strokeWidth={2.5} fill="currentColor" />
+            Knock all
+          </button>
         </div>
 
-        <div className="flex-1" />
-
-        {/* Snackbar */}
-        <div className="px-4 pb-4">
+        {/* Snackbar — the entire "result" is just this. */}
+        <div style={{ position: "absolute", left: 16, right: 16, bottom: 170 }}>
           <div
             style={{
               background: "var(--md-on-surface)",
               color: "var(--md-bg)",
-              borderRadius: 14,
-              padding: "12px 16px",
+              borderRadius: 16,
+              padding: "14px 16px",
               display: "flex",
               alignItems: "center",
               gap: 12,
-              boxShadow: "0 6px 22px rgba(0,0,0,0.5)",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.55)",
             }}
           >
-            <CheckCircle2 size={18} strokeWidth={2.5} />
-            <div className="flex-1 text-[13.5px] font-medium">Knocked · expires in 24h</div>
-            <button
-              style={{
-                background: "transparent",
-                color: "var(--md-primary)",
-                fontSize: 13,
-                fontWeight: 600,
-                padding: "4px 10px",
-                border: "none",
-              }}
-            >
-              UNDO
+            <CheckCircle2 size={18} strokeWidth={2.5} style={{ color: "#15803d" }} />
+            <div className="flex-1 text-[13.5px] font-medium leading-tight">
+              Knocked 3 profiles
+              <div className="text-[11.5px] font-normal mt-0.5 opacity-70">1 failed · Lab Cluster</div>
+            </div>
+            <button style={{ background: "transparent", color: "var(--md-primary)", fontSize: 12.5, fontWeight: 700, padding: "4px 8px", border: "none", letterSpacing: 0.5 }}>
+              RETRY
             </button>
           </div>
         </div>
+
+        {/* Hint label */}
+        <div style={{ position: "absolute", left: 16, bottom: 240 }}>
+          <span style={{ background: "rgba(252,211,77,0.12)", color: "var(--md-primary)", border: "1px dashed rgba(252,211,77,0.4)", borderRadius: 8, padding: "3px 8px", fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4 }}>
+            ↓ result is just a snackbar
+          </span>
+        </div>
+
+        {/* Suppress unused import warning */}
+        <div style={{ display: "none" }}><Clock size={1} /></div>
 
         <NavBar />
       </div>

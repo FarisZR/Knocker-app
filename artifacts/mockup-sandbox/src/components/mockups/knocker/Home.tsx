@@ -1,6 +1,6 @@
 import "./_group.css";
 import { StatusBar, NavBar } from "./_chrome";
-import { Search, MoreVertical, Plus, CheckCircle2, Clock, AlertCircle, Globe, Zap } from "lucide-react";
+import { Search, MoreVertical, Plus, CheckCircle2, Clock, AlertCircle, Globe, Zap, ChevronRight } from "lucide-react";
 
 type ProfileStatus = "active" | "idle" | "error";
 
@@ -10,8 +10,7 @@ interface Profile {
   status: ProfileStatus;
   expiresIn?: string;
   lastIp?: string;
-  knockOnBoot: boolean;
-  background: boolean;
+  autoRenew: boolean;
   errorText?: string;
 }
 
@@ -22,15 +21,13 @@ const profiles: Profile[] = [
     status: "active",
     expiresIn: "23h 41m",
     lastIp: "98.142.10.41",
-    knockOnBoot: true,
-    background: true,
+    autoRenew: true,
   },
   {
     name: "Work VPN",
     host: "vpn.acme.io",
     status: "idle",
-    knockOnBoot: false,
-    background: false,
+    autoRenew: false,
   },
   {
     name: "NAS · Media",
@@ -38,16 +35,14 @@ const profiles: Profile[] = [
     status: "active",
     expiresIn: "5h 12m",
     lastIp: "98.142.10.41",
-    knockOnBoot: true,
-    background: false,
+    autoRenew: true,
   },
   {
     name: "Lab Cluster",
     host: "lab.internal.dev",
     status: "error",
     errorText: "401 — invalid API key",
-    knockOnBoot: false,
-    background: false,
+    autoRenew: false,
   },
 ];
 
@@ -76,84 +71,51 @@ function StatusDot({ s }: { s: ProfileStatus }) {
   );
 }
 
-function ProfileCard({ p }: { p: Profile }) {
+function ProfileRow({ p }: { p: Profile }) {
   const isActive = p.status === "active";
   return (
     <div
       style={{
         background: "var(--md-surface)",
-        borderRadius: 28,
-        padding: "18px 18px 16px",
-        border: "1px solid transparent",
+        borderRadius: 24,
+        padding: "16px 18px",
       }}
     >
-      <div className="flex items-start justify-between mb-1">
-        <div className="min-w-0">
-          <div className="text-[17px] font-semibold tracking-tight">{p.name}</div>
-          <div className="text-[12.5px] mt-0.5 flex items-center gap-1.5" style={{ color: "var(--md-on-surface-muted)" }}>
-            <Globe size={12} strokeWidth={2} />
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className="text-[16.5px] font-semibold tracking-tight truncate">{p.name}</div>
+            {p.autoRenew && (
+              <span style={{ color: "var(--md-primary)" }} title="Auto-renew on">
+                <Zap size={11} strokeWidth={2.5} fill="currentColor" />
+              </span>
+            )}
+          </div>
+          <div className="text-[12px] mt-0.5 flex items-center gap-1.5" style={{ color: "var(--md-on-surface-muted)" }}>
+            <Globe size={11} strokeWidth={2} />
             <span className="truncate">{p.host}</span>
           </div>
+          <div className="mt-2 flex items-center gap-2 text-[12px]">
+            <StatusDot s={p.status} />
+            {isActive && (
+              <>
+                <span style={{ color: "var(--md-outline)" }}>·</span>
+                <span style={{ color: "var(--md-on-surface-variant)" }}>{p.expiresIn}</span>
+              </>
+            )}
+            {p.errorText && (
+              <>
+                <span style={{ color: "var(--md-outline)" }}>·</span>
+                <span style={{ color: "var(--md-error)" }} className="truncate">
+                  {p.errorText}
+                </span>
+              </>
+            )}
+          </div>
         </div>
-        <StatusDot s={p.status} />
-      </div>
-
-      {isActive && (
-        <div className="mt-3 flex items-center gap-3 text-[12px]" style={{ color: "var(--md-on-surface-variant)" }}>
-          <span className="font-medium" style={{ color: "var(--md-primary)" }}>
-            {p.lastIp}
-          </span>
-          <span style={{ color: "var(--md-outline)" }}>•</span>
-          <span>expires in {p.expiresIn}</span>
-        </div>
-      )}
-      {p.errorText && (
-        <div className="mt-3 text-[12px]" style={{ color: "var(--md-error)" }}>
-          {p.errorText}
-        </div>
-      )}
-
-      <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-        {p.knockOnBoot && <Chip>Boot</Chip>}
-        {p.background && <Chip>Background</Chip>}
-        <div className="flex-1" />
-        <button
-          style={{
-            background: "var(--md-primary)",
-            color: "var(--md-on-primary)",
-            borderRadius: 999,
-            padding: "8px 18px",
-            fontSize: 13,
-            fontWeight: 600,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            border: "none",
-          }}
-        >
-          <Zap size={14} strokeWidth={2.5} fill="currentColor" />
-          Knock
-        </button>
+        <ChevronRight size={18} style={{ color: "var(--md-on-surface-muted)", flexShrink: 0 }} />
       </div>
     </div>
-  );
-}
-
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        background: "var(--md-secondary-container)",
-        color: "var(--md-on-surface-variant)",
-        borderRadius: 8,
-        padding: "3px 9px",
-        fontSize: 11,
-        fontWeight: 500,
-        letterSpacing: 0.2,
-      }}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -163,11 +125,11 @@ export function Home() {
       <div className="knocker-frame">
         <StatusBar />
 
-        {/* Top app bar - MD3 large */}
+        {/* App bar */}
         <div className="px-5 pt-3 pb-2 flex-shrink-0">
           <div className="flex items-center justify-between">
             <span className="text-[14px] font-medium" style={{ color: "var(--md-on-surface-muted)" }}>
-              4 profiles
+              4 profiles · 2 active
             </span>
             <div className="flex items-center gap-1">
               <button className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: "var(--md-on-surface-variant)" }}>
@@ -181,32 +143,51 @@ export function Home() {
           <h1 className="text-[32px] font-normal tracking-tight mt-2 leading-tight">Knocker</h1>
         </div>
 
-        {/* List */}
-        <div className="flex-1 overflow-hidden px-4 pt-2 pb-4 space-y-2.5">
+        {/* List — tap a row to knock just that one */}
+        <div className="flex-1 overflow-hidden px-4 pt-2 pb-4 space-y-2">
           {profiles.map((p) => (
-            <ProfileCard key={p.name} p={p} />
+            <ProfileRow key={p.name} p={p} />
           ))}
         </div>
 
-        {/* Extended FAB */}
-        <div style={{ position: "absolute", right: 18, bottom: 60 }}>
+        {/* Stacked FABs: Knock all (primary) above New profile (secondary) */}
+        <div style={{ position: "absolute", right: 18, bottom: 56, display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-end" }}>
           <button
             style={{
-              background: "var(--md-primary-container)",
-              color: "var(--md-on-primary-container)",
+              background: "transparent",
+              color: "var(--md-on-surface-variant)",
               borderRadius: 18,
-              padding: "16px 22px",
-              fontSize: 14,
+              padding: "12px 18px",
+              fontSize: 13,
               fontWeight: 600,
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
+              border: "1px solid var(--md-outline)",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <Plus size={18} strokeWidth={2.5} />
+            New profile
+          </button>
+          <button
+            style={{
+              background: "var(--md-primary)",
+              color: "var(--md-on-primary)",
+              borderRadius: 22,
+              padding: "18px 26px",
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 10,
+              boxShadow: "0 6px 20px rgba(252,211,77,0.25), 0 4px 14px rgba(0,0,0,0.45)",
               border: "none",
             }}
           >
-            <Plus size={20} strokeWidth={2.5} />
-            New profile
+            <Zap size={22} strokeWidth={2.5} fill="currentColor" />
+            Knock all
           </button>
         </div>
 
