@@ -7,7 +7,10 @@
     "dev": "EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN pnpm exec expo start --localhost --port $PORT",
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "android:debug": "expo run:android",
+    "android:release": "expo run:android --variant release",
+    "android:apk": "expo prebuild --platform android && cd android && ./gradlew assembleRelease && echo \"\\nAPK: $(pwd)/app/build/outputs/apk/release/app-release.apk\""
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

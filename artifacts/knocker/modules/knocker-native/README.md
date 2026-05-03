@@ -50,8 +50,24 @@ This module is **not** available in Expo Go. To test on a physical device:
 
 ```sh
 cd artifacts/knocker
-npx expo run:android        # builds & installs the dev build
+
+# Option A — DEV build (fast iteration, requires Metro running on your machine).
+# The device must be USB-connected or on the same Wi-Fi as your dev machine.
+pnpm android:debug
+
+# Option B — RELEASE build (self-contained APK, no Metro needed).
+# This is what you want for everyday use; the JS bundle is baked in.
+pnpm android:release
+
+# Option C — just produce a shareable APK file (no install).
+pnpm android:apk
+# → APK path is printed at the end (android/app/build/outputs/apk/release/app-release.apk)
 ```
+
+> **"Unable to load script… index.android.bundle"** red screen?
+> You built the **debug** variant and Metro is not reachable from the device.
+> Either keep `pnpm dev` running on the same network, or rebuild with
+> `pnpm android:release` so the JS bundle is embedded in the APK.
 
 Then on the device:
 
