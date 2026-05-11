@@ -34,17 +34,24 @@ export function scheduleRenewals(
 
   const nativeOn = isNativeAvailable && Platform.OS === "android";
 
+  if (nativeOn) {
+    void (async () => {
+      await nativeCancelAll();
+      for (const p of profiles) {
+        if (!p.autoRenew || !p.expiresAt) continue;
+        const safety = (p.autoRenewSafetyWindowSec ?? 300) * 1000;
+        const fireAt = p.expiresAt - safety;
+        await nativeSchedule(p.id, fireAt);
+      }
+    })();
+    return;
+  }
+
   const now = Date.now();
   for (const p of profiles) {
     if (!p.autoRenew || !p.expiresAt) continue;
     const safety = (p.autoRenewSafetyWindowSec ?? 300) * 1000;
     const fireAt = p.expiresAt - safety;
-
-    if (nativeOn) {
-      // Native path: schedule via AlarmManager. Survives app close.
-      void nativeSchedule(p.id, fireAt);
-      continue;
-    }
 
     const delay = fireAt - now;
     if (delay <= 0) {

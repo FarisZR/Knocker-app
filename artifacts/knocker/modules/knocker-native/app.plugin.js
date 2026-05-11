@@ -2,7 +2,7 @@ const {
   withAndroidManifest,
   AndroidConfig,
   withPlugins,
-} = require("@expo/config-plugins");
+} = require("expo/config-plugins");
 
 const TILE_SLOT_COUNT = 5;
 const PACKAGE = "dev.faris.knockernative";
