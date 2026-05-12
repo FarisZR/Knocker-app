@@ -24,7 +24,7 @@ internal object KnockerPrefs {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
       )
     }.getOrElse { error ->
-      Log.e(TAG, "Encrypted storage unavailable.", error)
+      Log.e(TAG, "Encrypted storage unavailable (keystore/security provider issue).", error)
       throw IllegalStateException(
         "Encrypted storage unavailable (keystore/security provider issue)",
         error
