@@ -8,7 +8,7 @@ import androidx.security.crypto.MasterKey
 
 internal object KnockerPrefs {
   private const val TAG = "KnockerPrefs"
-  const val PREFS_NAME = "knocker.native"
+  private const val PREFS_NAME = "knocker.native"
 
   fun preferences(context: Context): SharedPreferences {
     return runCatching {
