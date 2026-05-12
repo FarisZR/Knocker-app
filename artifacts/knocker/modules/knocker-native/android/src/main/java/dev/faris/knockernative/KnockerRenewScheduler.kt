@@ -89,7 +89,7 @@ object KnockerRenewScheduler {
   }
 
   private fun trackedScheduledProfileIds(context: Context): Set<String> {
-    return prefs(context).getStringSet(SCHEDULED_IDS_KEY, emptySet())?.toSet() ?: emptySet()
+    return prefs(context).getStringSet(SCHEDULED_IDS_KEY, emptySet()) ?: emptySet()
   }
 
   private fun prefs(context: Context) =
