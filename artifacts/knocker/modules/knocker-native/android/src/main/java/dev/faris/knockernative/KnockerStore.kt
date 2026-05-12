@@ -2,6 +2,7 @@ package dev.faris.knockernative
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import org.json.JSONArray
@@ -34,6 +35,7 @@ data class StoredProfile(
 }
 
 object KnockerStore {
+  private const val TAG = "KnockerStore"
   private const val PREFS_NAME = "knocker.native"
   private const val PROFILES_KEY = "profiles"
 
@@ -83,7 +85,8 @@ object KnockerStore {
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
       )
-    }.getOrElse {
+    }.getOrElse { error ->
+      Log.w(TAG, "Encrypted storage unavailable; falling back to SharedPreferences.", error)
       context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
   }
