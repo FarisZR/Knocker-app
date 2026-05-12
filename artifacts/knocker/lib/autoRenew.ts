@@ -12,6 +12,42 @@ type Timer = ReturnType<typeof setTimeout>;
 
 const timers = new Map<string, Timer>();
 const MAX_DELAY_MS = 2_147_000_000;
+let nativeScheduleGeneration = 0;
+let nativeScheduleQueue: Promise<void> = Promise.resolve();
+
+function queueNativeScheduling(profiles: Profile[]): void {
+  const generation = ++nativeScheduleGeneration;
+  nativeScheduleQueue = nativeScheduleQueue
+    .catch(() => undefined)
+    .then(async () => {
+      try {
+        await nativeCancelAll();
+        if (generation !== nativeScheduleGeneration) return;
+        for (const p of profiles) {
+          if (generation !== nativeScheduleGeneration) return;
+          if (!p.autoRenew || !p.expiresAt) continue;
+          const safety = (p.autoRenewSafetyWindowSec ?? 300) * 1000;
+          const fireAt = p.expiresAt - safety;
+          await nativeSchedule(p.id, fireAt);
+        }
+      } catch (error) {
+        console.error("Failed to schedule native renewals", error);
+      }
+    });
+}
+
+function queueNativeCancelAll(): void {
+  ++nativeScheduleGeneration;
+  nativeScheduleQueue = nativeScheduleQueue
+    .catch(() => undefined)
+    .then(async () => {
+      try {
+        await nativeCancelAll();
+      } catch (error) {
+        console.error("Failed to cancel native renewals", error);
+      }
+    });
+}
 
 /**
  * Schedule a renewal callback for every auto-renew profile.
@@ -35,15 +71,7 @@ export function scheduleRenewals(
   const nativeOn = isNativeAvailable && Platform.OS === "android";
 
   if (nativeOn) {
-    void (async () => {
-      await nativeCancelAll();
-      for (const p of profiles) {
-        if (!p.autoRenew || !p.expiresAt) continue;
-        const safety = (p.autoRenewSafetyWindowSec ?? 300) * 1000;
-        const fireAt = p.expiresAt - safety;
-        await nativeSchedule(p.id, fireAt);
-      }
-    })();
+    queueNativeScheduling(profiles);
     return;
   }
 
@@ -71,6 +99,6 @@ export function clearAllRenewals(): void {
   for (const t of timers.values()) clearTimeout(t);
   timers.clear();
   if (isNativeAvailable && Platform.OS === "android") {
-    void nativeCancelAll();
+    queueNativeCancelAll();
   }
 }
