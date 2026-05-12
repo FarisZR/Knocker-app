@@ -2,9 +2,6 @@ package dev.faris.knockernative
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -35,7 +32,6 @@ data class StoredProfile(
 }
 
 object KnockerStore {
-  private const val TAG = "KnockerStore"
   private const val PROFILES_KEY = "profiles"
 
   fun replaceProfiles(context: Context, profilesJson: String) {
@@ -72,22 +68,7 @@ object KnockerStore {
   }
 
   private fun preferences(context: Context): SharedPreferences {
-    return runCatching {
-      val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-      EncryptedSharedPreferences.create(
-        context,
-        KnockerPrefs.PREFS_NAME,
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-      )
-    }.getOrElse { error ->
-      Log.e(TAG, "Encrypted storage unavailable; aborting profile persistence.", error)
-      throw IllegalStateException("Encrypted storage unavailable", error)
-    }
+    return KnockerPrefs.preferences(context)
   }
 
   private fun writeProfiles(context: Context, profiles: List<StoredProfile>) {
