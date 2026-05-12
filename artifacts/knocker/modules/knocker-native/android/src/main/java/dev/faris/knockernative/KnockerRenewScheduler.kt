@@ -10,7 +10,7 @@ import android.os.Build
 object KnockerRenewScheduler {
   private const val ACTION_RENEW = "dev.faris.knockernative.action.RENEW"
   private const val EXTRA_PROFILE_ID = "profileId"
-  private const val PREFS_NAME = "knocker.native.renewals"
+  private const val PREFS_NAME = "knocker.native"
   private const val SCHEDULED_IDS_KEY = "scheduledProfileIds"
   private const val REQUEST_CODE_RENEWAL = 0
 
