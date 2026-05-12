@@ -92,5 +92,5 @@ object KnockerRenewScheduler {
   }
 
   private fun prefs(context: Context) =
-    context.getSharedPreferences(KnockerPrefs.PREFS_NAME, Context.MODE_PRIVATE)
+    KnockerPrefs.preferences(context)
 }
