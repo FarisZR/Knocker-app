@@ -12,19 +12,19 @@ type Timer = ReturnType<typeof setTimeout>;
 
 const timers = new Map<string, Timer>();
 const MAX_DELAY_MS = 2_147_000_000;
-let nativeScheduleGeneration = 0;
+let nativeScheduleCancellationToken = 0;
 let nativeScheduleQueue: Promise<void> = Promise.resolve();
 
 function queueNativeScheduling(profiles: Profile[]): void {
-  const generation = ++nativeScheduleGeneration;
+  const cancellationToken = ++nativeScheduleCancellationToken;
   nativeScheduleQueue = nativeScheduleQueue
     .catch(() => undefined)
     .then(async () => {
       try {
         await nativeCancelAll();
-        if (generation !== nativeScheduleGeneration) return;
+        if (cancellationToken !== nativeScheduleCancellationToken) return;
         for (const p of profiles) {
-          if (generation !== nativeScheduleGeneration) return;
+          if (cancellationToken !== nativeScheduleCancellationToken) return;
           if (!p.autoRenew || !p.expiresAt) continue;
           const safety = (p.autoRenewSafetyWindowSec ?? 300) * 1000;
           const fireAt = p.expiresAt - safety;
@@ -37,7 +37,7 @@ function queueNativeScheduling(profiles: Profile[]): void {
 }
 
 function queueNativeCancelAll(): void {
-  ++nativeScheduleGeneration;
+  ++nativeScheduleCancellationToken;
   nativeScheduleQueue = nativeScheduleQueue
     .catch(() => undefined)
     .then(async () => {
