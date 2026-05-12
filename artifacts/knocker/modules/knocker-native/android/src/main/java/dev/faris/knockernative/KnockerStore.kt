@@ -85,8 +85,8 @@ object KnockerStore {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
       )
     }.getOrElse { error ->
-      Log.w(TAG, "Encrypted storage unavailable; falling back to SharedPreferences.", error)
-      context.getSharedPreferences(KnockerPrefs.PREFS_NAME, Context.MODE_PRIVATE)
+      Log.e(TAG, "Encrypted storage unavailable; aborting profile persistence.", error)
+      throw IllegalStateException("Encrypted storage unavailable", error)
     }
   }
 
