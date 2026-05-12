@@ -36,7 +36,6 @@ data class StoredProfile(
 
 object KnockerStore {
   private const val TAG = "KnockerStore"
-  private const val PREFS_NAME = "knocker.native"
   private const val PROFILES_KEY = "profiles"
 
   fun replaceProfiles(context: Context, profilesJson: String) {
@@ -80,14 +79,14 @@ object KnockerStore {
 
       EncryptedSharedPreferences.create(
         context,
-        PREFS_NAME,
+        KnockerPrefs.PREFS_NAME,
         masterKey,
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
       )
     }.getOrElse { error ->
       Log.w(TAG, "Encrypted storage unavailable; falling back to SharedPreferences.", error)
-      context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      context.getSharedPreferences(KnockerPrefs.PREFS_NAME, Context.MODE_PRIVATE)
     }
   }
 
