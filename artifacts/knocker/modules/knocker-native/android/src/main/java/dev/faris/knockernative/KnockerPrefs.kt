@@ -25,7 +25,10 @@ internal object KnockerPrefs {
       )
     }.getOrElse { error ->
       Log.e(TAG, "Encrypted storage unavailable.", error)
-      throw IllegalStateException("Encrypted storage unavailable", error)
+      throw IllegalStateException(
+        "Encrypted storage unavailable (keystore/security provider issue)",
+        error
+      )
     }
   }
 }
