@@ -58,11 +58,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      void SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
-
-  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>
@@ -70,6 +68,11 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
+              {/*
+                Keep the app tree mounted while the splash screen is still up so
+                launch-time side effects like knock-on-open can start before font
+                loading finishes.
+              */}
               <ProfilesProvider>
                 <StatusBar style="light" />
                 <RootLayoutNav />
