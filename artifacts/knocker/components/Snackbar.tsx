@@ -13,7 +13,7 @@ export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
   const { snackbar, dismissSnackbar } = useProfiles();
 
   useEffect(() => {
-    if (!snackbar) return;
+    if (!snackbar || snackbar.persistent) return;
     const t = setTimeout(dismissSnackbar, AUTO_DISMISS_MS);
     return () => clearTimeout(t);
   }, [snackbar, dismissSnackbar]);
