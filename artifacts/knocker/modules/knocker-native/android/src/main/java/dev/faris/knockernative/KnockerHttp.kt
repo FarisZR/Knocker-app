@@ -23,7 +23,6 @@ object KnockerHttp {
       return KnockOutcome.Failure(null, "Profile is not fully configured")
     }
 
-    val url = URL(profile.endpointUrl.trimEnd('/') + "/knock")
     val body = JSONObject().apply {
       profile.ipOverride?.trim()?.takeIf { it.isNotEmpty() }?.let {
         put("ip_address", it)
@@ -33,16 +32,19 @@ object KnockerHttp {
       }
     }
 
-    val connection = (url.openConnection() as HttpURLConnection).apply {
-      requestMethod = "POST"
-      connectTimeout = 10_000
-      readTimeout = 10_000
-      setRequestProperty("Content-Type", "application/json")
-      setRequestProperty("X-Api-Key", profile.apiKey)
-      setRequestProperty("Accept", "application/json")
-    }
+    var connection: HttpURLConnection? = null
 
     return try {
+      val url = URL(profile.endpointUrl.trimEnd('/') + "/knock")
+      connection = (url.openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        connectTimeout = 10_000
+        readTimeout = 10_000
+        setRequestProperty("Content-Type", "application/json")
+        setRequestProperty("X-Api-Key", profile.apiKey)
+        setRequestProperty("Accept", "application/json")
+      }
+
       if (body.length() > 0) {
         connection.doOutput = true
         connection.outputStream.use { output ->
@@ -73,7 +75,7 @@ object KnockerHttp {
       }
       KnockOutcome.Failure(null, message)
     } finally {
-      connection.disconnect()
+      connection?.disconnect()
     }
   }
 

@@ -18,6 +18,7 @@ import {
 } from "@/lib/profiles";
 import {
   isNativeAvailable as isKnockerNativeAvailable,
+  loadProfilesFromNative,
   syncProfiles as syncProfilesToNative,
   type NativeProfileSnapshot,
 } from "knocker-native";
@@ -77,6 +78,40 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, []);
+
+  const toNativeSnapshot = useCallback((list: Profile[]): NativeProfileSnapshot[] => {
+    return list.map((p) => ({
+      id: p.id,
+      name: p.name,
+      endpointUrl: p.endpointUrl,
+      apiKey: p.apiKey,
+      ttlSeconds: p.ttlSeconds,
+      ipOverride: p.ipOverride,
+      autoRenew: p.autoRenew,
+      autoRenewSafetyWindowSec: p.autoRenewSafetyWindowSec,
+      tileSlot: p.tileSlot,
+      expiresAt: p.expiresAt,
+    }));
+  }, []);
+
+  const mergeExpiryFromNative = useCallback(
+    (
+      jsProfiles: Profile[],
+      nativeProfiles: NativeProfileSnapshot[],
+    ): Profile[] => {
+      if (nativeProfiles.length === 0) return jsProfiles;
+      const nativeById = new Map(nativeProfiles.map((p) => [p.id, p]));
+      return jsProfiles.map((profile) => {
+        const nativeProfile = nativeById.get(profile.id);
+        if (!nativeProfile || nativeProfile.expiresAt == null) return profile;
+        if (profile.expiresAt == null || nativeProfile.expiresAt > profile.expiresAt) {
+          return { ...profile, expiresAt: nativeProfile.expiresAt };
+        }
+        return profile;
+      });
+    },
+    [],
+  );
 
   const updateOne = useCallback(
     async (id: string, patch: Partial<Profile>) => {
@@ -241,28 +276,21 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     void (async () => {
       const list = await loadProfiles();
+      const initialProfiles =
+        isKnockerNativeAvailable
+          ? mergeExpiryFromNative(list, await loadProfilesFromNative())
+          : list;
       if (cancelled) return;
-      profilesRef.current = list;
-      setProfiles(list);
+      profilesRef.current = initialProfiles;
+      setProfiles(initialProfiles);
       setLoaded(true);
       // Push the freshly loaded snapshot into the native store so tiles &
       // alarms have current data even if no edit happens this session.
       if (isKnockerNativeAvailable) {
-        const snapshot: NativeProfileSnapshot[] = list.map((p) => ({
-          id: p.id,
-          name: p.name,
-          endpointUrl: p.endpointUrl,
-          apiKey: p.apiKey,
-          ttlSeconds: p.ttlSeconds,
-          ipOverride: p.ipOverride,
-          autoRenew: p.autoRenew,
-          autoRenewSafetyWindowSec: p.autoRenewSafetyWindowSec,
-          tileSlot: p.tileSlot,
-          expiresAt: p.expiresAt,
-        }));
+        const snapshot = toNativeSnapshot(initialProfiles);
         void syncProfilesToNative(snapshot);
       }
-      const launchProfiles = list.filter((p) => p.knockOnOpen);
+      const launchProfiles = initialProfiles.filter((p) => p.knockOnOpen);
       if (launchProfiles.length === 0) return;
       const settled = await Promise.all(
         launchProfiles.map(async (profile) => ({
@@ -313,7 +341,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [runKnock, showSnackbar]);
+  }, [mergeExpiryFromNative, runKnock, showSnackbar, toNativeSnapshot]);
 
   // Reschedule renewals whenever profiles change. Gate is keyed by
   // (profileId, expiresAt) so a single expiry value can only trigger one
