@@ -13,6 +13,7 @@ import { Snackbar } from "@/components/Snackbar";
 import { motion } from "@/constants/motion";
 import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
+import { performKnockHaptic } from "@/lib/haptics";
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -43,11 +44,11 @@ export default function HomeScreen() {
     router.push("/profile/new");
   };
   const onKnockAll = () => {
-    haptic(Haptics.ImpactFeedbackStyle.Heavy);
+    performKnockHaptic();
     void knockAll();
   };
   const onKnockPinned = (id: string) => {
-    haptic(Haptics.ImpactFeedbackStyle.Medium);
+    performKnockHaptic();
     void knockOne(id);
   };
 

@@ -1,8 +1,7 @@
 import { Feather } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated, {
   FadeInDown,
   LinearTransition,
@@ -13,6 +12,7 @@ import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
 import { motion } from "@/constants/motion";
 import { formatCountdown, formatHostname } from "@/lib/format";
+import { performKnockHaptic } from "@/lib/haptics";
 import type { Profile } from "@/lib/profiles";
 
 export function ProfileCard({
@@ -41,9 +41,7 @@ export function ProfileCard({
 
   const onKnock = async () => {
     setKnocking(true);
-    if (Platform.OS !== "web") {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    performKnockHaptic();
     try {
       await knockOne(profile.id);
     } finally {
