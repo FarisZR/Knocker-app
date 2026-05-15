@@ -11,6 +11,7 @@ import Animated, {
 import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
+import { motion } from "@/constants/motion";
 import { formatCountdown, formatHostname } from "@/lib/format";
 import type { Profile } from "@/lib/profiles";
 
@@ -55,11 +56,12 @@ export function ProfileCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(index * 40)
-        .duration(300)
-        .springify()
-        .damping(18)}
-      layout={LinearTransition.springify().damping(20)}
+      entering={FadeInDown.delay(Math.min(index * 20, 120))
+        .duration(motion.duration.medium)
+        .easing(motion.easing.standard)}
+      layout={LinearTransition.duration(motion.duration.short).easing(
+        motion.easing.standard,
+      )}
     >
       <AnimatedPressable
         onPress={onOpen}
@@ -99,14 +101,21 @@ export function ProfileCard({
                 </Text>
                 <Text style={[styles.dot, { color: colors.border }]}>·</Text>
                 <Text
-                  style={[styles.statusText, { color: colors.onSurfaceVariant }]}
+                  style={[
+                    styles.statusText,
+                    { color: colors.onSurfaceVariant },
+                  ]}
                 >
                   {formatCountdown(profile.expiresAt, now)}
                 </Text>
               </>
             ) : isError ? (
               <>
-                <Feather name="alert-circle" size={13} color={colors.destructive} />
+                <Feather
+                  name="alert-circle"
+                  size={13}
+                  color={colors.destructive}
+                />
                 <Text
                   style={[styles.statusText, { color: colors.destructive }]}
                   numberOfLines={1}
@@ -116,8 +125,14 @@ export function ProfileCard({
               </>
             ) : (
               <>
-                <Feather name="clock" size={13} color={colors.mutedForeground} />
-                <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
+                <Feather
+                  name="clock"
+                  size={13}
+                  color={colors.mutedForeground}
+                />
+                <Text
+                  style={[styles.statusText, { color: colors.mutedForeground }]}
+                >
                   Idle
                 </Text>
               </>
@@ -129,7 +144,7 @@ export function ProfileCard({
           onPress={onKnock}
           disabled={knocking || disabled}
           hitSlop={8}
-          scaleTo={0.88}
+          scaleTo={0.94}
           style={[
             styles.knockBtn,
             {
@@ -160,7 +175,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontFamily: "Inter_600SemiBold", flexShrink: 1 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
   meta: { fontSize: 12, fontFamily: "Inter_400Regular", flexShrink: 1 },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+  },
   statusText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   dot: { fontSize: 12 },
   knockBtn: {
