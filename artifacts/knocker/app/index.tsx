@@ -104,13 +104,10 @@ export default function HomeScreen() {
             onPress={onNew}
             scaleTo={0.96}
             style={[styles.emptyCta, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Add new profile"
           >
-            <Feather name="plus" size={18} color={colors.primaryForeground} />
-            <Text
-              style={[styles.emptyCtaText, { color: colors.primaryForeground }]}
-            >
-              New
-            </Text>
+            <Feather name="plus" size={24} color={colors.primaryForeground} />
           </AnimatedPressable>
         </Animated.View>
       ) : (
@@ -297,17 +294,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   emptyCta: {
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    width: 152,
-    minHeight: 50,
-    paddingHorizontal: 24,
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     marginTop: 12,
   },
-  emptyCtaText: { fontSize: 15, fontFamily: "Inter_700Bold" },
   fabStack: {
     position: "absolute",
     alignItems: "flex-end",
