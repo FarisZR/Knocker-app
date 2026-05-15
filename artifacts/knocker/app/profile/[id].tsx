@@ -440,6 +440,7 @@ function TileSlotPicker({
                 : `Slot ${slot}${isActive ? ", selected" : ""}`
             }
             onPress={() => {
+              if (isDisabled) return;
               onChange(isActive ? null : slot);
             }}
             style={({ pressed }) => [
