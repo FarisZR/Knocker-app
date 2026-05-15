@@ -74,7 +74,9 @@ export default function HomeScreen() {
             ? "No profiles yet"
             : `${profiles.length} profile${profiles.length === 1 ? "" : "s"} · ${activeCount} active`}
         </Text>
-        <KnockerWordmark style={styles.wordmark} />
+        <View style={styles.wordmarkFrame}>
+          <KnockerWordmark />
+        </View>
       </Animated.View>
 
       <DevBuildBanner />
@@ -107,7 +109,7 @@ export default function HomeScreen() {
             <Text
               style={[styles.emptyCtaText, { color: colors.primaryForeground }]}
             >
-              New profile
+              New
             </Text>
           </AnimatedPressable>
         </Animated.View>
@@ -267,7 +269,12 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 8 },
   kicker: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  wordmark: { marginTop: 6 },
+  wordmarkFrame: {
+    width: 188,
+    height: 33,
+    marginTop: 6,
+    overflow: "visible",
+  },
   empty: {
     flex: 1,
     alignItems: "center",
@@ -276,8 +283,15 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   emptyIcon: { marginBottom: 2 },
-  emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", marginTop: 8 },
+  emptyTitle: {
+    alignSelf: "stretch",
+    fontSize: 20,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 8,
+    textAlign: "center",
+  },
   emptyBody: {
+    alignSelf: "stretch",
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
@@ -285,10 +299,12 @@ const styles = StyleSheet.create({
   emptyCta: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    borderRadius: 22,
+    width: 152,
+    minHeight: 50,
+    paddingHorizontal: 24,
+    borderRadius: 25,
     marginTop: 12,
   },
   emptyCtaText: { fontSize: 15, fontFamily: "Inter_700Bold" },
