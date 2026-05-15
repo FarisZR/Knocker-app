@@ -56,6 +56,7 @@ abstract class KnockerTileService : TileService() {
           }
           renderTile(current, Tile.STATE_ACTIVE, profileSubtitle("Knocked"))
           refreshCurrentStateAtExpiry(current)
+          KnockerTileNotifier.notifySuccess(this, slot, current, result.whitelistedEntry)
           showToast("Knocked ${profileDisplayName(current)}")
         }
         is KnockOutcome.Failure -> {
