@@ -1,5 +1,6 @@
 package dev.faris.knockernative
 
+import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -23,12 +24,14 @@ abstract class KnockerTileService : TileService() {
     if (profile == null) {
       renderTile(null, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
       showToast("Assign a profile to Knock $slot in Knocker")
+      openApp()
       return
     }
 
     if (!profile.canKnock()) {
       renderTile(profile, Tile.STATE_INACTIVE, profileSubtitle("Finish setup in Knocker"))
       showToast("${profileDisplayName(profile)} is missing its endpoint or API key")
+      openApp()
       refreshCurrentStateSoon()
       return
     }
@@ -45,11 +48,13 @@ abstract class KnockerTileService : TileService() {
             KnockerRenewScheduler.schedule(this, profile.id, nextFireAt)
           }
           renderTile(current, Tile.STATE_ACTIVE, profileSubtitle("Knocked"))
+          refreshCurrentStateAtExpiry(current)
           showToast("Knocked ${profileDisplayName(current)}")
         }
         is KnockOutcome.Failure -> {
-          renderTile(profile, Tile.STATE_ACTIVE, profileSubtitle("Failed - tap again"))
+          renderTile(profile, currentTileState(profile), profileSubtitle("Failed - tap again"))
           showToast("Knock failed: ${result.message}")
+          openApp()
         }
       }
       refreshCurrentStateSoon()
@@ -59,7 +64,7 @@ abstract class KnockerTileService : TileService() {
   protected fun renderCurrentState() {
     val profile = KnockerStore.findProfileBySlot(this, slot)
     if (profile == null) {
-      renderTile(null, Tile.STATE_UNAVAILABLE, "Assign this tile in Knocker")
+      renderTile(null, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
       return
     }
 
@@ -68,7 +73,8 @@ abstract class KnockerTileService : TileService() {
       return
     }
 
-    renderTile(profile, Tile.STATE_ACTIVE, profileSubtitle(currentStatus(profile)))
+    renderTile(profile, currentTileState(profile), profileSubtitle(currentStatus(profile)))
+    refreshCurrentStateAtExpiry(profile)
   }
 
   private fun renderTile(profile: StoredProfile?, state: Int, subtitle: String?) {
@@ -87,6 +93,15 @@ abstract class KnockerTileService : TileService() {
     return "Tile $slot - $status"
   }
 
+  private fun currentTileState(profile: StoredProfile): Int {
+    val expiresAt = profile.expiresAt ?: return Tile.STATE_INACTIVE
+    return if (expiresAt > System.currentTimeMillis()) {
+      Tile.STATE_ACTIVE
+    } else {
+      Tile.STATE_INACTIVE
+    }
+  }
+
   private fun profileDisplayName(profile: StoredProfile): String {
     return profile.name.takeIf { it.isNotBlank() } ?: "Profile"
   }
@@ -101,9 +116,24 @@ abstract class KnockerTileService : TileService() {
     mainHandler.postDelayed({ renderCurrentState() }, 1500L)
   }
 
+  private fun refreshCurrentStateAtExpiry(profile: StoredProfile) {
+    val expiresAt = profile.expiresAt ?: return
+    val delay = (expiresAt - System.currentTimeMillis()).coerceAtLeast(0L)
+    if (delay == 0L) return
+    mainHandler.postDelayed({ renderCurrentState() }, delay)
+  }
+
   private fun showToast(message: String) {
     mainHandler.post {
       Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
+    }
+  }
+
+  private fun openApp() {
+    mainHandler.post {
+      val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return@post
+      launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+      startActivityAndCollapse(launchIntent)
     }
   }
 }
