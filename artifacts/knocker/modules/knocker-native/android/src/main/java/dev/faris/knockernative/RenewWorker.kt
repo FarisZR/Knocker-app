@@ -29,7 +29,7 @@ class RenewWorker(
         KnockerTileService.refreshAll(applicationContext)
         Result.success()
       }
-      is KnockOutcome.Failure -> Result.success()
+      is KnockOutcome.Failure -> Result.failure()
     }
   }
 
