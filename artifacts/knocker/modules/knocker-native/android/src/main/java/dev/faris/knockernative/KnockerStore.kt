@@ -2,6 +2,7 @@ package dev.faris.knockernative
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -32,16 +33,25 @@ data class StoredProfile(
 }
 
 object KnockerStore {
+  private const val TAG = "KnockerStore"
   private const val PROFILES_KEY = "profiles"
+  private val profileLock = Any()
 
   fun replaceProfiles(context: Context, profilesJson: String) {
     val profiles = parseProfiles(profilesJson)
-    writeProfiles(context, profiles)
+    if (profiles == null) {
+      Log.w(TAG, "Skipping profile sync because the snapshot payload could not be parsed.")
+      return
+    }
+
+    synchronized(profileLock) {
+      writeProfiles(context, profiles)
+    }
   }
 
   fun readProfiles(context: Context): List<StoredProfile> {
     val raw = preferences(context).getString(PROFILES_KEY, "[]") ?: "[]"
-    return parseProfiles(raw)
+    return parseProfiles(raw) ?: emptyList()
   }
 
   fun findProfileById(context: Context, profileId: String): StoredProfile? {
@@ -57,14 +67,16 @@ object KnockerStore {
     profileId: String,
     expiresAt: Long?
   ): StoredProfile? {
-    val profiles = readProfiles(context).toMutableList()
-    val index = profiles.indexOfFirst { it.id == profileId }
-    if (index < 0) return null
+    synchronized(profileLock) {
+      val profiles = readProfiles(context).toMutableList()
+      val index = profiles.indexOfFirst { it.id == profileId }
+      if (index < 0) return null
 
-    val updated = profiles[index].withExpiresAt(expiresAt)
-    profiles[index] = updated
-    writeProfiles(context, profiles)
-    return updated
+      val updated = profiles[index].withExpiresAt(expiresAt)
+      profiles[index] = updated
+      writeProfiles(context, profiles)
+      return updated
+    }
   }
 
   private fun preferences(context: Context): SharedPreferences {
@@ -79,7 +91,7 @@ object KnockerStore {
     preferences(context).edit().putString(PROFILES_KEY, json.toString()).apply()
   }
 
-  private fun parseProfiles(raw: String): List<StoredProfile> {
+  private fun parseProfiles(raw: String): List<StoredProfile>? {
     return try {
       val json = JSONArray(raw)
       buildList(json.length()) {
@@ -93,18 +105,19 @@ object KnockerStore {
               name = objectJson.optString("name").trim(),
               endpointUrl = objectJson.optString("endpointUrl").trim(),
               apiKey = objectJson.optString("apiKey"),
-              ttlSeconds = objectJson.optNullableInt("ttlSeconds"),
+              ttlSeconds = objectJson.optStrictNullableInt("ttlSeconds"),
               ipOverride = objectJson.optNullableString("ipOverride"),
               autoRenew = objectJson.optBoolean("autoRenew", false),
-              autoRenewSafetyWindowSec = objectJson.optInt("autoRenewSafetyWindowSec", 300),
-              tileSlot = objectJson.optNullableInt("tileSlot"),
-              expiresAt = objectJson.optNullableLong("expiresAt")
+              autoRenewSafetyWindowSec = objectJson.optStrictNullableInt("autoRenewSafetyWindowSec") ?: 300,
+              tileSlot = objectJson.optStrictNullableInt("tileSlot"),
+              expiresAt = objectJson.optStrictNullableLong("expiresAt")
             )
           )
         }
       }
-    } catch (_: Exception) {
-      emptyList()
+    } catch (error: Exception) {
+      Log.w(TAG, "Failed to parse stored profiles.", error)
+      null
     }
   }
 
@@ -127,18 +140,39 @@ object KnockerStore {
     put(key, value ?: JSONObject.NULL)
   }
 
-  private fun JSONObject.optNullableInt(key: String): Int? {
-    if (isNull(key) || !has(key)) return null
-    return optInt(key)
+  private fun JSONObject.optStrictNullableInt(key: String): Int? {
+    val value = optNullableValue(key) ?: return null
+    return when (value) {
+      is Int -> value
+      is Long -> value.toIntOrNullSafe()
+      is Number -> value.toInt()
+      is String -> value.toIntOrNull()
+      else -> null
+    }
   }
 
-  private fun JSONObject.optNullableLong(key: String): Long? {
-    if (isNull(key) || !has(key)) return null
-    return optLong(key)
+  private fun JSONObject.optStrictNullableLong(key: String): Long? {
+    val value = optNullableValue(key) ?: return null
+    return when (value) {
+      is Int -> value.toLong()
+      is Long -> value
+      is Number -> value.toLong()
+      is String -> value.toLongOrNull()
+      else -> null
+    }
   }
 
   private fun JSONObject.optNullableString(key: String): String? {
     if (isNull(key) || !has(key)) return null
     return optString(key).takeIf { it.isNotBlank() }
+  }
+
+  private fun JSONObject.optNullableValue(key: String): Any? {
+    if (!has(key) || isNull(key)) return null
+    return get(key)
+  }
+
+  private fun Long.toIntOrNullSafe(): Int? {
+    return if (this in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) toInt() else null
   }
 }
