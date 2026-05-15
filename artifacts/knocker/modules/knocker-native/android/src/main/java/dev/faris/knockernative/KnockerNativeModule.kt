@@ -18,6 +18,10 @@ class KnockerNativeModule : Module() {
       KnockerTileService.refreshAll(context)
     }
 
+    AsyncFunction("getProfilesJson") {
+      KnockerStore.readProfilesJson(context)
+    }
+
     AsyncFunction("scheduleRenewal") { profileId: String, fireAtMs: Double ->
       KnockerRenewScheduler.schedule(context, profileId, fireAtMs.toLong())
     }

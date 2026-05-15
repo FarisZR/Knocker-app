@@ -51,8 +51,12 @@ object KnockerStore {
   }
 
   fun readProfiles(context: Context): List<StoredProfile> {
-    val raw = preferences(context).getString(PROFILES_KEY, "[]") ?: "[]"
+    val raw = readProfilesJson(context)
     return parseProfiles(raw) ?: emptyList()
+  }
+
+  fun readProfilesJson(context: Context): String {
+    return preferences(context).getString(PROFILES_KEY, "[]") ?: "[]"
   }
 
   fun findProfileById(context: Context, profileId: String): StoredProfile? {

@@ -430,8 +430,16 @@ function TileSlotPicker({
         return (
           <Pressable
             key={slot}
+            disabled={isDisabled}
+            accessibilityState={{ disabled: isDisabled, selected: isActive }}
+            accessibilityLabel={
+              isDisabled
+                ? `Slot ${slot}, unavailable${
+                    conflict?.name ? `, used by ${conflict.name}` : ""
+                  }`
+                : `Slot ${slot}${isActive ? ", selected" : ""}`
+            }
             onPress={() => {
-              if (isDisabled) return;
               onChange(isActive ? null : slot);
             }}
             style={({ pressed }) => [
