@@ -9,10 +9,12 @@ import android.os.Looper
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.widget.Toast
+import java.util.concurrent.atomic.AtomicBoolean
 
 abstract class KnockerTileService : TileService() {
   protected abstract val slot: Int
   private val mainHandler = Handler(Looper.getMainLooper())
+  private val isKnocking = AtomicBoolean(false)
 
   override fun onTileAdded() {
     super.onTileAdded()
@@ -27,9 +29,16 @@ abstract class KnockerTileService : TileService() {
   override fun onClick() {
     super.onClick()
 
+    if (isKnocking.get()) {
+      val currentProfile = KnockerStore.findProfileBySlot(this, slot)
+      renderTile(currentProfile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
+      return
+    }
+
     val profile = KnockerStore.findProfileBySlot(this, slot)
     if (profile == null) {
       renderTile(null, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
+      KnockerTileNotifier.notifyFailure(this, slot, null, "Assign a profile to Knock $slot in Knocker.")
       showToast("Assign a profile to Knock $slot in Knocker")
       openApp()
       return
@@ -37,35 +46,48 @@ abstract class KnockerTileService : TileService() {
 
     if (!profile.canKnock()) {
       renderTile(profile, Tile.STATE_INACTIVE, profileSubtitle("Finish setup in Knocker"))
+      KnockerTileNotifier.notifyFailure(this, slot, profile, "Finish setup in Knocker before using this tile.")
       showToast("${profileDisplayName(profile)} is missing its endpoint or API key")
       openApp()
       refreshCurrentStateSoon()
       return
     }
 
-    renderTile(profile, Tile.STATE_ACTIVE, profileSubtitle("Knocking..."))
+    if (!isKnocking.compareAndSet(false, true)) {
+      renderTile(profile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
+      return
+    }
+
+    renderTile(profile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
     KnockerExecutors.io.execute {
-      val result = KnockerHttp.knock(profile)
-      when (result) {
-        is KnockOutcome.Success -> {
-          val updated = KnockerStore.updateExpiry(this, profile.id, result.expiresAtMillis)
-          val current = updated ?: profile
-          val nextFireAt = updated?.renewalAtMillis()
-          if (nextFireAt != null) {
-            KnockerRenewScheduler.schedule(this, profile.id, nextFireAt)
+      try {
+        val result = KnockerHttp.knock(profile)
+        when (result) {
+          is KnockOutcome.Success -> {
+            val updated = KnockerStore.updateExpiry(this, profile.id, result.expiresAtMillis)
+            val current = updated ?: profile
+            val nextFireAt = updated?.renewalAtMillis()
+            if (nextFireAt != null) {
+              KnockerRenewScheduler.schedule(this, profile.id, nextFireAt)
+            } else if (updated != null) {
+              KnockerRenewScheduler.cancel(this, profile.id)
+            }
+            renderTile(current, Tile.STATE_ACTIVE, profileSubtitle("Knocked"))
+            refreshCurrentStateAtExpiry(current)
+            KnockerTileNotifier.notifySuccess(this, slot, current, result.whitelistedEntry)
+            showToast("Knocked ${profileDisplayName(current)}")
           }
-          renderTile(current, Tile.STATE_ACTIVE, profileSubtitle("Knocked"))
-          refreshCurrentStateAtExpiry(current)
-          KnockerTileNotifier.notifySuccess(this, slot, current, result.whitelistedEntry)
-          showToast("Knocked ${profileDisplayName(current)}")
+          is KnockOutcome.Failure -> {
+            renderTile(profile, currentTileState(profile), profileSubtitle("Failed - tap again"))
+            KnockerTileNotifier.notifyFailure(this, slot, profile, result.message)
+            showToast("Knock failed: ${result.message}")
+            openApp()
+          }
         }
-        is KnockOutcome.Failure -> {
-          renderTile(profile, currentTileState(profile), profileSubtitle("Failed - tap again"))
-          showToast("Knock failed: ${result.message}")
-          openApp()
-        }
+      } finally {
+        isKnocking.set(false)
+        refreshCurrentStateSoon()
       }
-      refreshCurrentStateSoon()
     }
   }
 

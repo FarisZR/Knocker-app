@@ -70,7 +70,11 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         expiresAt: p.expiresAt,
       }));
       // Wait for native storage so a just-saved tile mapping works immediately.
-      await syncProfilesToNative(snapshot);
+      try {
+        await syncProfilesToNative(snapshot);
+      } catch (error) {
+        console.warn("Failed to sync profiles to native storage.", error);
+      }
     }
   }, []);
 
