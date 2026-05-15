@@ -2,9 +2,18 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useMemo } from "react";
-import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
+import {
+  FlatList,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Circle, Ellipse, G, Path } from "react-native-svg";
 
 import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { DevBuildBanner } from "@/components/DevBuildBanner";
@@ -70,9 +79,7 @@ export default function HomeScreen() {
             ? "No profiles yet"
             : `${profiles.length} profile${profiles.length === 1 ? "" : "s"} · ${activeCount} active`}
         </Text>
-        <Text style={[styles.title, { color: colors.foreground }]}>
-          Knocker
-        </Text>
+        <KnockerWordmark style={styles.wordmark} />
       </Animated.View>
 
       <DevBuildBanner />
@@ -88,7 +95,7 @@ export default function HomeScreen() {
           )}
           style={styles.empty}
         >
-          <Feather name="zap" size={48} color={colors.primary} />
+          <KnockerIcon style={styles.emptyIcon} />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
             Add your first profile
           </Text>
@@ -220,16 +227,52 @@ export default function HomeScreen() {
   );
 }
 
+function KnockerIcon({ style }: { style?: StyleProp<ViewStyle> }) {
+  return (
+    <Svg
+      width={64}
+      height={64}
+      viewBox="0 -960 960 960"
+      style={style}
+      accessibilityRole="image"
+      accessibilityLabel="Knocker"
+    >
+      <Ellipse fill="#1a1a1a" cx={479.39853} cy={-479.3985} rx={479.3985} ry={478.1955} />
+      <Path
+        fill="#ffffff"
+        d="m 764,-172 v -22 h -56 v -563 q 0,-21.5 -16.25,-37.75 Q 675.5,-811 654,-811 H 306 q -21.5,0 -37.75,16.25 Q 252,-778.5 252,-757 v 563 h -56 v 22 z m -404,-22 h -86 v -563 q 0,-14 9,-23 9,-9 23,-9 h 128 v -3 q -32,2 -53,25.7 -21,23.7 -21,55.3 z m 159.81,-261 q -9.81,0 -17.31,-7.69 -7.5,-7.7 -7.5,-17.5 0,-9.81 7.69,-17.31 7.7,-7.5 17.5,-7.5 9.81,0 17.31,7.69 7.5,7.7 7.5,17.5 0,9.81 -7.69,17.31 -7.7,7.5 -17.5,7.5 z"
+      />
+      <Ellipse fill="#fde562" cx={518.95984} cy={-479.2001} rx={28.732313} ry={28.63653} />
+    </Svg>
+  );
+}
+
+function KnockerWordmark({ style }: { style?: StyleProp<ViewStyle> }) {
+  return (
+    <Svg
+      width={205}
+      height={36}
+      viewBox="0 0 204.67189 35.55994"
+      style={style}
+      accessibilityRole="image"
+      accessibilityLabel="Knocker"
+    >
+      <G transform="translate(-3.5522995,-148.19943)">
+        <Path
+          fill="#f9f9f9"
+          d="m 3.5523266,183.75937 v -35.56 h 4.5719999 v 15.494 h 8.3819995 l 9.5504,-15.494 h 5.3848 l -10.668,16.764 11.43,18.796 h -5.2832 l -9.7028,-16.002 H 8.1243265 v 16.002 z m 32.0039554,0 v -28.448 h 20.828 l 4.572,4.572 v 23.876 h -4.572 v -24.384 h -16.256 v 24.384 z m 31.242045,-4.572 v -19.304 l 4.572,-4.572 h 15.747999 l 4.572,4.572 v 19.304 l -4.572,4.572 H 71.370327 Z m 4.572,0.508 h 15.747999 v -20.32 H 71.370327 Z m 25.908018,-0.508 v -19.304 l 4.572005,-4.572 h 18.79599 v 4.064 h -18.79599 v 20.32 h 18.79599 v 4.064 h -18.79599 z m 27.939995,4.572 v -35.56 h 4.572 v 18.7452 h 9.0424 l 7.62,-11.6332 h 5.2324 l -8.9408,13.1064 9.398,15.3416 h -5.1816 l -7.6708,-12.7508 h -9.4996 v 12.7508 z m 29.21001,-4.572 v -19.304 l 4.572,-4.572 h 19.812 v 15.748 h -19.812 v 8.636 h 18.796 v 4.064 h -18.796 z m 4.572,-11.684 15.4432,-0.508 v -7.62 h -15.4432 z m 25.654,16.256 v -23.876 l 4.572,-4.572 h 15.24 v 4.064 h -15.24 v 24.384 z"
+        />
+        <Circle fill="#fde562" cx={203.30513} cy={157.00136} r={4.9190621} />
+      </G>
+    </Svg>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 8 },
   kicker: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  title: {
-    fontSize: 32,
-    fontFamily: "Inter_400Regular",
-    marginTop: 6,
-    letterSpacing: -0.5,
-  },
+  wordmark: { marginTop: 6 },
   empty: {
     flex: 1,
     alignItems: "center",
@@ -237,6 +280,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     gap: 14,
   },
+  emptyIcon: { marginBottom: 2 },
   emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", marginTop: 8 },
   emptyBody: {
     fontSize: 14,
