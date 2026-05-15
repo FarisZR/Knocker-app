@@ -3,6 +3,7 @@ package dev.faris.knockernative
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import java.io.IOException
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -88,7 +89,10 @@ object KnockerStore {
     for (profile in profiles) {
       json.put(profile.toJson())
     }
-    preferences(context).edit().putString(PROFILES_KEY, json.toString()).commit()
+    val committed = preferences(context).edit().putString(PROFILES_KEY, json.toString()).commit()
+    if (!committed) {
+      throw IOException("Failed to commit stored profiles.")
+    }
   }
 
   private fun parseProfiles(raw: String): List<StoredProfile>? {

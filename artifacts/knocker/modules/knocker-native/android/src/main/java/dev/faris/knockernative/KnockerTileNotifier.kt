@@ -47,6 +47,33 @@ object KnockerTileNotifier {
     NotificationManagerCompat.from(appContext).notify(slot, notification)
   }
 
+  fun notifyFailure(
+    context: Context,
+    slot: Int,
+    profile: StoredProfile?,
+    message: String
+  ) {
+    val appContext = context.applicationContext
+    if (!canPostNotifications(appContext)) return
+
+    ensureChannel(appContext)
+
+    val title = profile?.let {
+      "Knock failed for ${profileDisplayName(it)}"
+    } ?: "Knock $slot failed"
+    val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.stat_notify_error)
+      .setContentTitle(title)
+      .setContentText(message)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+      .setAutoCancel(true)
+      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+      .setContentIntent(contentIntent(appContext))
+      .build()
+
+    NotificationManagerCompat.from(appContext).notify(1000 + slot, notification)
+  }
+
   private fun ensureChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val manager = context.getSystemService(NotificationManager::class.java) ?: return
