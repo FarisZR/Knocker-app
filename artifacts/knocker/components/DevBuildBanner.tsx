@@ -14,8 +14,8 @@ import {
  *   - Hidden on iOS / web entirely.
  *   - On Android in Expo Go: shows a friendly notice that Quick Settings
  *     tiles + background auto-renew need a custom dev/prod build.
- *   - On Android dev/prod build: shows a green "ready" pill, OR a yellow
- *     warning if exact alarm permission has been revoked.
+ *   - On Android dev/prod build: only shows a warning if exact alarm
+ *     permission has been revoked.
  */
 export function DevBuildBanner() {
   const colors = useColors();
@@ -75,26 +75,6 @@ export function DevBuildBanner() {
           settings.
         </Text>
       </Pressable>
-    );
-  }
-
-  if (exactAlarms === true) {
-    return (
-      <View
-        style={[
-          styles.banner,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.borderVariant,
-          },
-        ]}
-      >
-        <Feather name="check-circle" size={14} color={colors.primary} />
-        <Text style={[styles.text, { color: colors.mutedForeground }]}> 
-          Native tiles active. Add Android's Knock 1-5 tiles, then match the
-          same number inside a profile.
-        </Text>
-      </View>
     );
   }
 
