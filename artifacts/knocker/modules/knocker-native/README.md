@@ -71,12 +71,15 @@ pnpm android:apk
 
 Then on the device:
 
-1. Open the pull-down panel → pencil/edit icon → drag any "Knock 1…5" tile
-   into the active set.
+1. Open the pull-down panel -> pencil/edit icon -> drag any "Knock 1...5"
+   tile into the active set.
 2. In Knocker, edit a profile and assign it to the matching slot in the
-   "Quick Settings tile" picker.
-3. Force-stop the app and tap the tile — a knock will still fire.
-4. Enable "Auto-renew before expiry" on a profile and observe that renewals
+   "Quick Settings tile slot" picker.
+3. The mapping is one-to-one: the Android tile named "Knock 3" triggers the
+   profile assigned to slot `3` in Knocker.
+4. Force-stop the app and tap the tile. You should get a toast and the tile
+   state should update even while the app is closed.
+5. Enable "Auto-renew before expiry" on a profile and observe that renewals
    continue even after the app is killed (logcat tag `KnockerRenewAlarm`).
 
 If the in-app banner says "Exact alarms disabled", tap it to open the system

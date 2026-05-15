@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -81,22 +80,21 @@ export function DevBuildBanner() {
 
   if (exactAlarms === true) {
     return (
-      <Pressable
-        onPress={() => Linking.openSettings()}
-        style={({ pressed }) => [
+      <View
+        style={[
           styles.banner,
           {
             backgroundColor: colors.surface,
             borderColor: colors.borderVariant,
-            opacity: pressed ? 0.7 : 1,
           },
         ]}
       >
         <Feather name="check-circle" size={14} color={colors.primary} />
-        <Text style={[styles.text, { color: colors.mutedForeground }]}>
-          Native tiles & exact-alarm renewals active.
+        <Text style={[styles.text, { color: colors.mutedForeground }]}> 
+          Native tiles active. Add Android's Knock 1-5 tiles, then match the
+          same number inside a profile.
         </Text>
-      </Pressable>
+      </View>
     );
   }
 

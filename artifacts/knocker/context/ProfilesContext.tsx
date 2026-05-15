@@ -66,7 +66,8 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         tileSlot: p.tileSlot,
         expiresAt: p.expiresAt,
       }));
-      void syncProfilesToNative(snapshot);
+      // Wait for native storage so a just-saved tile mapping works immediately.
+      await syncProfilesToNative(snapshot);
     }
   }, []);
 
@@ -195,7 +196,15 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       const next = exists
         ? profilesRef.current.map((x) => (x.id === p.id ? p : x))
         : [...profilesRef.current, p];
-      await persist(next);
+      await persist(
+        p.tileSlot === null
+          ? next
+          : next.map((x) =>
+              x.id !== p.id && x.tileSlot === p.tileSlot
+                ? { ...x, tileSlot: null }
+                : x,
+            ),
+      );
     },
     [persist],
   );

@@ -241,14 +241,14 @@ export default function ProfileEditScreen() {
           />
           {isKnockerNativeAvailable ? (
             <View style={[styles.field, { paddingTop: 14 }]}>
-              <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-                Quick Settings tile
+              <Text style={[styles.fieldLabel, { color: colors.foreground }]}> 
+                Quick Settings tile slot
               </Text>
               <Text
                 style={[styles.fieldSub, { color: colors.mutedForeground }]}
               >
-                Pin a tile (1–{TILE_SLOT_COUNT}) so you can knock from the
-                pull-down panel even when the app is closed.
+                Android names these system tiles Knock 1-{TILE_SLOT_COUNT}.
+                Pick the same number here and in the Quick Settings editor.
               </Text>
               <TileSlotPicker
                 value={draft.tileSlot}
@@ -257,6 +257,13 @@ export default function ProfileEditScreen() {
                 onChange={(slot) => patch({ tileSlot: slot })}
                 colors={colors}
               />
+              <Text
+                style={[styles.tileSlotHint, { color: colors.mutedForeground }]}
+              >
+                {draft.tileSlot === null
+                  ? "Add a Knock tile in Android, then match its number here."
+                  : `This profile will respond to the Android tile labeled \"Knock ${draft.tileSlot}\".`}
+              </Text>
             </View>
           ) : null}
         </Section>
@@ -419,16 +426,20 @@ function TileSlotPicker({
       {slots.map((slot) => {
         const conflict = ownerOf(slot);
         const isActive = value === slot;
+        const isDisabled = Boolean(conflict) && !isActive;
         return (
           <Pressable
             key={slot}
-            onPress={() => onChange(isActive ? null : slot)}
+            onPress={() => {
+              if (isDisabled) return;
+              onChange(isActive ? null : slot);
+            }}
             style={({ pressed }) => [
               styles.tileSlotChip,
               {
                 borderColor: conflict ? colors.destructive : colors.border,
                 backgroundColor: isActive ? colors.primary : "transparent",
-                opacity: pressed ? 0.7 : 1,
+                opacity: isDisabled ? 0.45 : pressed ? 0.7 : 1,
               },
             ]}
           >
@@ -603,5 +614,11 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
     maxWidth: 90,
+  },
+  tileSlotHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: 10,
+    lineHeight: 17,
   },
 });
