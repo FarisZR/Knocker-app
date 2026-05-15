@@ -15,7 +15,7 @@ class RenewWorker(
   override fun doWork(): Result {
     val profileId = inputData.getString(KEY_PROFILE_ID)?.takeIf { it.isNotBlank() }
       ?: return Result.failure()
-    val profile = KnockerStore.findProfileById(applicationContext, profileId) ?: return Result.success()
+    val profile = KnockerStore.findProfileById(applicationContext, profileId) ?: return Result.failure()
 
     return when (val knockResult = KnockerHttp.knock(profile)) {
       is KnockOutcome.Success -> {
