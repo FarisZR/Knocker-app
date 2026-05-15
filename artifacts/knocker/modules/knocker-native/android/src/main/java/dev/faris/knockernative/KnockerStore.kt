@@ -88,7 +88,7 @@ object KnockerStore {
     for (profile in profiles) {
       json.put(profile.toJson())
     }
-    preferences(context).edit().putString(PROFILES_KEY, json.toString()).apply()
+    preferences(context).edit().putString(PROFILES_KEY, json.toString()).commit()
   }
 
   private fun parseProfiles(raw: String): List<StoredProfile>? {
