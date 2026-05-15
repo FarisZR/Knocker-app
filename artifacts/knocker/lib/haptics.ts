@@ -6,27 +6,17 @@ function ignoreHapticFailure(promise: Promise<void>) {
 }
 
 export function performKnockHaptic() {
-  if (Platform.OS === "android") {
+  if (Platform.OS !== "web") {
     ignoreHapticFailure(
       Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Confirm),
     );
-    return;
-  }
-
-  if (Platform.OS !== "web") {
-    ignoreHapticFailure(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
   }
 }
 
 export function performTapHaptic() {
-  if (Platform.OS === "android") {
+  if (Platform.OS !== "web") {
     ignoreHapticFailure(
       Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Context_Click),
     );
-    return;
-  }
-
-  if (Platform.OS !== "web") {
-    ignoreHapticFailure(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
   }
 }
