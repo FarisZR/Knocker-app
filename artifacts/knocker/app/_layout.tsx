@@ -17,10 +17,10 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ProfilesProvider } from "@/context/ProfilesContext";
+import { ProfilesProvider, useProfiles } from "@/context/ProfilesContext";
 import { useColors } from "@/hooks/useColors";
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
@@ -48,8 +48,22 @@ function RootLayoutNav() {
   );
 }
 
+function StartupReadyController() {
+  const { loaded } = useProfiles();
+
+  useEffect(() => {
+    if (!loaded) return;
+    const frame = requestAnimationFrame(() => {
+      void SplashScreen.hideAsync();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [loaded]);
+
+  return null;
+}
+
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
+  useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -58,21 +72,17 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
-
-  useEffect(() => {
     if (Platform.OS !== "android") return;
+    if (Number(Platform.Version) < 33) return;
+
     void (async () => {
-      await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-      );
+      const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+      const alreadyGranted = await PermissionsAndroid.check(permission);
+      if (alreadyGranted) return;
+
+      await PermissionsAndroid.request(permission);
     })();
   }, []);
-
-  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>
@@ -80,7 +90,13 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
+              {/*
+                Load fonts in the background, but don't keep the splash screen up
+                for cosmetic work — we want the home screen and launch-knock
+                feedback visible as soon as profiles are loaded.
+              */}
               <ProfilesProvider>
+                <StartupReadyController />
                 <StatusBar style="light" />
                 <RootLayoutNav />
               </ProfilesProvider>

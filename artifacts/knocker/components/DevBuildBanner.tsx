@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import {
@@ -12,8 +12,7 @@ import {
 /**
  * Compact banner that explains the state of native Android features:
  *   - Hidden on iOS / web entirely.
- *   - On Android in Expo Go: shows a friendly notice that Quick Settings
- *     tiles + background auto-renew need a custom dev/prod build.
+ *   - Hidden when the native module is unavailable.
  *   - On Android dev/prod build: only shows a warning if exact alarm
  *     permission has been revoked.
  */
@@ -34,27 +33,7 @@ export function DevBuildBanner() {
   }, []);
 
   if (Platform.OS !== "android") return null;
-
-  if (!isNativeAvailable) {
-    return (
-      <View
-        style={[
-          styles.banner,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-        ]}
-      >
-        <Feather name="info" size={14} color={colors.mutedForeground} />
-        <Text style={[styles.text, { color: colors.mutedForeground }]}>
-          Quick Settings tiles & background auto-renew need a dev build —
-          run{" "}
-          <Text style={[styles.code, { color: colors.foreground }]}>
-            npx expo run:android
-          </Text>
-          .
-        </Text>
-      </View>
-    );
-  }
+  if (!isNativeAvailable) return null;
 
   if (exactAlarms === false) {
     return (
@@ -71,7 +50,7 @@ export function DevBuildBanner() {
       >
         <Feather name="alert-triangle" size={14} color={colors.destructive} />
         <Text style={[styles.text, { color: colors.foreground }]}>
-          Exact alarms disabled — auto-renew may fire late. Tap to open
+          Exact alarms disabled - auto-renew may fire late. Tap to open
           settings.
         </Text>
       </Pressable>
@@ -99,5 +78,4 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     lineHeight: 16,
   },
-  code: { fontFamily: "Inter_600SemiBold" },
 });

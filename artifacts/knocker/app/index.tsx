@@ -3,16 +3,14 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useMemo } from "react";
 import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  FadeIn,
-  FadeInDown,
-} from "react-native-reanimated";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { DevBuildBanner } from "@/components/DevBuildBanner";
 import { ProfileCard } from "@/components/ProfileCard";
 import { Snackbar } from "@/components/Snackbar";
+import { motion } from "@/constants/motion";
 import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
 
@@ -61,7 +59,9 @@ export default function HomeScreen() {
       ]}
     >
       <Animated.View
-        entering={FadeIn.duration(300)}
+        entering={FadeIn.duration(motion.duration.medium).easing(
+          motion.easing.standard,
+        )}
         style={styles.header}
       >
         <Text style={[styles.kicker, { color: colors.mutedForeground }]}>
@@ -69,7 +69,9 @@ export default function HomeScreen() {
             ? "No profiles yet"
             : `${profiles.length} profile${profiles.length === 1 ? "" : "s"} · ${activeCount} active`}
         </Text>
-        <Text style={[styles.title, { color: colors.foreground }]}>Knocker</Text>
+        <Text style={[styles.title, { color: colors.foreground }]}>
+          Knocker
+        </Text>
       </Animated.View>
 
       <DevBuildBanner />
@@ -80,7 +82,9 @@ export default function HomeScreen() {
         </View>
       ) : profiles.length === 0 ? (
         <Animated.View
-          entering={FadeIn.duration(400).delay(100)}
+          entering={FadeIn.duration(motion.duration.medium).easing(
+            motion.easing.standard,
+          )}
           style={styles.empty}
         >
           <Feather name="zap" size={48} color={colors.primary} />
@@ -93,7 +97,7 @@ export default function HomeScreen() {
           </Text>
           <AnimatedPressable
             onPress={onNew}
-            scaleTo={0.94}
+            scaleTo={0.96}
             style={[styles.emptyCta, { backgroundColor: colors.primary }]}
           >
             <Feather name="plus" size={18} color={colors.primaryForeground} />
@@ -127,16 +131,21 @@ export default function HomeScreen() {
           pointerEvents="box-none"
         >
           <Animated.View
-            entering={FadeInDown.delay(60).duration(280).springify().damping(16)}
+            entering={FadeInDown.duration(motion.duration.medium).easing(
+              motion.easing.standard,
+            )}
           >
             <AnimatedPressable
               onPress={onNew}
-              scaleTo={0.93}
+              scaleTo={0.96}
               style={[styles.fabSecondary, { borderColor: colors.border }]}
             >
               <Feather name="plus" size={16} color={colors.onSurfaceVariant} />
               <Text
-                style={[styles.fabSecondaryText, { color: colors.onSurfaceVariant }]}
+                style={[
+                  styles.fabSecondaryText,
+                  { color: colors.onSurfaceVariant },
+                ]}
               >
                 New profile
               </Text>
@@ -146,14 +155,13 @@ export default function HomeScreen() {
           {pinned.map((p, i) => (
             <Animated.View
               key={p.id}
-              entering={FadeInDown.delay(100 + i * 60)
-                .duration(300)
-                .springify()
-                .damping(16)}
+              entering={FadeInDown.delay(Math.min(i * 20, 80))
+                .duration(motion.duration.medium)
+                .easing(motion.easing.standard)}
             >
               <AnimatedPressable
                 onPress={() => onKnockPinned(p.id)}
-                scaleTo={0.92}
+                scaleTo={0.96}
                 style={[
                   styles.fabPinned,
                   { backgroundColor: colors.primaryContainer },
@@ -183,19 +191,21 @@ export default function HomeScreen() {
           ))}
 
           <Animated.View
-            entering={FadeInDown.delay(140 + pinned.length * 60)
-              .duration(320)
-              .springify()
-              .damping(15)}
+            entering={FadeInDown.delay(Math.min((pinned.length + 1) * 20, 100))
+              .duration(motion.duration.medium)
+              .easing(motion.easing.standard)}
           >
             <AnimatedPressable
               onPress={onKnockAll}
-              scaleTo={0.94}
+              scaleTo={0.96}
               style={[styles.fabPrimary, { backgroundColor: colors.primary }]}
             >
               <Feather name="zap" size={22} color={colors.primaryForeground} />
               <Text
-                style={[styles.fabPrimaryText, { color: colors.primaryForeground }]}
+                style={[
+                  styles.fabPrimaryText,
+                  { color: colors.primaryForeground },
+                ]}
               >
                 Knock all
               </Text>
@@ -227,7 +237,11 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   emptyTitle: { fontSize: 20, fontFamily: "Inter_600SemiBold", marginTop: 8 },
-  emptyBody: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+  emptyBody: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+  },
   emptyCta: {
     flexDirection: "row",
     alignItems: "center",
@@ -271,5 +285,9 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 22,
   },
-  fabPrimaryText: { fontSize: 16, fontFamily: "Inter_700Bold", letterSpacing: 0.2 },
+  fabPrimaryText: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+  },
 });
