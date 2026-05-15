@@ -275,22 +275,34 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const nativeProfilesPromise = isKnockerNativeAvailable
+        ? loadProfilesFromNative()
+        : Promise.resolve<NativeProfileSnapshot[]>([]);
       const list = await loadProfiles();
-      const initialProfiles =
-        isKnockerNativeAvailable
-          ? mergeExpiryFromNative(list, await loadProfilesFromNative())
-          : list;
       if (cancelled) return;
-      profilesRef.current = initialProfiles;
-      setProfiles(initialProfiles);
+      profilesRef.current = list;
+      setProfiles(list);
       setLoaded(true);
-      // Push the freshly loaded snapshot into the native store so tiles &
-      // alarms have current data even if no edit happens this session.
+
       if (isKnockerNativeAvailable) {
-        const snapshot = toNativeSnapshot(initialProfiles);
-        void syncProfilesToNative(snapshot);
+        void (async () => {
+          const nativeProfiles = await nativeProfilesPromise;
+          if (cancelled) return;
+
+          const mergedProfiles = mergeExpiryFromNative(
+            profilesRef.current,
+            nativeProfiles,
+          );
+          profilesRef.current = mergedProfiles;
+          setProfiles(mergedProfiles);
+
+          // Push the freshly loaded snapshot into the native store so tiles &
+          // alarms have current data even if no edit happens this session.
+          void syncProfilesToNative(toNativeSnapshot(mergedProfiles));
+        })();
       }
-      const launchProfiles = initialProfiles.filter((p) => p.knockOnOpen);
+
+      const launchProfiles = list.filter((p) => p.knockOnOpen);
       if (launchProfiles.length === 0) return;
       const settled = await Promise.all(
         launchProfiles.map(async (profile) => ({
