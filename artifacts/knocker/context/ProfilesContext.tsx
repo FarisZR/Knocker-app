@@ -27,6 +27,7 @@ export interface SnackbarState {
   text: string;
   detail?: string;
   tone: "success" | "error" | "info";
+  persistent?: boolean;
   retry?: () => void;
 }
 
@@ -42,6 +43,8 @@ interface ProfilesContextValue {
 }
 
 const ProfilesContext = createContext<ProfilesContextValue | null>(null);
+
+type KnockFeedbackMode = "snackbar" | "silent";
 
 export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -87,10 +90,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
 
   const dismissSnackbar = useCallback(() => setSnackbar(null), []);
 
-  const knockOne = useCallback(
-    async (id: string) => {
+  const runKnock = useCallback(
+    async (id: string, feedbackMode: KnockFeedbackMode = "snackbar") => {
       const profile = profilesRef.current.find((p) => p.id === id);
-      if (!profile) return;
+      if (!profile) return null;
       const result: KnockResult = await knock(profile);
       const now = Date.now();
       if (result.ok) {
@@ -101,34 +104,46 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           whitelistedEntry: result.whitelistedEntry,
           expiresAt: result.expiresAt,
         });
-        const minutes = Math.round(result.expiresInSeconds / 60);
-        const baseDetail = result.whitelistedEntry
-          ? `${result.whitelistedEntry} · ${minutes}m`
-          : `${minutes}m`;
-        showSnackbar({
-          text: `Knocked ${profile.name || "profile"}`,
-          detail: result.ttlCapped
-            ? `${baseDetail} · TTL capped by server`
-            : baseDetail,
-          tone: result.ttlCapped ? "info" : "success",
-        });
+        if (feedbackMode === "snackbar") {
+          const minutes = Math.round(result.expiresInSeconds / 60);
+          const baseDetail = result.whitelistedEntry
+            ? `${result.whitelistedEntry} · ${minutes}m`
+            : `${minutes}m`;
+          showSnackbar({
+            text: `Knocked ${profile.name || "profile"}`,
+            detail: result.ttlCapped
+              ? `${baseDetail} · TTL capped by server`
+              : baseDetail,
+            tone: result.ttlCapped ? "info" : "success",
+          });
+        }
       } else {
         await updateOne(id, {
           lastKnockStatus: "error",
           lastKnockAt: now,
           lastError: result.message,
         });
-        showSnackbar({
-          text: `${profile.name || "Profile"} failed`,
-          detail: result.message,
-          tone: "error",
-          retry: () => {
-            void knockOne(id);
-          },
-        });
+        if (feedbackMode === "snackbar") {
+          showSnackbar({
+            text: `${profile.name || "Profile"} failed`,
+            detail: result.message,
+            tone: "error",
+            retry: () => {
+              void runKnock(id);
+            },
+          });
+        }
       }
+      return result;
     },
     [updateOne, showSnackbar],
+  );
+
+  const knockOne = useCallback(
+    async (id: string) => {
+      await runKnock(id);
+    },
+    [runKnock],
   );
 
   const knockAll = useCallback(async () => {
@@ -243,18 +258,58 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         }));
         void syncProfilesToNative(snapshot);
       }
-      // Knock on app open — fire after ref is updated
-      for (const p of list) {
-        if (p.knockOnOpen) {
-          void knockOne(p.id);
-        }
+      const launchProfiles = list.filter((p) => p.knockOnOpen);
+      if (launchProfiles.length === 0) return;
+      const settled = await Promise.all(
+        launchProfiles.map(async (profile) => ({
+          profile,
+          result: await runKnock(profile.id, "silent"),
+        })),
+      );
+      if (cancelled) return;
+      const successes = settled.filter((s) => s.result?.ok).length;
+      const failures = settled.length - successes;
+      const cappedCount = settled.filter((s) => s.result?.ok && s.result.ttlCapped).length;
+      const failedNames = settled
+        .filter((s) => s.result && !s.result.ok)
+        .map((s) => s.profile.name || "unnamed")
+        .slice(0, 2)
+        .join(", ");
+      const detailParts: string[] = [
+        `${successes}/${launchProfiles.length} profile${launchProfiles.length === 1 ? "" : "s"} whitelisted`,
+      ];
+      if (failures > 0) {
+        detailParts.push(
+          `${failures} failed${failedNames ? ` · ${failedNames}${failures > 2 ? ", …" : ""}` : ""}`,
+        );
       }
+      if (cappedCount > 0) {
+        detailParts.push(`${cappedCount} TTL capped by server`);
+      }
+      showSnackbar({
+        text:
+          failures > 0
+            ? "Launch knock finished with issues"
+            : "Launch knock succeeded",
+        detail: detailParts.join(" · "),
+        tone: failures > 0 ? "error" : cappedCount > 0 ? "info" : "success",
+        persistent: true,
+        retry:
+          failures > 0
+            ? () => {
+                for (const failed of settled) {
+                  if (failed.result && !failed.result.ok) {
+                    void runKnock(failed.profile.id);
+                  }
+                }
+              }
+            : undefined,
+      });
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [runKnock, showSnackbar]);
 
   // Reschedule renewals whenever profiles change. Gate is keyed by
   // (profileId, expiresAt) so a single expiry value can only trigger one
