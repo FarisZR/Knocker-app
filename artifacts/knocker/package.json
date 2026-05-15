@@ -59,6 +59,6 @@
   },
   "dependencies": {
     "expo-secure-store": "~15.0.8",
-    "knocker-native": "file:./modules/knocker-native"
+    "knocker-native": "link:./modules/knocker-native"
   }
 }
