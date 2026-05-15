@@ -5,6 +5,7 @@ import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 
 import { useColors } from "@/hooks/useColors";
 import { useProfiles, type SnackbarState } from "@/context/ProfilesContext";
+import { motion } from "@/constants/motion";
 
 const AUTO_DISMISS_MS = 4500;
 
@@ -22,15 +23,27 @@ export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
 
   const tone: SnackbarState["tone"] = snackbar.tone;
   const iconName =
-    tone === "success" ? "check-circle" : tone === "error" ? "alert-circle" : "info";
+    tone === "success"
+      ? "check-circle"
+      : tone === "error"
+        ? "alert-circle"
+        : "info";
   const iconColor =
-    tone === "success" ? colors.success : tone === "error" ? colors.destructive : colors.primary;
+    tone === "success"
+      ? colors.success
+      : tone === "error"
+        ? colors.destructive
+        : colors.primary;
 
   return (
     <Animated.View
       key={snackbar.id}
-      entering={FadeInDown.duration(220).springify().damping(18)}
-      exiting={FadeOutDown.duration(180)}
+      entering={FadeInDown.duration(motion.duration.medium).easing(
+        motion.easing.standard,
+      )}
+      exiting={FadeOutDown.duration(motion.duration.short).easing(
+        motion.easing.standard,
+      )}
       style={[
         styles.wrap,
         { bottom: bottomOffset, backgroundColor: colors.foreground },
@@ -38,7 +51,10 @@ export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
     >
       <Feather name={iconName} size={20} color={iconColor} />
       <View style={styles.body}>
-        <Text style={[styles.text, { color: colors.background }]} numberOfLines={1}>
+        <Text
+          style={[styles.text, { color: colors.background }]}
+          numberOfLines={1}
+        >
           {snackbar.text}
         </Text>
         {snackbar.detail ? (
@@ -63,7 +79,12 @@ export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
         </Pressable>
       ) : (
         <Pressable onPress={dismissSnackbar} hitSlop={8}>
-          <Feather name="x" size={18} color={colors.background} style={{ opacity: 0.7 }} />
+          <Feather
+            name="x"
+            size={18}
+            color={colors.background}
+            style={{ opacity: 0.7 }}
+          />
         </Pressable>
       )}
     </Animated.View>

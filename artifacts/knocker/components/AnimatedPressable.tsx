@@ -6,6 +6,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { motion } from "@/constants/motion";
+
 const AnimatedPressableBase = Animated.createAnimatedComponent(Pressable);
 
 interface Props extends Omit<PressableProps, "style"> {
@@ -15,7 +17,7 @@ interface Props extends Omit<PressableProps, "style"> {
 
 export function AnimatedPressable({
   style,
-  scaleTo = 0.94,
+  scaleTo = 0.97,
   onPressIn,
   onPressOut,
   children,
@@ -29,7 +31,10 @@ export function AnimatedPressable({
 
   const handlePressIn = useCallback<NonNullable<PressableProps["onPressIn"]>>(
     (e) => {
-      scale.value = withTiming(scaleTo, { duration: 90 });
+      scale.value = withTiming(scaleTo, {
+        duration: motion.duration.pressIn,
+        easing: motion.easing.standard,
+      });
       onPressIn?.(e);
     },
     [scale, scaleTo, onPressIn],
@@ -37,7 +42,10 @@ export function AnimatedPressable({
 
   const handlePressOut = useCallback<NonNullable<PressableProps["onPressOut"]>>(
     (e) => {
-      scale.value = withTiming(1, { duration: 140 });
+      scale.value = withTiming(1, {
+        duration: motion.duration.pressOut,
+        easing: motion.easing.standard,
+      });
       onPressOut?.(e);
     },
     [scale, onPressOut],
