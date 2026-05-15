@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useMemo } from "react";
 import {
@@ -22,7 +21,7 @@ import { Snackbar } from "@/components/Snackbar";
 import { motion } from "@/constants/motion";
 import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
-import { performKnockHaptic } from "@/lib/haptics";
+import { performKnockHaptic, performTapHaptic } from "@/lib/haptics";
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -44,12 +43,8 @@ export default function HomeScreen() {
   const topPad = (isWeb ? 67 : insets.top) + 12;
   const bottomPad = isWeb ? 34 : insets.bottom;
 
-  const haptic = (style: Haptics.ImpactFeedbackStyle) => {
-    if (Platform.OS !== "web") void Haptics.impactAsync(style);
-  };
-
   const onNew = () => {
-    haptic(Haptics.ImpactFeedbackStyle.Light);
+    performTapHaptic();
     router.push("/profile/new");
   };
   const onKnockAll = () => {
