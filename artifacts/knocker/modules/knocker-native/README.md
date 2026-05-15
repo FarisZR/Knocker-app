@@ -15,10 +15,11 @@ build that includes this module.
 
 ## Architecture
 
-- **JS bridge** (`index.ts`) exposes `syncProfiles`, `scheduleRenewal`,
-  `cancelRenewal`, `cancelAllRenewals`, `canScheduleExactAlarms`, and
-  `openExactAlarmSettings`. `isNativeAvailable` is `true` only on Android
-  builds that include the module.
+- **JS bridge** (`index.ts`) exposes `syncProfiles`, `loadProfilesFromNative`,
+  `scheduleRenewal`, `cancelRenewal`, `cancelAllRenewals`,
+  `canScheduleExactAlarms`, and `openExactAlarmSettings`.
+  `isNativeAvailable` is `true` only on Android builds that include the
+  module.
 - **Storage** (`KnockerStore.kt`) writes the profile snapshot to
   `EncryptedSharedPreferences` so the tile services and the alarm receiver can
   read profile data (including the API key) without touching the JS runtime.
@@ -28,9 +29,9 @@ build that includes this module.
 - **Tiles** (`KnockerTileService.kt`) — base class plus 5 thin subclasses, one
   per slot. The base class looks up the profile assigned to its slot and fires
   the knock on a background thread, then updates the tile state.
-- **Alarms** (`RenewAlarmReceiver.kt`) — `BroadcastReceiver` that uses
-  `goAsync()` to perform the HTTP knock off the main thread, then reschedules
-  the next renewal. Falls back to `setAndAllowWhileIdle` if the user has
+- **Alarms** (`RenewAlarmReceiver.kt`, `RenewWorker.kt`) — the receiver quickly
+  hands work to `WorkManager`, and the worker performs the HTTP knock + next
+  renewal scheduling. Falls back to `setAndAllowWhileIdle` if the user has
   revoked the exact-alarm permission on Android 12+.
 
 ## Permissions
@@ -71,12 +72,15 @@ pnpm android:apk
 
 Then on the device:
 
-1. Open the pull-down panel → pencil/edit icon → drag any "Knock 1…5" tile
-   into the active set.
+1. Open the pull-down panel -> pencil/edit icon -> drag any "Knock 1...5"
+   tile into the active set.
 2. In Knocker, edit a profile and assign it to the matching slot in the
-   "Quick Settings tile" picker.
-3. Force-stop the app and tap the tile — a knock will still fire.
-4. Enable "Auto-renew before expiry" on a profile and observe that renewals
+   "Quick Settings tile slot" picker.
+3. The mapping is one-to-one: the Android tile named "Knock 3" triggers the
+   profile assigned to slot `3` in Knocker.
+4. Force-stop the app and tap the tile. You should get a toast and the tile
+   state should update even while the app is closed.
+5. Enable "Auto-renew before expiry" on a profile and observe that renewals
    continue even after the app is killed (logcat tag `KnockerRenewAlarm`).
 
 If the in-app banner says "Exact alarms disabled", tap it to open the system

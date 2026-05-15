@@ -15,7 +15,8 @@ export interface NativeProfileSnapshot {
 }
 
 interface KnockerNativeAndroid {
-  syncProfiles(profiles: NativeProfileSnapshot[]): Promise<void>;
+  syncProfiles(profilesJson: string): Promise<void>;
+  getProfilesJson(): Promise<string>;
   scheduleRenewal(profileId: string, fireAtMs: number): Promise<void>;
   cancelRenewal(profileId: string): Promise<void>;
   cancelAllRenewals(): Promise<void>;
@@ -32,7 +33,20 @@ export async function syncProfiles(
   profiles: NativeProfileSnapshot[],
 ): Promise<void> {
   if (!native) return;
-  await native.syncProfiles(profiles);
+  await native.syncProfiles(JSON.stringify(profiles));
+}
+
+export async function loadProfilesFromNative(): Promise<NativeProfileSnapshot[]> {
+  if (!native) return [];
+
+  try {
+    const raw = await native.getProfilesJson();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as NativeProfileSnapshot[];
+  } catch {
+    return [];
+  }
 }
 
 export async function scheduleRenewal(

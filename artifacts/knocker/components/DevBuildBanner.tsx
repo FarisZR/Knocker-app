@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text } from "react-native";
 
@@ -14,8 +13,8 @@ import {
  * Compact banner that explains the state of native Android features:
  *   - Hidden on iOS / web entirely.
  *   - Hidden when the native module is unavailable.
- *   - On Android dev/prod build: shows a green "ready" pill, OR a yellow
- *     warning if exact alarm permission has been revoked.
+ *   - On Android dev/prod build: only shows a warning if exact alarm
+ *     permission has been revoked.
  */
 export function DevBuildBanner() {
   const colors = useColors();
@@ -53,27 +52,6 @@ export function DevBuildBanner() {
         <Text style={[styles.text, { color: colors.foreground }]}>
           Exact alarms disabled - auto-renew may fire late. Tap to open
           settings.
-        </Text>
-      </Pressable>
-    );
-  }
-
-  if (exactAlarms === true) {
-    return (
-      <Pressable
-        onPress={() => Linking.openSettings()}
-        style={({ pressed }) => [
-          styles.banner,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.borderVariant,
-            opacity: pressed ? 0.7 : 1,
-          },
-        ]}
-      >
-        <Feather name="check-circle" size={14} color={colors.primary} />
-        <Text style={[styles.text, { color: colors.mutedForeground }]}>
-          Native tiles & exact-alarm renewals active.
         </Text>
       </Pressable>
     );

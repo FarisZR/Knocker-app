@@ -1,0 +1,25 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.faris.knockernative'
+version = '0.1.0'
+
+android {
+  namespace 'dev.faris.knockernative'
+
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+
+  lint {
+    abortOnError true
+  }
+}
+
+dependencies {
+  implementation "androidx.security:security-crypto:1.1.0"
+  implementation "androidx.work:work-runtime-ktx:2.10.3"
+}

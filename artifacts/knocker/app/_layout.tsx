@@ -11,6 +11,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
+import { PermissionsAndroid, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -69,6 +70,19 @@ export default function RootLayout() {
     Inter_700Bold,
     ...Feather.font,
   });
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    if (Number(Platform.Version) < 33) return;
+
+    void (async () => {
+      const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+      const alreadyGranted = await PermissionsAndroid.check(permission);
+      if (alreadyGranted) return;
+
+      await PermissionsAndroid.request(permission);
+    })();
+  }, []);
 
   return (
     <SafeAreaProvider>

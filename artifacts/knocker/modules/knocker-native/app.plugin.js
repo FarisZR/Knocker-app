@@ -2,7 +2,7 @@ const {
   withAndroidManifest,
   AndroidConfig,
   withPlugins,
-} = require("@expo/config-plugins");
+} = require("expo/config-plugins");
 
 const TILE_SLOT_COUNT = 5;
 const PACKAGE = "dev.faris.knockernative";
@@ -79,6 +79,7 @@ function withKnockerManifest(config) {
 function withKnockerPermissions(config) {
   return AndroidConfig.Permissions.withPermissions(config, [
     "android.permission.INTERNET",
+    "android.permission.POST_NOTIFICATIONS",
     "android.permission.SCHEDULE_EXACT_ALARM",
     "android.permission.USE_EXACT_ALARM",
   ]);
