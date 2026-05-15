@@ -1,5 +1,7 @@
 package dev.faris.knockernative
 
+import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
@@ -11,6 +13,11 @@ import android.widget.Toast
 abstract class KnockerTileService : TileService() {
   protected abstract val slot: Int
   private val mainHandler = Handler(Looper.getMainLooper())
+
+  override fun onTileAdded() {
+    super.onTileAdded()
+    renderCurrentState()
+  }
 
   override fun onStartListening() {
     super.onStartListening()
@@ -133,7 +140,35 @@ abstract class KnockerTileService : TileService() {
     mainHandler.post {
       val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return@post
       launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-      startActivityAndCollapse(launchIntent)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        val pendingIntent = PendingIntent.getActivity(
+          applicationContext,
+          slot,
+          launchIntent,
+          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        startActivityAndCollapse(pendingIntent)
+      } else {
+        @Suppress("DEPRECATION")
+        startActivityAndCollapse(launchIntent)
+      }
     }
+  }
+
+  companion object {
+    fun refreshAll(context: android.content.Context) {
+      val appContext = context.applicationContext
+      tileComponents.forEach { component ->
+        requestListeningState(appContext, component)
+      }
+    }
+
+    private val tileComponents = listOf(
+      ComponentName("dev.faris.knocker", KnockerTileService1::class.java.name),
+      ComponentName("dev.faris.knocker", KnockerTileService2::class.java.name),
+      ComponentName("dev.faris.knocker", KnockerTileService3::class.java.name),
+      ComponentName("dev.faris.knocker", KnockerTileService4::class.java.name),
+      ComponentName("dev.faris.knocker", KnockerTileService5::class.java.name),
+    )
   }
 }

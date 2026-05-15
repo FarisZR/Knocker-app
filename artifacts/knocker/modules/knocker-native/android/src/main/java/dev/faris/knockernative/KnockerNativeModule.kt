@@ -15,6 +15,7 @@ class KnockerNativeModule : Module() {
 
     AsyncFunction("syncProfiles") { profilesJson: String ->
       KnockerStore.replaceProfiles(context, profilesJson)
+      KnockerTileService.refreshAll(context)
     }
 
     AsyncFunction("scheduleRenewal") { profileId: String, fireAtMs: Double ->
