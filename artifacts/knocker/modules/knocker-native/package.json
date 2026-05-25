@@ -4,8 +4,10 @@
   "description": "Knocker native Android features: Quick Settings tiles + AlarmManager-based auto-renew.",
   "main": "index.ts",
   "private": true,
+  "dependencies": {
+    "expo-modules-core": "*"
+  },
   "peerDependencies": {
-    "expo-modules-core": "*",
     "react-native": "*"
   }
 }
