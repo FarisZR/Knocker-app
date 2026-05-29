@@ -16,6 +16,9 @@ abstract class KnockerTileService : TileService() {
   private val mainHandler = Handler(Looper.getMainLooper())
   private val isKnocking = AtomicBoolean(false)
 
+  @Volatile
+  private var latestProfile: StoredProfile? = null
+
   override fun onTileAdded() {
     super.onTileAdded()
     renderCurrentState()
@@ -29,43 +32,48 @@ abstract class KnockerTileService : TileService() {
   override fun onClick() {
     super.onClick()
 
+    val cachedProfile = latestProfile
+
     if (isKnocking.get()) {
-      val currentProfile = KnockerStore.findProfileBySlot(this, slot)
-      renderTile(currentProfile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
-      return
-    }
-
-    val profile = KnockerStore.findProfileBySlot(this, slot)
-    if (profile == null) {
-      renderTile(null, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
-      KnockerTileNotifier.notifyFailure(this, slot, null, "Assign a profile to Knock $slot in Knocker.")
-      showToast("Assign a profile to Knock $slot in Knocker")
-      openApp()
-      return
-    }
-
-    if (!profile.canKnock()) {
-      renderTile(profile, Tile.STATE_INACTIVE, profileSubtitle("Finish setup in Knocker"))
-      KnockerTileNotifier.notifyFailure(this, slot, profile, "Finish setup in Knocker before using this tile.")
-      showToast("${profileDisplayName(profile)} is missing its endpoint or API key")
-      openApp()
-      refreshCurrentStateSoon()
+      renderTile(cachedProfile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
       return
     }
 
     if (!isKnocking.compareAndSet(false, true)) {
-      renderTile(profile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
+      renderTile(cachedProfile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
       return
     }
 
-    renderTile(profile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
+    renderTile(cachedProfile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
     KnockerExecutors.io.execute {
       try {
+        val profile = latestProfile?.takeIf { it.tileSlot == slot }
+          ?: KnockerStore.findProfileBySlot(applicationContext, slot)
+        latestProfile = profile
+
+        if (profile == null) {
+          renderTile(null, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
+          KnockerTileNotifier.notifyFailure(this, slot, null, "Assign a profile to Knock $slot in Knocker.")
+          showToast("Assign a profile to Knock $slot in Knocker")
+          openApp()
+          return@execute
+        }
+
+        if (!profile.canKnock()) {
+          renderTile(profile, Tile.STATE_INACTIVE, profileSubtitle("Finish setup in Knocker"))
+          KnockerTileNotifier.notifyFailure(this, slot, profile, "Finish setup in Knocker before using this tile.")
+          showToast("${profileDisplayName(profile)} is missing its endpoint or API key")
+          openApp()
+          refreshCurrentStateSoon()
+          return@execute
+        }
+
         val result = KnockerHttp.knock(profile)
         when (result) {
           is KnockOutcome.Success -> {
             val updated = KnockerStore.updateExpiry(this, profile.id, result.expiresAtMillis)
             val current = updated ?: profile
+            latestProfile = current
             val nextFireAt = updated?.renewalAtMillis()
             if (nextFireAt != null) {
               KnockerRenewScheduler.schedule(this, profile.id, nextFireAt)
@@ -78,6 +86,7 @@ abstract class KnockerTileService : TileService() {
             showToast("Knocked ${profileDisplayName(current)}")
           }
           is KnockOutcome.Failure -> {
+            latestProfile = profile
             renderTile(profile, currentTileState(profile), profileSubtitle("Failed - tap again"))
             KnockerTileNotifier.notifyFailure(this, slot, profile, result.message)
             showToast("Knock failed: ${result.message}")
@@ -92,19 +101,28 @@ abstract class KnockerTileService : TileService() {
   }
 
   protected fun renderCurrentState() {
-    val profile = KnockerStore.findProfileBySlot(this, slot)
-    if (profile == null) {
-      renderTile(null, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
-      return
-    }
+    KnockerExecutors.io.execute {
+      val profile = KnockerStore.findProfileBySlot(applicationContext, slot)
+      latestProfile = profile
 
-    if (!profile.canKnock()) {
-      renderTile(profile, Tile.STATE_INACTIVE, profileSubtitle("Finish setup in Knocker"))
-      return
-    }
+      if (isKnocking.get()) {
+        renderTile(profile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
+        return@execute
+      }
 
-    renderTile(profile, currentTileState(profile), profileSubtitle(currentStatus(profile)))
-    refreshCurrentStateAtExpiry(profile)
+      if (profile == null) {
+        renderTile(null, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
+        return@execute
+      }
+
+      if (!profile.canKnock()) {
+        renderTile(profile, Tile.STATE_INACTIVE, profileSubtitle("Finish setup in Knocker"))
+        return@execute
+      }
+
+      renderTile(profile, currentTileState(profile), profileSubtitle(currentStatus(profile)))
+      refreshCurrentStateAtExpiry(profile)
+    }
   }
 
   private fun renderTile(profile: StoredProfile?, state: Int, subtitle: String?) {

@@ -20,16 +20,32 @@ class RenewWorker(
     return when (val knockResult = KnockerHttp.knock(profile)) {
       is KnockOutcome.Success -> {
         val updated = KnockerStore.updateExpiry(applicationContext, profileId, knockResult.expiresAtMillis)
+        val current = updated ?: profile
         val nextFireAt = updated?.renewalAtMillis()
         if (nextFireAt != null) {
           KnockerRenewScheduler.schedule(applicationContext, profileId, nextFireAt)
         } else if (updated != null) {
           KnockerRenewScheduler.cancel(applicationContext, profileId)
         }
+        KnockerTileNotifier.notifySuccess(
+          applicationContext,
+          current.tileSlot ?: 0,
+          current,
+          knockResult.whitelistedEntry
+        )
         KnockerTileService.refreshAll(applicationContext)
         Result.success()
       }
-      is KnockOutcome.Failure -> Result.failure()
+      is KnockOutcome.Failure -> {
+        KnockerTileNotifier.notifyFailure(
+          applicationContext,
+          profile.tileSlot ?: 0,
+          profile,
+          knockResult.message
+        )
+        KnockerTileService.refreshAll(applicationContext)
+        Result.failure()
+      }
     }
   }
 

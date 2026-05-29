@@ -26,25 +26,34 @@ object KnockerTileNotifier {
     if (!canPostNotifications(appContext)) return
 
     ensureChannel(appContext)
+    cancelLegacyNotifications(appContext, slot)
 
     val detailParts = buildList {
       whitelistedEntry?.takeIf { it.isNotBlank() }?.let { add(it) }
       add(ttlText(profile.expiresAt))
     }
+    val statusText = buildString {
+      append("Latest knock succeeded")
+      if (detailParts.isNotEmpty()) {
+        append(" - ")
+        append(detailParts.joinToString(" - "))
+      }
+    }
 
     val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-      .setContentTitle("Knocked ${profileDisplayName(profile)}")
-      .setContentText(detailParts.joinToString(" - "))
-      .setStyle(NotificationCompat.BigTextStyle().bigText(detailParts.joinToString(" - ")))
+      .setContentTitle(profileDisplayName(profile))
+      .setContentText(statusText)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(statusText))
       .setSilent(true)
       .setOnlyAlertOnce(true)
-      .setAutoCancel(true)
+      .setShowWhen(true)
+      .setWhen(System.currentTimeMillis())
       .setPriority(NotificationCompat.PRIORITY_LOW)
       .setContentIntent(contentIntent(appContext))
       .build()
 
-    NotificationManagerCompat.from(appContext).notify(slot, notification)
+    NotificationManagerCompat.from(appContext).notify(notificationId(slot, profile), notification)
   }
 
   fun notifyFailure(
@@ -57,21 +66,23 @@ object KnockerTileNotifier {
     if (!canPostNotifications(appContext)) return
 
     ensureChannel(appContext)
+    cancelLegacyNotifications(appContext, slot)
 
-    val title = profile?.let {
-      "Knock failed for ${profileDisplayName(it)}"
-    } ?: "Knock $slot failed"
+    val title = profile?.let(::profileDisplayName) ?: "Knock $slot"
+    val body = "Latest knock failed - $message"
     val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_error)
       .setContentTitle(title)
-      .setContentText(message)
-      .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-      .setAutoCancel(true)
+      .setContentText(body)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+      .setOnlyAlertOnce(true)
+      .setShowWhen(true)
+      .setWhen(System.currentTimeMillis())
       .setPriority(NotificationCompat.PRIORITY_DEFAULT)
       .setContentIntent(contentIntent(appContext))
       .build()
 
-    NotificationManagerCompat.from(appContext).notify(1000 + slot, notification)
+    NotificationManagerCompat.from(appContext).notify(notificationId(slot, profile), notification)
   }
 
   private fun ensureChannel(context: Context) {
@@ -124,5 +135,16 @@ object KnockerTileNotifier {
 
   private fun profileDisplayName(profile: StoredProfile): String {
     return profile.name.takeIf { it.isNotBlank() } ?: "profile"
+  }
+
+  private fun notificationId(slot: Int, profile: StoredProfile?): Int {
+    val stableProfileId = profile?.id?.hashCode()?.and(Int.MAX_VALUE)
+    return stableProfileId ?: (10_000 + slot)
+  }
+
+  private fun cancelLegacyNotifications(context: Context, slot: Int) {
+    val notifications = NotificationManagerCompat.from(context)
+    notifications.cancel(slot)
+    notifications.cancel(1000 + slot)
   }
 }
