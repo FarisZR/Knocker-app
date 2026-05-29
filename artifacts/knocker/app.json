@@ -21,7 +21,8 @@
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0e0e10"
+        "monochromeImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#1a1a1a"
       },
       "permissions": [
         "android.permission.INTERNET",
