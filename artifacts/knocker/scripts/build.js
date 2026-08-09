@@ -5,6 +5,7 @@ const { Readable } = require("stream");
 const { pipeline } = require("stream/promises");
 
 let metroProcess = null;
+let sentryUploadRoot = null;
 
 const projectRoot = path.resolve(__dirname, "..");
 
@@ -16,7 +17,9 @@ function findWorkspaceRoot(startDir) {
     }
     dir = path.dirname(dir);
   }
-  throw new Error("Could not find workspace root (no pnpm-workspace.yaml found)");
+  throw new Error(
+    "Could not find workspace root (no pnpm-workspace.yaml found)",
+  );
 }
 
 const workspaceRoot = findWorkspaceRoot(projectRoot);
@@ -24,6 +27,7 @@ const basePath = (process.env.BASE_PATH || "/").replace(/\/+$/, "");
 
 function exitWithError(message) {
   console.error(message);
+  cleanupSentryUpload();
   if (metroProcess) {
     metroProcess.kill();
   }
@@ -36,6 +40,7 @@ function setupSignalHandlers() {
       console.log("Cleaning up Metro process...");
       metroProcess.kill();
     }
+    cleanupSentryUpload();
     process.exit(0);
   };
 
@@ -81,6 +86,12 @@ function prepareDirectories(timestamp) {
     fs.rmSync(staticBuild, { recursive: true });
   }
 
+  const sentryUploadDirectory = path.join(projectRoot, ".sentry-upload");
+  if (fs.existsSync(sentryUploadDirectory)) {
+    fs.rmSync(sentryUploadDirectory, { recursive: true, force: true });
+  }
+  sentryUploadRoot = path.join(sentryUploadDirectory, timestamp);
+
   const dirs = [
     path.join(staticBuild, timestamp, "_expo", "static", "js", "ios"),
     path.join(staticBuild, timestamp, "_expo", "static", "js", "android"),
@@ -91,8 +102,17 @@ function prepareDirectories(timestamp) {
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  fs.mkdirSync(sentryUploadRoot, { recursive: true });
 
   console.log("Build:", timestamp);
+}
+
+function cleanupSentryUpload() {
+  const sentryUploadDirectory = path.join(projectRoot, ".sentry-upload");
+  if (fs.existsSync(sentryUploadDirectory)) {
+    fs.rmSync(sentryUploadDirectory, { recursive: true, force: true });
+  }
+  sentryUploadRoot = null;
 }
 
 function clearMetroCache() {
@@ -148,14 +168,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 
   metroProcess = spawn(
     "pnpm",
-    [
-      "exec",
-      "expo",
-      "start",
-      "--no-dev",
-      "--minify",
-      "--localhost",
-    ],
+    ["exec", "expo", "start", "--no-dev", "--minify", "--localhost"],
     {
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
@@ -187,8 +200,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
     }
   }
 
-  console.error("Metro timeout");
-  process.exit(1);
+  exitWithError("Metro timeout");
 }
 
 async function downloadFile(url, outputPath) {
@@ -228,7 +240,12 @@ async function downloadFile(url, outputPath) {
 }
 
 async function downloadBundle(platform, timestamp) {
-  const entryPath = path.resolve(projectRoot, "node_modules", "expo-router", "entry");
+  const entryPath = path.resolve(
+    projectRoot,
+    "node_modules",
+    "expo-router",
+    "entry",
+  );
   const bundlePath = path.relative(workspaceRoot, entryPath);
   const url = new URL(`http://localhost:8081/${bundlePath}.bundle`);
   url.searchParams.set("platform", platform);
@@ -237,7 +254,11 @@ async function downloadBundle(platform, timestamp) {
   url.searchParams.set("lazy", "false");
   url.searchParams.set("minify", "true");
 
+  const sourceMapUrl = new URL(url);
+  sourceMapUrl.pathname = sourceMapUrl.pathname.replace(/\.bundle$/, ".map");
+
   const output = path.join(
+    projectRoot,
     "static-build",
     timestamp,
     "_expo",
@@ -246,10 +267,109 @@ async function downloadBundle(platform, timestamp) {
     platform,
     "bundle.js",
   );
+  const uploadPlatformRoot = path.join(sentryUploadRoot, platform);
+  const sourceMapOutput = path.join(uploadPlatformRoot, "bundle.js.map");
+  const uploadBundleOutput = path.join(uploadPlatformRoot, "bundle.js");
+
+  fs.mkdirSync(uploadPlatformRoot, { recursive: true });
 
   console.log(`Fetching ${platform} bundle...`);
   await downloadFile(url.toString(), output);
+  console.log(`Fetching ${platform} source map...`);
+  await downloadFile(sourceMapUrl.toString(), sourceMapOutput);
+  addDebugIdToSourceMap(output, sourceMapOutput);
+  fs.copyFileSync(output, uploadBundleOutput);
   console.log(`${platform} bundle ready`);
+}
+
+function addDebugIdToSourceMap(bundlePath, sourceMapPath) {
+  const bundle = fs.readFileSync(bundlePath, "utf-8");
+  const debugIdMatch = bundle.match(/\/\/# debugId=([0-9a-f-]+)/i);
+
+  if (!debugIdMatch) {
+    throw new Error(`Bundle is missing a Sentry debug ID: ${bundlePath}`);
+  }
+
+  let sourceMap;
+  try {
+    sourceMap = JSON.parse(fs.readFileSync(sourceMapPath, "utf-8"));
+  } catch (error) {
+    throw new Error(
+      `Could not parse source map ${sourceMapPath}: ${error.message}`,
+    );
+  }
+
+  const debugId = debugIdMatch[1];
+  const existingDebugId = sourceMap.debugId || sourceMap.debug_id;
+  if (existingDebugId && existingDebugId !== debugId) {
+    throw new Error(
+      `Source map debug ID ${existingDebugId} does not match bundle debug ID ${debugId}`,
+    );
+  }
+
+  // The direct Metro .map endpoint does not include the metadata that the
+  // Sentry uploader needs, even though the corresponding bundle has it.
+  sourceMap.debugId = debugId;
+  sourceMap.debug_id = debugId;
+  fs.writeFileSync(sourceMapPath, `${JSON.stringify(sourceMap)}\n`);
+}
+
+async function uploadSourceMaps() {
+  if (process.env.SENTRY_DISABLE_AUTO_UPLOAD === "true") {
+    console.warn(
+      "Skipping Sentry source-map upload because SENTRY_DISABLE_AUTO_UPLOAD=true",
+    );
+    return;
+  }
+
+  if (!process.env.SENTRY_AUTH_TOKEN) {
+    throw new Error(
+      "SENTRY_AUTH_TOKEN must be set to upload production source maps. Set SENTRY_DISABLE_AUTO_UPLOAD=true only for local builds.",
+    );
+  }
+
+  const uploaderPath = path.join(
+    projectRoot,
+    "node_modules",
+    ".bin",
+    "sentry-expo-upload-sourcemaps",
+  );
+  if (!fs.existsSync(uploaderPath)) {
+    throw new Error(
+      `Sentry source-map uploader not found at ${uploaderPath}. Run pnpm install first.`,
+    );
+  }
+
+  console.log("Uploading JavaScript bundles and source maps to Sentry...");
+  await new Promise((resolve, reject) => {
+    const uploader = spawn(process.execPath, [uploaderPath, sentryUploadRoot], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        SENTRY_ORG: process.env.SENTRY_ORG || "fariszr",
+        SENTRY_PROJECT: process.env.SENTRY_PROJECT || "knocker-app",
+        SENTRY_URL: process.env.SENTRY_URL || "https://de.sentry.io/",
+      },
+      stdio: "inherit",
+    });
+
+    uploader.once("error", reject);
+    uploader.once("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          signal
+            ? `Sentry source-map uploader terminated by ${signal}`
+            : `Sentry source-map uploader exited with status ${code}`,
+        ),
+      );
+    });
+  });
+  console.log("Sentry source maps uploaded");
 }
 
 async function downloadManifest(platform) {
@@ -308,11 +428,27 @@ function extractAssets(timestamp) {
   const staticBuild = path.join(projectRoot, "static-build");
   const bundles = {
     ios: fs.readFileSync(
-      path.join(staticBuild, timestamp, "_expo", "static", "js", "ios", "bundle.js"),
+      path.join(
+        staticBuild,
+        timestamp,
+        "_expo",
+        "static",
+        "js",
+        "ios",
+        "bundle.js",
+      ),
       "utf-8",
     ),
     android: fs.readFileSync(
-      path.join(staticBuild, timestamp, "_expo", "static", "js", "android", "bundle.js"),
+      path.join(
+        staticBuild,
+        timestamp,
+        "_expo",
+        "static",
+        "js",
+        "android",
+        "bundle.js",
+      ),
       "utf-8",
     ),
   };
@@ -535,6 +671,9 @@ async function main() {
 
   const manifests = await Promise.race([downloadPromise, timeoutPromise]);
 
+  await uploadSourceMaps();
+  cleanupSentryUpload();
+
   console.log("Processing assets...");
   const assets = extractAssets(timestamp);
   console.log("Found", assets.length, "unique asset(s)");
@@ -561,11 +700,13 @@ async function main() {
   if (metroProcess) {
     metroProcess.kill();
   }
+  cleanupSentryUpload();
   process.exit(0);
 }
 
 main().catch((error) => {
   console.error("Build failed:", error.message);
+  cleanupSentryUpload();
   if (metroProcess) {
     metroProcess.kill();
   }

@@ -42,6 +42,13 @@ Sentry.wrapExpoRouter(router as unknown as Sentry.ExpoRouter);
 
 void SplashScreen.preventAutoHideAsync();
 
+function reportErrorBoundaryError(error: Error, componentStack: string): void {
+  Sentry.withScope((scope) => {
+    scope.setExtra("componentStack", componentStack);
+    Sentry.captureException(error);
+  });
+}
+
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
@@ -113,7 +120,7 @@ function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ErrorBoundary>
+      <ErrorBoundary onError={reportErrorBoundaryError}>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
