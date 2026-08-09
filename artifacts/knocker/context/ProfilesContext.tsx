@@ -183,8 +183,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const showLaunchSnackbarFromNative = useCallback(
-    (results: NativeLaunchKnockResult[]) => {
-      const total = results.length;
+    (results: NativeLaunchKnockResult[], total = results.length) => {
       const successes = results.filter((r) => r.ok).length;
       const failures = total - successes;
       const cappedCount = results.filter((r) => r.ok && r.ttlCapped).length;
@@ -341,21 +340,23 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       setLoaded(true);
 
       if (isKnockerNativeAvailable) {
-        void (async () => {
-          const nativeProfiles = await nativeProfilesPromise;
-          if (cancelled) return;
+        const nativeProfiles = await nativeProfilesPromise;
+        if (cancelled) return;
 
-          const mergedProfiles = mergeExpiryFromNative(
-            profilesRef.current,
-            nativeProfiles,
-          );
-          profilesRef.current = mergedProfiles;
-          setProfiles(mergedProfiles);
+        const mergedProfiles = mergeExpiryFromNative(
+          profilesRef.current,
+          nativeProfiles,
+        );
+        profilesRef.current = mergedProfiles;
+        setProfiles(mergedProfiles);
 
-          // Push the freshly loaded snapshot into the native store so tiles &
-          // alarms have current data even if no edit happens this session.
-          void syncProfilesToNative(toNativeSnapshot(mergedProfiles));
-        })();
+        // Push the freshly loaded snapshot into the native store so tiles &
+        // alarms have current data even if no edit happens this session.
+        try {
+          await syncProfilesToNative(toNativeSnapshot(mergedProfiles));
+        } catch (error) {
+          console.warn("Failed to sync profiles to native storage.", error);
+        }
       }
 
       const launchProfiles = list.filter((p) => p.knockOnOpen);
@@ -369,62 +370,77 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       const nativeResults = await nativeLaunchPromise;
       if (cancelled) return;
 
-      if (nativeResults !== null && nativeResults.length > 0) {
-        showLaunchSnackbarFromNative(nativeResults);
-        return;
+      const nativeResultById = new Map(
+        (nativeResults ?? [])
+          .filter((result) =>
+            launchProfiles.some((p) => p.id === result.profileId),
+          )
+          .map((result) => [result.profileId, result]),
+      );
+      const matchingNativeResults = [...nativeResultById.values()];
+      const missingLaunchProfiles = launchProfiles.filter(
+        (profile) => !nativeResultById.has(profile.id),
+      );
+
+      if (matchingNativeResults.length > 0) {
+        const now = Date.now();
+        const next = profilesRef.current.map((profile) => {
+          const result = nativeResultById.get(profile.id);
+          if (!result) return profile;
+          if (result.ok) {
+            return {
+              ...profile,
+              lastKnockStatus: "success" as const,
+              lastKnockAt: now,
+              lastError: null,
+              whitelistedEntry: result.whitelistedEntry,
+              expiresAt: result.expiresAtMillis,
+            };
+          }
+          return {
+            ...profile,
+            lastKnockStatus: "error" as const,
+            lastKnockAt: now,
+            lastError: result.message,
+          };
+        });
+        await persist(next);
+        if (cancelled) return;
       }
 
       const settled = await Promise.all(
-        launchProfiles.map(async (profile) => ({
+        missingLaunchProfiles.map(async (profile) => ({
           profile,
           result: await runKnock(profile.id, "silent"),
         })),
       );
       if (cancelled) return;
-      const successes = settled.filter((s) => s.result?.ok).length;
-      const failures = settled.length - successes;
-      const cappedCount = settled.filter((s) => s.result?.ok && s.result.ttlCapped).length;
-      const failedNames = settled
-        .filter((s) => s.result && !s.result.ok)
-        .map((s) => s.profile.name || "unnamed")
-        .slice(0, 2)
-        .join(", ");
-      const detailParts: string[] = [
-        `${successes}/${launchProfiles.length} profile${launchProfiles.length === 1 ? "" : "s"} whitelisted`,
-      ];
-      if (failures > 0) {
-        detailParts.push(
-          `${failures} failed${failedNames ? ` · ${failedNames}${failures > 2 ? ", …" : ""}` : ""}`,
-        );
+      const jsResults: NativeLaunchKnockResult[] = settled.map(
+        ({ profile, result }) => ({
+          profileId: profile.id,
+          name: profile.name,
+          ok: result?.ok === true,
+          message: result && !result.ok ? result.message : null,
+          whitelistedEntry: result?.ok ? result.whitelistedEntry : null,
+          expiresInSeconds: result?.ok ? result.expiresInSeconds : null,
+          expiresAtMillis: result?.ok ? result.expiresAt : null,
+          requestedTtlSeconds: result?.ok
+            ? result.requestedTtlSeconds
+            : profile.ttlSeconds,
+          ttlCapped: result?.ok === true && result.ttlCapped,
+        }),
+      );
+      const allResults = [...matchingNativeResults, ...jsResults];
+      if (allResults.length > 0) {
+        showLaunchSnackbarFromNative(allResults, launchProfiles.length);
       }
-      if (cappedCount > 0) {
-        detailParts.push(`${cappedCount} TTL capped by server`);
-      }
-      showSnackbar({
-        text:
-          failures > 0
-            ? "Launch knock finished with issues"
-            : "Launch knock succeeded",
-        detail: detailParts.join(" · "),
-        tone: failures > 0 ? "error" : cappedCount > 0 ? "info" : "success",
-        persistent: true,
-        retry:
-          failures > 0
-            ? () => {
-                for (const failed of settled) {
-                  if (failed.result && !failed.result.ok) {
-                    void runKnock(failed.profile.id);
-                  }
-                }
-              }
-            : undefined,
-      });
     })();
     return () => {
       cancelled = true;
     };
   }, [
     mergeExpiryFromNative,
+    persist,
     runKnock,
     showLaunchSnackbarFromNative,
     showSnackbar,
