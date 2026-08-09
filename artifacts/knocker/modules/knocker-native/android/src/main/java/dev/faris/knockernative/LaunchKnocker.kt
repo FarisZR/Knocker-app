@@ -1,0 +1,134 @@
+package dev.faris.knockernative
+
+import android.content.Context
+import android.util.Log
+import java.util.concurrent.CompletableFuture
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * Fires launch knocks for every cached profile with [StoredProfile.knockOnOpen] = true.
+ *
+ * This runs as early as possible in the app lifecycle (see [KnockerNativeModule]'s
+ * OnCreate hook) so the whitelisting request reaches the server well before the
+ * React Native JS bundle finishes loading. The JS side later consumes
+ * [KnockerNativeModule.getLaunchKnockResultsJson] to render the snackbar, and
+ * picks up the new expiry via the existing native -> JS profile merge.
+ *
+ * Only one launch-knock batch runs per process — [runOnce] is idempotent and
+ * returns the same future for every caller, so the JS side can safely re-query.
+ */
+object LaunchKnocker {
+  private const val TAG = "KnockerLaunch"
+
+  @Volatile
+  private var pending: CompletableFuture<List<LaunchKnockResult>>? = null
+
+  fun runOnce(context: Context): CompletableFuture<List<LaunchKnockResult>> {
+    pending?.let { return it }
+    synchronized(this) {
+      pending?.let { return it }
+      val future = CompletableFuture<List<LaunchKnockResult>>()
+      pending = future
+      KnockerExecutors.io.execute { performLaunchKnocks(context.applicationContext, future) }
+      return future
+    }
+  }
+
+  private fun performLaunchKnocks(
+    context: Context,
+    future: CompletableFuture<List<LaunchKnockResult>>
+  ) {
+    try {
+      val targets = KnockerStore.readProfiles(context)
+        .filter { it.knockOnOpen && it.canKnock() }
+
+      if (targets.isEmpty()) {
+        future.complete(emptyList())
+        return
+      }
+
+      val results = targets.map { profile ->
+        ProfileKnocker.knock(context, profile)
+      }
+      future.complete(results)
+      KnockerTileService.refreshAll(context)
+    } catch (error: Exception) {
+      Log.w(TAG, "Launch knock batch failed.", error)
+      future.complete(emptyList())
+    }
+  }
+
+  fun resultsToJson(results: List<LaunchKnockResult>): String {
+    val array = JSONArray()
+    for (result in results) {
+      array.put(result.toJson())
+    }
+    return array.toString()
+  }
+}
+
+private object ProfileKnocker {
+  fun knock(context: Context, profile: StoredProfile): LaunchKnockResult {
+    return when (val outcome = KnockerHttp.knock(profile)) {
+      is KnockOutcome.Success -> {
+        val updated = KnockerStore.updateExpiry(context, profile.id, outcome.expiresAtMillis)
+        val current = updated ?: profile
+        val nextFireAt = updated?.renewalAtMillis()
+        if (nextFireAt != null) {
+          KnockerRenewScheduler.schedule(context, profile.id, nextFireAt)
+        } else if (updated != null) {
+          KnockerRenewScheduler.cancel(context, profile.id)
+        }
+        LaunchKnockResult(
+          profileId = current.id,
+          name = current.name,
+          ok = true,
+          message = null,
+          whitelistedEntry = outcome.whitelistedEntry,
+          expiresInSeconds = outcome.expiresInSeconds,
+          expiresAtMillis = outcome.expiresAtMillis,
+          requestedTtlSeconds = outcome.requestedTtlSeconds,
+          ttlCapped = outcome.ttlCapped
+        )
+      }
+      is KnockOutcome.Failure -> LaunchKnockResult(
+        profileId = profile.id,
+        name = profile.name,
+        ok = false,
+        message = outcome.message,
+        whitelistedEntry = null,
+        expiresInSeconds = null,
+        expiresAtMillis = null,
+        requestedTtlSeconds = profile.ttlSeconds,
+        ttlCapped = false
+      )
+    }
+  }
+}
+
+data class LaunchKnockResult(
+  val profileId: String,
+  val name: String,
+  val ok: Boolean,
+  val message: String?,
+  val whitelistedEntry: String?,
+  val expiresInSeconds: Long?,
+  val expiresAtMillis: Long?,
+  val requestedTtlSeconds: Int?,
+  val ttlCapped: Boolean
+) {
+  fun toJson(): JSONObject {
+    return JSONObject().apply {
+      put("profileId", profileId)
+      put("name", name)
+      put("ok", ok)
+      message?.let { put("message", it) } ?: put("message", JSONObject.NULL)
+      whitelistedEntry?.let { put("whitelistedEntry", it) } ?: put("whitelistedEntry", JSONObject.NULL)
+      expiresInSeconds?.let { put("expiresInSeconds", it) } ?: put("expiresInSeconds", JSONObject.NULL)
+      expiresAtMillis?.let { put("expiresAtMillis", it) } ?: put("expiresAtMillis", JSONObject.NULL)
+      requestedTtlSeconds?.let { put("requestedTtlSeconds", it) } ?: put("requestedTtlSeconds", JSONObject.NULL)
+      put("ttlCapped", ttlCapped)
+    }
+  }
+}

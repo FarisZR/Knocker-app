@@ -17,9 +17,11 @@ import {
   type Profile,
 } from "@/lib/profiles";
 import {
+  awaitLaunchKnockResults,
   isNativeAvailable as isKnockerNativeAvailable,
   loadProfilesFromNative,
   syncProfiles as syncProfilesToNative,
+  type NativeLaunchKnockResult,
   type NativeProfileSnapshot,
 } from "knocker-native";
 
@@ -69,6 +71,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         autoRenewSafetyWindowSec: p.autoRenewSafetyWindowSec,
         tileSlot: p.tileSlot,
         expiresAt: p.expiresAt,
+        knockOnOpen: p.knockOnOpen,
       }));
       // Wait for native storage so a just-saved tile mapping works immediately.
       try {
@@ -91,6 +94,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       autoRenewSafetyWindowSec: p.autoRenewSafetyWindowSec,
       tileSlot: p.tileSlot,
       expiresAt: p.expiresAt,
+      knockOnOpen: p.knockOnOpen,
     }));
   }, []);
 
@@ -176,6 +180,51 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       return result;
     },
     [updateOne, showSnackbar],
+  );
+
+  const showLaunchSnackbarFromNative = useCallback(
+    (results: NativeLaunchKnockResult[]) => {
+      const total = results.length;
+      const successes = results.filter((r) => r.ok).length;
+      const failures = total - successes;
+      const cappedCount = results.filter((r) => r.ok && r.ttlCapped).length;
+      const failedNames = results
+        .filter((r) => !r.ok)
+        .map((r) => r.name || "unnamed")
+        .slice(0, 2)
+        .join(", ");
+      const detailParts: string[] = [
+        `${successes}/${total} profile${total === 1 ? "" : "s"} whitelisted`,
+      ];
+      if (failures > 0) {
+        detailParts.push(
+          `${failures} failed${failedNames ? ` · ${failedNames}${failures > 2 ? ", …" : ""}` : ""}`,
+        );
+      }
+      if (cappedCount > 0) {
+        detailParts.push(`${cappedCount} TTL capped by server`);
+      }
+      showSnackbar({
+        text:
+          failures > 0
+            ? "Launch knock finished with issues"
+            : "Launch knock succeeded",
+        detail: detailParts.join(" · "),
+        tone: failures > 0 ? "error" : cappedCount > 0 ? "info" : "success",
+        persistent: true,
+        retry:
+          failures > 0
+            ? () => {
+                for (const failed of results) {
+                  if (!failed.ok) {
+                    void runKnock(failed.profileId);
+                  }
+                }
+              }
+            : undefined,
+      });
+    },
+    [runKnock, showSnackbar],
   );
 
   const knockOne = useCallback(
@@ -278,6 +327,13 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       const nativeProfilesPromise = isKnockerNativeAvailable
         ? loadProfilesFromNative()
         : Promise.resolve<NativeProfileSnapshot[]>([]);
+      // On Android the native module fires launch knocks from its OnCreate
+      // hook — long before the JS bundle finishes loading — so we just await
+      // its results instead of doing a second round of HTTP from JS. We start
+      // awaiting in parallel with loadProfiles() to keep latency minimal.
+      const nativeLaunchPromise = isKnockerNativeAvailable
+        ? awaitLaunchKnockResults()
+        : Promise.resolve<NativeLaunchKnockResult[] | null>(null);
       const list = await loadProfiles();
       if (cancelled) return;
       profilesRef.current = list;
@@ -304,6 +360,20 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
 
       const launchProfiles = list.filter((p) => p.knockOnOpen);
       if (launchProfiles.length === 0) return;
+
+      // Prefer the native launch-knock results when available — the HTTP
+      // request was already fired by LaunchKnocker.kt at process start. If
+      // native returned nothing (cache empty, stale snapshot, or no
+      // knockOnOpen profiles), fall through to the JS-side knock path so we
+      // still cover web / iOS / Expo Go and freshly-upgraded installs.
+      const nativeResults = await nativeLaunchPromise;
+      if (cancelled) return;
+
+      if (nativeResults !== null && nativeResults.length > 0) {
+        showLaunchSnackbarFromNative(nativeResults);
+        return;
+      }
+
       const settled = await Promise.all(
         launchProfiles.map(async (profile) => ({
           profile,
@@ -353,7 +423,13 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [mergeExpiryFromNative, runKnock, showSnackbar, toNativeSnapshot]);
+  }, [
+    mergeExpiryFromNative,
+    runKnock,
+    showLaunchSnackbarFromNative,
+    showSnackbar,
+    toNativeSnapshot,
+  ]);
 
   // Reschedule renewals whenever profiles change. Gate is keyed by
   // (profileId, expiresAt) so a single expiry value can only trigger one

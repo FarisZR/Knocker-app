@@ -12,11 +12,25 @@ export interface NativeProfileSnapshot {
   autoRenewSafetyWindowSec: number;
   tileSlot: number | null;
   expiresAt: number | null;
+  knockOnOpen: boolean;
+}
+
+export interface NativeLaunchKnockResult {
+  profileId: string;
+  name: string;
+  ok: boolean;
+  message: string | null;
+  whitelistedEntry: string | null;
+  expiresInSeconds: number | null;
+  expiresAtMillis: number | null;
+  requestedTtlSeconds: number | null;
+  ttlCapped: boolean;
 }
 
 interface KnockerNativeAndroid {
   syncProfiles(profilesJson: string): Promise<void>;
   getProfilesJson(): Promise<string>;
+  getLaunchKnockResultsJson(): Promise<string>;
   scheduleRenewal(profileId: string, fireAtMs: number): Promise<void>;
   cancelRenewal(profileId: string): Promise<void>;
   cancelAllRenewals(): Promise<void>;
@@ -44,6 +58,27 @@ export async function loadProfilesFromNative(): Promise<NativeProfileSnapshot[]>
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed as NativeProfileSnapshot[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Awaits the launch-knock batch that the native module fires from its OnCreate
+ * hook (i.e. as soon as the app process starts). Returns the per-profile
+ * results so the JS side can render the same launch snackbar without firing a
+ * second round of HTTP requests.
+ *
+ * Returns [] when native is unavailable or no profile has knockOnOpen enabled.
+ */
+export async function awaitLaunchKnockResults(): Promise<NativeLaunchKnockResult[]> {
+  if (!native) return [];
+
+  try {
+    const raw = await native.getLaunchKnockResultsJson();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as NativeLaunchKnockResult[];
   } catch {
     return [];
   }

@@ -13,6 +13,14 @@ class KnockerNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KnockerNative")
 
+    // Fire launch knocks as early as possible — before the JS bundle finishes
+    // loading — so whitelisting happens promptly when the user opens the app.
+    // JS later picks up the result via `getLaunchKnockResultsJson`.
+    OnCreate {
+      val ctx = appContext.reactContext ?: return@OnCreate
+      LaunchKnocker.runOnce(ctx)
+    }
+
     AsyncFunction("syncProfiles") { profilesJson: String ->
       KnockerStore.replaceProfiles(context, profilesJson)
       KnockerTileService.refreshAll(context)
@@ -20,6 +28,17 @@ class KnockerNativeModule : Module() {
 
     AsyncFunction("getProfilesJson") {
       KnockerStore.readProfilesJson(context)
+    }
+
+    AsyncFunction("getLaunchKnockResultsJson") {
+      // Awaits the launch-knock batch started in OnCreate (or returns []
+      // immediately if there is nothing to knock). Safe to call repeatedly.
+      val ctx = appContext.reactContext
+      if (ctx == null) {
+        return@AsyncFunction "[]"
+      }
+      val results = LaunchKnocker.runOnce(ctx).get()
+      LaunchKnocker.resultsToJson(results)
     }
 
     AsyncFunction("scheduleRenewal") { profileId: String, fireAtMs: Double ->

@@ -17,7 +17,8 @@ data class StoredProfile(
   val autoRenew: Boolean,
   val autoRenewSafetyWindowSec: Int,
   val tileSlot: Int?,
-  val expiresAt: Long?
+  val expiresAt: Long?,
+  val knockOnOpen: Boolean = false
 ) {
   fun canKnock(): Boolean {
     return endpointUrl.isNotBlank() && apiKey.isNotBlank()
@@ -118,7 +119,8 @@ object KnockerStore {
               autoRenew = objectJson.optBoolean("autoRenew", false),
               autoRenewSafetyWindowSec = objectJson.optStrictNullableInt("autoRenewSafetyWindowSec") ?: 300,
               tileSlot = objectJson.optStrictNullableInt("tileSlot"),
-              expiresAt = objectJson.optStrictNullableLong("expiresAt")
+              expiresAt = objectJson.optStrictNullableLong("expiresAt"),
+              knockOnOpen = objectJson.optBoolean("knockOnOpen", false)
             )
           )
         }
@@ -141,6 +143,7 @@ object KnockerStore {
       put("autoRenewSafetyWindowSec", autoRenewSafetyWindowSec)
       putNullable("tileSlot", tileSlot)
       putNullable("expiresAt", expiresAt)
+      put("knockOnOpen", knockOnOpen)
     }
   }
 
