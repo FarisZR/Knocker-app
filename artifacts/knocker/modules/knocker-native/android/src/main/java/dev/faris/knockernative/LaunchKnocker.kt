@@ -15,8 +15,9 @@ import org.json.JSONObject
  * [KnockerNativeModule.getLaunchKnockResultsJson] to render the snackbar, and
  * picks up the new expiry via the existing native -> JS profile merge.
  *
- * Only one launch-knock batch runs per process — [runOnce] is idempotent and
- * returns the same future for every caller, so the JS side can safely re-query.
+ * Only one launch-knock batch runs per native/React surface. The batch is
+ * replaced when a new surface is created and released after the JS bridge
+ * consumes its result.
  */
 object LaunchKnocker {
   private const val TAG = "KnockerLaunch"
@@ -24,14 +25,37 @@ object LaunchKnocker {
   @Volatile
   private var pending: CompletableFuture<List<LaunchKnockResult>>? = null
 
+  /** Starts a new batch for a newly created native/React surface. */
+  fun startForLaunch(context: Context): CompletableFuture<List<LaunchKnockResult>> {
+    synchronized(this) {
+      val future = CompletableFuture<List<LaunchKnockResult>>()
+      pending = future
+      KnockerExecutors.io.execute {
+        performLaunchKnocks(context.applicationContext, future)
+      }
+      return future
+    }
+  }
+
   fun runOnce(context: Context): CompletableFuture<List<LaunchKnockResult>> {
     pending?.let { return it }
     synchronized(this) {
       pending?.let { return it }
-      val future = CompletableFuture<List<LaunchKnockResult>>()
-      pending = future
-      KnockerExecutors.io.execute { performLaunchKnocks(context.applicationContext, future) }
-      return future
+      return startForLaunch(context)
+    }
+  }
+
+  /** Returns this surface's result batch and releases it for the next launch. */
+  fun awaitAndConsume(context: Context): List<LaunchKnockResult> {
+    val future = runOnce(context)
+    return try {
+      future.get()
+    } finally {
+      synchronized(this) {
+        if (pending === future) {
+          pending = null
+        }
+      }
     }
   }
 

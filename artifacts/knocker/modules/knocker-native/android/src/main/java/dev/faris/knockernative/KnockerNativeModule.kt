@@ -18,7 +18,7 @@ class KnockerNativeModule : Module() {
     // JS later picks up the result via `getLaunchKnockResultsJson`.
     OnCreate {
       val ctx = appContext.reactContext ?: return@OnCreate
-      LaunchKnocker.runOnce(ctx)
+      LaunchKnocker.startForLaunch(ctx)
     }
 
     AsyncFunction("syncProfiles") { profilesJson: String ->
@@ -31,13 +31,14 @@ class KnockerNativeModule : Module() {
     }
 
     AsyncFunction("getLaunchKnockResultsJson") {
-      // Awaits the launch-knock batch started in OnCreate (or returns []
-      // immediately if there is nothing to knock). Safe to call repeatedly.
+      // Awaits and consumes the launch-knock batch started in OnCreate. If a
+      // later React surface asks again, it gets a fresh batch instead of the
+      // previous surface's results.
       val ctx = appContext.reactContext
       if (ctx == null) {
         return@AsyncFunction "[]"
       }
-      val results = LaunchKnocker.runOnce(ctx).get()
+      val results = LaunchKnocker.awaitAndConsume(ctx)
       LaunchKnocker.resultsToJson(results)
     }
 
