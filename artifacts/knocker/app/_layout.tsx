@@ -7,15 +7,12 @@ import {
 } from "@expo-google-fonts/inter";
 import Feather from "@expo/vector-icons/Feather";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import * as Sentry from "@sentry/react-native";
 import React, { useEffect } from "react";
-import {
-  InteractionManager,
-  PermissionsAndroid,
-  Platform,
-} from "react-native";
+import { InteractionManager, PermissionsAndroid, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -23,6 +20,25 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProfilesProvider } from "@/context/ProfilesContext";
 import { useColors } from "@/hooks/useColors";
+
+Sentry.init({
+  dsn: "https://e7a4df6605d189adfbee103c2dcba868@o4511192693014528.ingest.de.sentry.io/4511882460069969",
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+  integrations: [Sentry.expoRouterIntegration(), Sentry.feedbackIntegration()],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
+
+// Expo Router's static singleton has a narrower prefetch signature than the
+// router shape accepted by Sentry's wrapper.
+Sentry.wrapExpoRouter(router as unknown as Sentry.ExpoRouter);
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -63,7 +79,7 @@ function StartupReadyController() {
   return null;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -117,3 +133,5 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+export default Sentry.wrap(RootLayout);

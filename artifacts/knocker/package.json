@@ -58,6 +58,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@sentry/react-native": "^8.22.0",
     "expo-modules-core": "3.0.30",
     "expo-secure-store": "~15.0.8",
     "knocker-native": "link:./modules/knocker-native"
