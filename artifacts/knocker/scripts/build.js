@@ -269,7 +269,6 @@ async function downloadBundle(platform, timestamp) {
   );
   const uploadPlatformRoot = path.join(sentryUploadRoot, platform);
   const sourceMapOutput = path.join(uploadPlatformRoot, "bundle.js.map");
-  const uploadBundleOutput = path.join(uploadPlatformRoot, "bundle.js");
 
   fs.mkdirSync(uploadPlatformRoot, { recursive: true });
 
@@ -278,7 +277,6 @@ async function downloadBundle(platform, timestamp) {
   console.log(`Fetching ${platform} source map...`);
   await downloadFile(sourceMapUrl.toString(), sourceMapOutput);
   addDebugIdToSourceMap(output, sourceMapOutput);
-  fs.copyFileSync(output, uploadBundleOutput);
   console.log(`${platform} bundle ready`);
 }
 
@@ -342,7 +340,7 @@ async function uploadSourceMaps() {
 
   console.log("Uploading JavaScript bundles and source maps to Sentry...");
   await new Promise((resolve, reject) => {
-    const uploader = spawn(process.execPath, [uploaderPath, sentryUploadRoot], {
+    const uploader = spawn(uploaderPath, [sentryUploadRoot], {
       cwd: projectRoot,
       env: {
         ...process.env,
@@ -370,6 +368,24 @@ async function uploadSourceMaps() {
     });
   });
   console.log("Sentry source maps uploaded");
+}
+
+function stageFinalBundles(timestamp) {
+  for (const platform of ["ios", "android"]) {
+    const bundlePath = path.join(
+      projectRoot,
+      "static-build",
+      timestamp,
+      "_expo",
+      "static",
+      "js",
+      platform,
+      "bundle.js",
+    );
+    const uploadBundlePath = path.join(sentryUploadRoot, platform, "bundle.js");
+
+    fs.copyFileSync(bundlePath, uploadBundlePath);
+  }
 }
 
 async function downloadManifest(platform) {
@@ -671,9 +687,6 @@ async function main() {
 
   const manifests = await Promise.race([downloadPromise, timeoutPromise]);
 
-  await uploadSourceMaps();
-  cleanupSentryUpload();
-
   console.log("Processing assets...");
   const assets = extractAssets(timestamp);
   console.log("Found", assets.length, "unique asset(s)");
@@ -691,6 +704,10 @@ async function main() {
   if (assetCount > 0) {
     updateBundleUrls(timestamp, baseUrl);
   }
+
+  stageFinalBundles(timestamp);
+  await uploadSourceMaps();
+  cleanupSentryUpload();
 
   console.log("Updating manifests and creating landing page...");
   updateManifests(manifests, timestamp, baseUrl, assetsByHash);
