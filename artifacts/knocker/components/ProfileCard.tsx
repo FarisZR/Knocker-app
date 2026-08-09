@@ -18,9 +18,13 @@ import type { Profile } from "@/lib/profiles";
 export function ProfileCard({
   profile,
   index = 0,
+  selected = false,
+  onOpen,
 }: {
   profile: Profile;
   index?: number;
+  selected?: boolean;
+  onOpen?: (profileId: string) => void;
 }) {
   const colors = useColors();
   const { knockOne } = useProfiles();
@@ -49,7 +53,13 @@ export function ProfileCard({
     }
   };
 
-  const onOpen = () => router.push(`/profile/${profile.id}`);
+  const openProfile = () => {
+    if (onOpen) {
+      onOpen(profile.id);
+      return;
+    }
+    router.push(`/profile/${profile.id}`);
+  };
   const disabled = !profile.endpointUrl || !profile.apiKey;
 
   return (
@@ -62,9 +72,19 @@ export function ProfileCard({
       )}
     >
       <AnimatedPressable
-        onPress={onOpen}
+        onPress={openProfile}
         scaleTo={0.98}
-        style={[styles.card, { backgroundColor: colors.surface }]}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        style={[
+          styles.card,
+          {
+            backgroundColor: selected
+              ? colors.primaryContainer
+              : colors.surface,
+            borderColor: selected ? colors.primary : "transparent",
+          },
+        ]}
       >
         <View style={styles.body}>
           <View style={styles.titleRow}>
@@ -161,6 +181,7 @@ export function ProfileCard({
 const styles = StyleSheet.create({
   card: {
     borderRadius: 24,
+    borderWidth: 1,
     paddingVertical: 14,
     paddingLeft: 18,
     paddingRight: 14,

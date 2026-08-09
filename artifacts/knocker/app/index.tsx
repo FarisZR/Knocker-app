@@ -1,7 +1,15 @@
 import { Feather } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useMemo } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
+  Alert,
+  BackHandler,
   FlatList,
   Platform,
   StyleSheet,
@@ -10,16 +18,24 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Ellipse, G, Path } from "react-native-svg";
 
 import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { DevBuildBanner } from "@/components/DevBuildBanner";
+import { ProfileEditor } from "@/components/ProfileEditor";
 import { ProfileCard } from "@/components/ProfileCard";
 import { Snackbar } from "@/components/Snackbar";
 import { motion } from "@/constants/motion";
 import { useColors } from "@/hooks/useColors";
+import { useAdaptiveLayout } from "@/hooks/useAdaptiveLayout";
 import { useProfiles } from "@/context/ProfilesContext";
 import { performKnockHaptic, performTapHaptic } from "@/lib/haptics";
 
@@ -27,6 +43,15 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { profiles, loaded, knockOne, knockAll } = useProfiles();
+  const { profile: profileParam } = useLocalSearchParams<{
+    profile?: string;
+  }>();
+  const { showTwoPanes, widthClass, width, height } = useAdaptiveLayout();
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
+    profileParam ?? null,
+  );
+  const [editorDirty, setEditorDirty] = useState(false);
+  const previousProfileIdRef = useRef<string | null>(null);
 
   const activeCount = useMemo(() => {
     const now = Date.now();
@@ -43,8 +68,84 @@ export default function HomeScreen() {
   const topPad = (isWeb ? 67 : insets.top) + 12;
   const bottomPad = isWeb ? 34 : insets.bottom;
 
+  useEffect(() => {
+    if (!showTwoPanes || !profileParam) return;
+    setSelectedProfileId(profileParam);
+  }, [profileParam, showTwoPanes]);
+
+  useEffect(() => {
+    if (!loaded || !showTwoPanes) return;
+    if (selectedProfileId === "new") return;
+    if (
+      selectedProfileId &&
+      profiles.some((profile) => profile.id === selectedProfileId)
+    ) {
+      return;
+    }
+    setSelectedProfileId(profiles[0]?.id ?? "new");
+  }, [loaded, profiles, selectedProfileId, showTwoPanes]);
+
+  useEffect(() => {
+    if (selectedProfileId && selectedProfileId !== "new") {
+      previousProfileIdRef.current = selectedProfileId;
+    }
+  }, [selectedProfileId]);
+
+  const commitSelection = useCallback((profileId: string | null) => {
+    setEditorDirty(false);
+    setSelectedProfileId(profileId);
+  }, []);
+
+  const requestSelection = useCallback(
+    (profileId: string | null) => {
+      if (profileId === selectedProfileId) return;
+      if (!editorDirty) {
+        commitSelection(profileId);
+        return;
+      }
+
+      const discard = () => commitSelection(profileId);
+      if (Platform.OS === "web") {
+        // eslint-disable-next-line no-alert
+        if (
+          typeof window !== "undefined" &&
+          window.confirm("Discard unsaved changes?")
+        ) {
+          discard();
+        }
+        return;
+      }
+
+      Alert.alert(
+        "Discard unsaved changes?",
+        "Your changes to this profile have not been saved.",
+        [
+          { text: "Keep editing", style: "cancel" },
+          { text: "Discard", style: "destructive", onPress: discard },
+        ],
+      );
+    },
+    [commitSelection, editorDirty, selectedProfileId],
+  );
+
+  useEffect(() => {
+    if (showTwoPanes || !selectedProfileId || Platform.OS !== "android") return;
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        requestSelection(null);
+        return true;
+      },
+    );
+    return () => subscription.remove();
+  }, [requestSelection, selectedProfileId, showTwoPanes]);
+
   const onNew = () => {
     performTapHaptic();
+    if (showTwoPanes) {
+      requestSelection("new");
+      return;
+    }
     router.push("/profile/new");
   };
   const onKnockAll = () => {
@@ -56,167 +157,288 @@ export default function HomeScreen() {
     void knockOne(id);
   };
 
-  return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: colors.background, paddingTop: topPad },
-      ]}
-    >
+  const onOpenProfile = (profileId: string) => {
+    if (showTwoPanes) {
+      requestSelection(profileId);
+      return;
+    }
+    router.push(`/profile/${profileId}`);
+  };
+
+  const onEditorDeleted = (profileId: string) => {
+    const remaining = profiles.filter((profile) => profile.id !== profileId);
+    commitSelection(remaining[0]?.id ?? "new");
+  };
+
+  const onEditorCancel = () => {
+    if (!showTwoPanes) {
+      commitSelection(null);
+      return;
+    }
+    if (selectedProfileId !== "new") return;
+    const previous = previousProfileIdRef.current;
+    commitSelection(
+      previous && profiles.some((profile) => profile.id === previous)
+        ? previous
+        : (profiles[0]?.id ?? "new"),
+    );
+  };
+
+  const showListPane = showTwoPanes || selectedProfileId === null;
+  const showDetailPane = selectedProfileId !== null;
+  const floatingActionBottom =
+    bottomPad + 16 + (showTwoPanes && editorDirty ? 76 : 0);
+  const animatedFloatingActionBottom = useSharedValue(floatingActionBottom);
+  useEffect(() => {
+    animatedFloatingActionBottom.value = withTiming(floatingActionBottom, {
+      duration: motion.duration.medium,
+      easing: motion.easing.standard,
+    });
+  }, [animatedFloatingActionBottom, floatingActionBottom]);
+  const floatingActionStyle = useAnimatedStyle(() => ({
+    bottom: animatedFloatingActionBottom.value,
+  }));
+  const floatingActions =
+    profiles.length > 0 ? (
       <Animated.View
-        entering={FadeIn.duration(motion.duration.medium).easing(
-          motion.easing.standard,
-        )}
-        style={styles.header}
+        style={[
+          styles.fabStack,
+          { right: 16 },
+          floatingActionStyle,
+        ]}
+        pointerEvents="box-none"
       >
-        <Text style={[styles.kicker, { color: colors.mutedForeground }]}>
-          {profiles.length === 0
-            ? "No profiles yet"
-            : `${profiles.length} profile${profiles.length === 1 ? "" : "s"} · ${activeCount} active`}
-        </Text>
-        <View style={styles.wordmarkFrame}>
-          <KnockerWordmark />
-        </View>
-      </Animated.View>
-
-      <DevBuildBanner />
-
-      {!loaded ? (
-        <View style={styles.empty}>
-          <Text style={{ color: colors.mutedForeground }}>Loading…</Text>
-        </View>
-      ) : profiles.length === 0 ? (
         <Animated.View
-          entering={FadeIn.duration(motion.duration.medium).easing(
+          entering={FadeInDown.duration(motion.duration.medium).easing(
             motion.easing.standard,
           )}
-          style={styles.empty}
         >
-          <KnockerIcon style={styles.emptyIcon} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            Add your first profile
-          </Text>
-          <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>
-            Set the endpoint URL and API key for your Caddy Knocker server.
-            We'll handle the rest.
-          </Text>
           <AnimatedPressable
             onPress={onNew}
             scaleTo={0.96}
-            style={[styles.emptyCta, { backgroundColor: colors.primary }]}
-            accessibilityRole="button"
-            accessibilityLabel="Add new profile"
+            style={[
+              styles.fabSecondary,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
           >
-            <Feather name="plus" size={24} color={colors.primaryForeground} />
+            <Feather
+              name="plus"
+              size={16}
+              color={colors.onSurfaceVariant}
+            />
+            <Text
+              style={[
+                styles.fabSecondaryText,
+                { color: colors.onSurfaceVariant },
+              ]}
+            >
+              New profile
+            </Text>
           </AnimatedPressable>
         </Animated.View>
-      ) : (
-        <FlatList
-          data={profiles}
-          keyExtractor={(p) => p.id}
-          renderItem={({ item, index }) => (
-            <ProfileCard profile={item} index={index} />
-          )}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: 8,
-            paddingBottom: bottomPad + 220,
-          }}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
 
-      {profiles.length > 0 ? (
-        <View
-          style={[styles.fabStack, { right: 16, bottom: bottomPad + 16 }]}
-          pointerEvents="box-none"
-        >
+        {pinned.map((profile, index) => (
           <Animated.View
-            entering={FadeInDown.duration(motion.duration.medium).easing(
-              motion.easing.standard,
-            )}
-          >
-            <AnimatedPressable
-              onPress={onNew}
-              scaleTo={0.96}
-              style={[styles.fabSecondary, { borderColor: colors.border }]}
-            >
-              <Feather name="plus" size={16} color={colors.onSurfaceVariant} />
-              <Text
-                style={[
-                  styles.fabSecondaryText,
-                  { color: colors.onSurfaceVariant },
-                ]}
-              >
-                New profile
-              </Text>
-            </AnimatedPressable>
-          </Animated.View>
-
-          {pinned.map((p, i) => (
-            <Animated.View
-              key={p.id}
-              entering={FadeInDown.delay(Math.min(i * 20, 80))
-                .duration(motion.duration.medium)
-                .easing(motion.easing.standard)}
-            >
-              <AnimatedPressable
-                onPress={() => onKnockPinned(p.id)}
-                scaleTo={0.96}
-                style={[
-                  styles.fabPinned,
-                  { backgroundColor: colors.primaryContainer },
-                ]}
-              >
-                <Feather
-                  name="bookmark"
-                  size={13}
-                  color={colors.onPrimaryContainer}
-                />
-                <Feather
-                  name="zap"
-                  size={16}
-                  color={colors.onPrimaryContainer}
-                />
-                <Text
-                  style={[
-                    styles.fabPinnedText,
-                    { color: colors.onPrimaryContainer },
-                  ]}
-                  numberOfLines={1}
-                >
-                  Knock {p.name || "profile"}
-                </Text>
-              </AnimatedPressable>
-            </Animated.View>
-          ))}
-
-          <Animated.View
-            entering={FadeInDown.delay(Math.min((pinned.length + 1) * 20, 100))
+            key={profile.id}
+            entering={FadeInDown.delay(Math.min(index * 20, 80))
               .duration(motion.duration.medium)
               .easing(motion.easing.standard)}
           >
             <AnimatedPressable
-              onPress={onKnockAll}
+              onPress={() => onKnockPinned(profile.id)}
               scaleTo={0.96}
-              style={[styles.fabPrimary, { backgroundColor: colors.primary }]}
+              style={[
+                styles.fabPinned,
+                { backgroundColor: colors.primaryContainer },
+              ]}
             >
-              <Feather name="zap" size={22} color={colors.primaryForeground} />
+              <Feather
+                name="bookmark"
+                size={13}
+                color={colors.onPrimaryContainer}
+              />
+              <Feather
+                name="zap"
+                size={16}
+                color={colors.onPrimaryContainer}
+              />
               <Text
                 style={[
-                  styles.fabPrimaryText,
-                  { color: colors.primaryForeground },
+                  styles.fabPinnedText,
+                  { color: colors.onPrimaryContainer },
                 ]}
+                numberOfLines={1}
               >
-                Knock all
+                Knock {profile.name || "profile"}
               </Text>
             </AnimatedPressable>
           </Animated.View>
-        </View>
-      ) : null}
+        ))}
 
-      <Snackbar bottomOffset={bottomPad + 220} />
+        <Animated.View
+          entering={FadeInDown.delay(
+            Math.min((pinned.length + 1) * 20, 100),
+          )
+            .duration(motion.duration.medium)
+            .easing(motion.easing.standard)}
+        >
+          <AnimatedPressable
+            onPress={onKnockAll}
+            scaleTo={0.96}
+            style={[
+              styles.fabPrimary,
+              { backgroundColor: colors.primary },
+            ]}
+          >
+            <Feather
+              name="zap"
+              size={22}
+              color={colors.primaryForeground}
+            />
+            <Text
+              style={[
+                styles.fabPrimaryText,
+                { color: colors.primaryForeground },
+              ]}
+            >
+              Knock all
+            </Text>
+          </AnimatedPressable>
+        </Animated.View>
+      </Animated.View>
+    ) : null;
+
+  return (
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <View style={styles.adaptiveShell}>
+        <View
+          style={[
+            styles.listPane,
+            showTwoPanes
+              ? widthClass === "medium"
+                ? styles.mediumPane
+              : width > height
+                ? styles.expandedLandscapeListPane
+                : styles.expandedListPane
+              : styles.singlePane,
+            !showListPane ? styles.hiddenPane : null,
+            { paddingTop: topPad },
+          ]}
+        >
+          <Animated.View
+            entering={FadeIn.duration(motion.duration.medium).easing(
+              motion.easing.standard,
+            )}
+            style={styles.header}
+          >
+            <Text style={[styles.kicker, { color: colors.mutedForeground }]}>
+              {profiles.length === 0
+                ? "No profiles yet"
+                : `${profiles.length} profile${profiles.length === 1 ? "" : "s"} · ${activeCount} active`}
+            </Text>
+            <View style={styles.wordmarkFrame}>
+              <KnockerWordmark />
+            </View>
+          </Animated.View>
+
+          <DevBuildBanner />
+
+          {!loaded ? (
+            <View style={styles.empty}>
+              <Text style={{ color: colors.mutedForeground }}>Loading…</Text>
+            </View>
+          ) : profiles.length === 0 ? (
+            <Animated.View
+              entering={FadeIn.duration(motion.duration.medium).easing(
+                motion.easing.standard,
+              )}
+              style={styles.empty}
+            >
+              <KnockerIcon style={styles.emptyIcon} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                Add your first profile
+              </Text>
+              <Text
+                style={[styles.emptyBody, { color: colors.mutedForeground }]}
+              >
+                Set the endpoint URL and API key for your Caddy Knocker server.
+                We'll handle the rest.
+              </Text>
+              <AnimatedPressable
+                onPress={onNew}
+                scaleTo={0.96}
+                style={[styles.emptyCta, { backgroundColor: colors.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="Add new profile"
+              >
+                <Feather
+                  name="plus"
+                  size={24}
+                  color={colors.primaryForeground}
+                />
+              </AnimatedPressable>
+            </Animated.View>
+          ) : (
+            <FlatList
+              data={profiles}
+              keyExtractor={(profile) => profile.id}
+              renderItem={({ item, index }) => (
+                <ProfileCard
+                  profile={item}
+                  index={index}
+                  selected={showTwoPanes && item.id === selectedProfileId}
+                  onOpen={onOpenProfile}
+                />
+              )}
+              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              contentContainerStyle={{
+                paddingHorizontal: 16,
+                paddingTop: 8,
+                paddingBottom: bottomPad + 220,
+              }}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+
+          {!showTwoPanes ? floatingActions : null}
+
+          <Snackbar bottomOffset={bottomPad + 220} />
+        </View>
+
+        {showTwoPanes ? (
+          <View
+            style={[
+              styles.paneDivider,
+              { backgroundColor: colors.borderVariant },
+            ]}
+          />
+        ) : null}
+
+        <View
+          style={[
+            styles.detailPane,
+            !showTwoPanes ? styles.singlePane : null,
+            !showDetailPane ? styles.hiddenPane : null,
+            { paddingTop: topPad },
+          ]}
+        >
+          {selectedProfileId ? (
+            <ProfileEditor
+              key={selectedProfileId}
+              profileId={selectedProfileId}
+              embedded={showTwoPanes}
+              onSaved={(profile) => commitSelection(profile.id)}
+              onDeleted={onEditorDeleted}
+              onCancel={onEditorCancel}
+              onDirtyChange={setEditorDirty}
+            />
+          ) : null}
+        </View>
+      </View>
+      {showTwoPanes ? floatingActions : null}
     </View>
   );
 }
@@ -231,12 +453,24 @@ function KnockerIcon({ style }: { style?: StyleProp<ViewStyle> }) {
       accessibilityRole="image"
       accessibilityLabel="Knocker"
     >
-      <Ellipse fill="#1a1a1a" cx={479.39853} cy={-479.3985} rx={479.3985} ry={478.1955} />
+      <Ellipse
+        fill="#1a1a1a"
+        cx={479.39853}
+        cy={-479.3985}
+        rx={479.3985}
+        ry={478.1955}
+      />
       <Path
         fill="#ffffff"
         d="m 764,-172 v -22 h -56 v -563 q 0,-21.5 -16.25,-37.75 Q 675.5,-811 654,-811 H 306 q -21.5,0 -37.75,16.25 Q 252,-778.5 252,-757 v 563 h -56 v 22 z m -404,-22 h -86 v -563 q 0,-14 9,-23 9,-9 23,-9 h 128 v -3 q -32,2 -53,25.7 -21,23.7 -21,55.3 z m 159.81,-261 q -9.81,0 -17.31,-7.69 -7.5,-7.7 -7.5,-17.5 0,-9.81 7.69,-17.31 7.7,-7.5 17.5,-7.5 9.81,0 17.31,7.69 7.5,7.7 7.5,17.5 0,9.81 -7.69,17.31 -7.7,7.5 -17.5,7.5 z"
       />
-      <Ellipse fill="#fde562" cx={518.95984} cy={-479.2001} rx={28.732313} ry={28.63653} />
+      <Ellipse
+        fill="#fde562"
+        cx={518.95984}
+        cy={-479.2001}
+        rx={28.732313}
+        ry={28.63653}
+      />
     </Svg>
   );
 }
@@ -264,6 +498,15 @@ function KnockerWordmark({ style }: { style?: StyleProp<ViewStyle> }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  adaptiveShell: { flex: 1, flexDirection: "row" },
+  listPane: { minWidth: 0 },
+  detailPane: { flex: 1, minWidth: 0 },
+  mediumPane: { flex: 1 },
+  expandedListPane: { width: 360 },
+  expandedLandscapeListPane: { width: 420 },
+  singlePane: { width: "100%", flex: 1 },
+  hiddenPane: { display: "none" },
+  paneDivider: { width: StyleSheet.hairlineWidth },
   header: { paddingHorizontal: 20, paddingBottom: 8 },
   kicker: { fontSize: 13, fontFamily: "Inter_500Medium" },
   wordmarkFrame: {
