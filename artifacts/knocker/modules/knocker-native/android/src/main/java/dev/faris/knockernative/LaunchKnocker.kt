@@ -48,9 +48,13 @@ object LaunchKnocker {
         return
       }
 
-      val results = targets.map { profile ->
-        ProfileKnocker.knock(context, profile)
+      val resultFutures = targets.map { profile ->
+        CompletableFuture.supplyAsync(
+          { ProfileKnocker.knock(context, profile) },
+          KnockerExecutors.io
+        )
       }
+      val results = resultFutures.map { it.join() }
       future.complete(results)
       KnockerTileService.refreshAll(context)
     } catch (error: Exception) {
@@ -72,8 +76,12 @@ private object ProfileKnocker {
   fun knock(context: Context, profile: StoredProfile): LaunchKnockResult {
     return when (val outcome = KnockerHttp.knock(profile)) {
       is KnockOutcome.Success -> {
-        val updated = KnockerStore.updateExpiry(context, profile.id, outcome.expiresAtMillis)
-        val current = updated ?: profile
+        val updated = KnockerStore.updateExpiry(
+          context,
+          profile.id,
+          outcome.expiresAtMillis,
+          profile.configurationFingerprint
+        )
         val nextFireAt = updated?.renewalAtMillis()
         if (nextFireAt != null) {
           KnockerRenewScheduler.schedule(context, profile.id, nextFireAt)
@@ -81,15 +89,16 @@ private object ProfileKnocker {
           KnockerRenewScheduler.cancel(context, profile.id)
         }
         LaunchKnockResult(
-          profileId = current.id,
-          name = current.name,
+          profileId = profile.id,
+          name = profile.name,
           ok = true,
           message = null,
           whitelistedEntry = outcome.whitelistedEntry,
           expiresInSeconds = outcome.expiresInSeconds,
           expiresAtMillis = outcome.expiresAtMillis,
           requestedTtlSeconds = outcome.requestedTtlSeconds,
-          ttlCapped = outcome.ttlCapped
+          ttlCapped = outcome.ttlCapped,
+          configurationFingerprint = profile.configurationFingerprint
         )
       }
       is KnockOutcome.Failure -> LaunchKnockResult(
@@ -101,7 +110,8 @@ private object ProfileKnocker {
         expiresInSeconds = null,
         expiresAtMillis = null,
         requestedTtlSeconds = profile.ttlSeconds,
-        ttlCapped = false
+        ttlCapped = false,
+        configurationFingerprint = profile.configurationFingerprint
       )
     }
   }
@@ -116,7 +126,8 @@ data class LaunchKnockResult(
   val expiresInSeconds: Long?,
   val expiresAtMillis: Long?,
   val requestedTtlSeconds: Int?,
-  val ttlCapped: Boolean
+  val ttlCapped: Boolean,
+  val configurationFingerprint: String
 ) {
   fun toJson(): JSONObject {
     return JSONObject().apply {
@@ -129,6 +140,7 @@ data class LaunchKnockResult(
       expiresAtMillis?.let { put("expiresAtMillis", it) } ?: put("expiresAtMillis", JSONObject.NULL)
       requestedTtlSeconds?.let { put("requestedTtlSeconds", it) } ?: put("requestedTtlSeconds", JSONObject.NULL)
       put("ttlCapped", ttlCapped)
+      put("configurationFingerprint", configurationFingerprint)
     }
   }
 }

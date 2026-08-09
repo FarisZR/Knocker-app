@@ -13,6 +13,7 @@ export interface NativeProfileSnapshot {
   tileSlot: number | null;
   expiresAt: number | null;
   knockOnOpen: boolean;
+  configurationFingerprint: string;
 }
 
 export interface NativeLaunchKnockResult {
@@ -25,6 +26,7 @@ export interface NativeLaunchKnockResult {
   expiresAtMillis: number | null;
   requestedTtlSeconds: number | null;
   ttlCapped: boolean;
+  configurationFingerprint: string;
 }
 
 interface KnockerNativeAndroid {

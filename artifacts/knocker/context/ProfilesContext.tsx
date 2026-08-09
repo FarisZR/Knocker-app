@@ -13,6 +13,7 @@ import { scheduleRenewals } from "@/lib/autoRenew";
 import {
   deleteProfileSecret,
   loadProfiles,
+  nativeConfigurationFingerprint,
   saveProfiles,
   type Profile,
 } from "@/lib/profiles";
@@ -72,6 +73,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         tileSlot: p.tileSlot,
         expiresAt: p.expiresAt,
         knockOnOpen: p.knockOnOpen,
+        configurationFingerprint: nativeConfigurationFingerprint(p),
       }));
       // Wait for native storage so a just-saved tile mapping works immediately.
       try {
@@ -95,6 +97,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       tileSlot: p.tileSlot,
       expiresAt: p.expiresAt,
       knockOnOpen: p.knockOnOpen,
+      configurationFingerprint: nativeConfigurationFingerprint(p),
     }));
   }, []);
 
@@ -107,7 +110,14 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       const nativeById = new Map(nativeProfiles.map((p) => [p.id, p]));
       return jsProfiles.map((profile) => {
         const nativeProfile = nativeById.get(profile.id);
-        if (!nativeProfile || nativeProfile.expiresAt == null) return profile;
+        if (
+          !nativeProfile ||
+          nativeProfile.configurationFingerprint !==
+            nativeConfigurationFingerprint(profile) ||
+          nativeProfile.expiresAt == null
+        ) {
+          return profile;
+        }
         if (profile.expiresAt == null || nativeProfile.expiresAt > profile.expiresAt) {
           return { ...profile, expiresAt: nativeProfile.expiresAt };
         }
@@ -372,9 +382,16 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
 
       const nativeResultById = new Map(
         (nativeResults ?? [])
-          .filter((result) =>
-            launchProfiles.some((p) => p.id === result.profileId),
-          )
+          .filter((result) => {
+            const profile = launchProfiles.find(
+              (candidate) => candidate.id === result.profileId,
+            );
+            return (
+              profile != null &&
+              result.configurationFingerprint ===
+                nativeConfigurationFingerprint(profile)
+            );
+          })
           .map((result) => [result.profileId, result]),
       );
       const matchingNativeResults = [...nativeResultById.values()];
@@ -428,6 +445,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
             ? result.requestedTtlSeconds
             : profile.ttlSeconds,
           ttlCapped: result?.ok === true && result.ttlCapped,
+          configurationFingerprint: nativeConfigurationFingerprint(profile),
         }),
       );
       const allResults = [...matchingNativeResults, ...jsResults];
