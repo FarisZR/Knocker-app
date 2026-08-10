@@ -24,12 +24,12 @@ import { useColors } from "@/hooks/useColors";
 Sentry.init({
   dsn: "https://e7a4df6605d189adfbee103c2dcba868@o4511192693014528.ingest.de.sentry.io/4511882460069969",
 
-  // Adds more context data to events (IP address, cookies, user, etc.)
+  // Keep request and user context opt-in because the app handles profile data.
   // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  sendDefaultPii: true,
+  sendDefaultPii: false,
 
-  // Enable Logs
-  enableLogs: true,
+  // Keep log collection disabled because console output may contain user data.
+  enableLogs: false,
   integrations: [Sentry.expoRouterIntegration(), Sentry.feedbackIntegration()],
 
   // uncomment the line below to enable Spotlight (https://spotlightjs.com)

@@ -7,6 +7,12 @@ const { pipeline } = require("stream/promises");
 let metroProcess = null;
 let sentryUploadRoot = null;
 
+const BASE64_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const BASE64_VALUES = new Map(
+  [...BASE64_CHARS].map((character, index) => [character, index]),
+);
+
 const projectRoot = path.resolve(__dirname, "..");
 
 function findWorkspaceRoot(startDir) {
@@ -312,6 +318,166 @@ function addDebugIdToSourceMap(bundlePath, sourceMapPath) {
   fs.writeFileSync(sourceMapPath, `${JSON.stringify(sourceMap)}\n`);
 }
 
+function decodeVlq(value, startIndex) {
+  let result = 0;
+  let shift = 0;
+  let index = startIndex;
+
+  while (true) {
+    if (index >= value.length) {
+      throw new Error(`Invalid source-map VLQ segment: ${value}`);
+    }
+
+    const digit = BASE64_VALUES.get(value[index++]);
+    if (digit === undefined) {
+      throw new Error(`Invalid source-map character in segment: ${value}`);
+    }
+
+    result += (digit & 31) * 2 ** shift;
+    if ((digit & 32) === 0) break;
+    shift += 5;
+  }
+
+  return {
+    value:
+      (result & 1) === 1 ? -Math.floor(result / 2) : Math.floor(result / 2),
+    nextIndex: index,
+  };
+}
+
+function encodeVlq(value) {
+  let unsignedValue = value < 0 ? -value * 2 + 1 : value * 2;
+  let encoded = "";
+
+  do {
+    let digit = unsignedValue % 32;
+    unsignedValue = Math.floor(unsignedValue / 32);
+    if (unsignedValue > 0) digit |= 32;
+    encoded += BASE64_CHARS[digit];
+  } while (unsignedValue > 0);
+
+  return encoded;
+}
+
+function decodeMappings(mappings) {
+  let previousSource = 0;
+  let previousOriginalLine = 0;
+  let previousOriginalColumn = 0;
+  let previousName = 0;
+
+  return mappings.split(";").map((line) => {
+    let previousGeneratedColumn = 0;
+    if (!line) return [];
+
+    return line.split(",").map((encodedSegment) => {
+      const values = [];
+      let index = 0;
+
+      while (index < encodedSegment.length) {
+        const decoded = decodeVlq(encodedSegment, index);
+        values.push(decoded.value);
+        index = decoded.nextIndex;
+      }
+
+      if (![1, 4, 5].includes(values.length)) {
+        throw new Error(`Invalid source-map segment: ${encodedSegment}`);
+      }
+
+      previousGeneratedColumn += values[0];
+      const segment = [previousGeneratedColumn];
+
+      if (values.length > 1) {
+        previousSource += values[1];
+        previousOriginalLine += values[2];
+        previousOriginalColumn += values[3];
+        segment.push(
+          previousSource,
+          previousOriginalLine,
+          previousOriginalColumn,
+        );
+
+        if (values.length === 5) {
+          previousName += values[4];
+          segment.push(previousName);
+        }
+      }
+
+      return segment;
+    });
+  });
+}
+
+function encodeMappings(lines) {
+  let previousSource = 0;
+  let previousOriginalLine = 0;
+  let previousOriginalColumn = 0;
+  let previousName = 0;
+
+  return lines
+    .map((segments) => {
+      let previousGeneratedColumn = 0;
+
+      return segments
+        .map((segment) => {
+          let encoded = encodeVlq(segment[0] - previousGeneratedColumn);
+          previousGeneratedColumn = segment[0];
+
+          if (segment.length > 1) {
+            encoded += encodeVlq(segment[1] - previousSource);
+            encoded += encodeVlq(segment[2] - previousOriginalLine);
+            encoded += encodeVlq(segment[3] - previousOriginalColumn);
+            previousSource = segment[1];
+            previousOriginalLine = segment[2];
+            previousOriginalColumn = segment[3];
+
+            if (segment.length === 5) {
+              encoded += encodeVlq(segment[4] - previousName);
+              previousName = segment[4];
+            }
+          }
+
+          return encoded;
+        })
+        .join(",");
+    })
+    .join(";");
+}
+
+function adjustSourceMapMappings(sourceMapPath, rewrites) {
+  if (rewrites.length === 0) return;
+
+  const sourceMap = JSON.parse(fs.readFileSync(sourceMapPath, "utf-8"));
+  const mappings = decodeMappings(sourceMap.mappings);
+  const rewritesByLine = new Map();
+
+  for (const rewrite of rewrites) {
+    const lineRewrites = rewritesByLine.get(rewrite.line) || [];
+    lineRewrites.push(rewrite);
+    rewritesByLine.set(rewrite.line, lineRewrites);
+  }
+
+  for (const [line, lineRewrites] of rewritesByLine) {
+    for (const segment of mappings[line]) {
+      const originalColumn = segment[0];
+      let adjustedColumn = originalColumn;
+
+      for (const rewrite of lineRewrites) {
+        const rewriteEnd = rewrite.column + rewrite.originalLength;
+        if (originalColumn >= rewriteEnd) {
+          adjustedColumn += rewrite.delta;
+        } else if (originalColumn >= rewrite.column) {
+          adjustedColumn = rewrite.column;
+        }
+      }
+
+      segment[0] = adjustedColumn;
+    }
+  }
+
+  sourceMap.mappings = encodeMappings(mappings);
+  fs.writeFileSync(sourceMapPath, `${JSON.stringify(sourceMap)}\n`);
+}
+
 async function uploadSourceMaps() {
   if (process.env.SENTRY_DISABLE_AUTO_UPLOAD === "true") {
     console.warn(
@@ -589,10 +755,11 @@ function updateBundleUrls(timestamp, baseUrl) {
       "bundle.js",
     );
     let bundle = fs.readFileSync(bundlePath, "utf-8");
+    const rewrites = [];
 
     bundle = bundle.replace(
       /httpServerLocation:"(\/[^"]+)"/g,
-      (_match, capturedPath) => {
+      (match, capturedPath, offset) => {
         const tempUrl = new URL(`http://localhost:8081${capturedPath}`);
         const unstablePath = tempUrl.searchParams.get("unstable_path");
 
@@ -603,11 +770,24 @@ function updateBundleUrls(timestamp, baseUrl) {
         }
 
         const decodedPath = decodeURIComponent(unstablePath);
-        return `httpServerLocation:"${baseUrl}${basePath}/${timestamp}/_expo/static/js/${decodedPath}"`;
+        const propertyPrefix = 'httpServerLocation:"';
+        const replacement = `${propertyPrefix}${baseUrl}${basePath}/${timestamp}/_expo/static/js/${decodedPath}"`;
+        const lineStart = bundle.lastIndexOf("\n", offset - 1) + 1;
+        rewrites.push({
+          line: bundle.slice(0, lineStart).split("\n").length - 1,
+          column: offset - lineStart + propertyPrefix.length,
+          originalLength: match.length - propertyPrefix.length,
+          delta: replacement.length - match.length,
+        });
+        return replacement;
       },
     );
 
     fs.writeFileSync(bundlePath, bundle);
+    adjustSourceMapMappings(
+      path.join(sentryUploadRoot, platform, "bundle.js.map"),
+      rewrites,
+    );
   };
 
   updateForPlatform("ios");
