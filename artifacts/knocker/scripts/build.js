@@ -5,6 +5,13 @@ const { Readable } = require("stream");
 const { pipeline } = require("stream/promises");
 
 let metroProcess = null;
+let sentryUploadRoot = null;
+
+const BASE64_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const BASE64_VALUES = new Map(
+  [...BASE64_CHARS].map((character, index) => [character, index]),
+);
 
 const projectRoot = path.resolve(__dirname, "..");
 
@@ -16,7 +23,9 @@ function findWorkspaceRoot(startDir) {
     }
     dir = path.dirname(dir);
   }
-  throw new Error("Could not find workspace root (no pnpm-workspace.yaml found)");
+  throw new Error(
+    "Could not find workspace root (no pnpm-workspace.yaml found)",
+  );
 }
 
 const workspaceRoot = findWorkspaceRoot(projectRoot);
@@ -24,6 +33,7 @@ const basePath = (process.env.BASE_PATH || "/").replace(/\/+$/, "");
 
 function exitWithError(message) {
   console.error(message);
+  cleanupSentryUpload();
   if (metroProcess) {
     metroProcess.kill();
   }
@@ -36,6 +46,7 @@ function setupSignalHandlers() {
       console.log("Cleaning up Metro process...");
       metroProcess.kill();
     }
+    cleanupSentryUpload();
     process.exit(0);
   };
 
@@ -81,6 +92,12 @@ function prepareDirectories(timestamp) {
     fs.rmSync(staticBuild, { recursive: true });
   }
 
+  const sentryUploadDirectory = path.join(projectRoot, ".sentry-upload");
+  if (fs.existsSync(sentryUploadDirectory)) {
+    fs.rmSync(sentryUploadDirectory, { recursive: true, force: true });
+  }
+  sentryUploadRoot = path.join(sentryUploadDirectory, timestamp);
+
   const dirs = [
     path.join(staticBuild, timestamp, "_expo", "static", "js", "ios"),
     path.join(staticBuild, timestamp, "_expo", "static", "js", "android"),
@@ -91,8 +108,17 @@ function prepareDirectories(timestamp) {
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  fs.mkdirSync(sentryUploadRoot, { recursive: true });
 
   console.log("Build:", timestamp);
+}
+
+function cleanupSentryUpload() {
+  const sentryUploadDirectory = path.join(projectRoot, ".sentry-upload");
+  if (fs.existsSync(sentryUploadDirectory)) {
+    fs.rmSync(sentryUploadDirectory, { recursive: true, force: true });
+  }
+  sentryUploadRoot = null;
 }
 
 function clearMetroCache() {
@@ -148,14 +174,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 
   metroProcess = spawn(
     "pnpm",
-    [
-      "exec",
-      "expo",
-      "start",
-      "--no-dev",
-      "--minify",
-      "--localhost",
-    ],
+    ["exec", "expo", "start", "--no-dev", "--minify", "--localhost"],
     {
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
@@ -187,8 +206,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
     }
   }
 
-  console.error("Metro timeout");
-  process.exit(1);
+  exitWithError("Metro timeout");
 }
 
 async function downloadFile(url, outputPath) {
@@ -228,7 +246,12 @@ async function downloadFile(url, outputPath) {
 }
 
 async function downloadBundle(platform, timestamp) {
-  const entryPath = path.resolve(projectRoot, "node_modules", "expo-router", "entry");
+  const entryPath = path.resolve(
+    projectRoot,
+    "node_modules",
+    "expo-router",
+    "entry",
+  );
   const bundlePath = path.relative(workspaceRoot, entryPath);
   const url = new URL(`http://localhost:8081/${bundlePath}.bundle`);
   url.searchParams.set("platform", platform);
@@ -237,7 +260,11 @@ async function downloadBundle(platform, timestamp) {
   url.searchParams.set("lazy", "false");
   url.searchParams.set("minify", "true");
 
+  const sourceMapUrl = new URL(url);
+  sourceMapUrl.pathname = sourceMapUrl.pathname.replace(/\.bundle$/, ".map");
+
   const output = path.join(
+    projectRoot,
     "static-build",
     timestamp,
     "_expo",
@@ -246,10 +273,285 @@ async function downloadBundle(platform, timestamp) {
     platform,
     "bundle.js",
   );
+  const uploadPlatformRoot = path.join(sentryUploadRoot, platform);
+  const sourceMapOutput = path.join(uploadPlatformRoot, "bundle.js.map");
+
+  fs.mkdirSync(uploadPlatformRoot, { recursive: true });
 
   console.log(`Fetching ${platform} bundle...`);
   await downloadFile(url.toString(), output);
+  console.log(`Fetching ${platform} source map...`);
+  await downloadFile(sourceMapUrl.toString(), sourceMapOutput);
+  addDebugIdToSourceMap(output, sourceMapOutput);
   console.log(`${platform} bundle ready`);
+}
+
+function addDebugIdToSourceMap(bundlePath, sourceMapPath) {
+  const bundle = fs.readFileSync(bundlePath, "utf-8");
+  const debugIdMatch = bundle.match(/\/\/# debugId=([0-9a-f-]+)/i);
+
+  if (!debugIdMatch) {
+    throw new Error(`Bundle is missing a Sentry debug ID: ${bundlePath}`);
+  }
+
+  let sourceMap;
+  try {
+    sourceMap = JSON.parse(fs.readFileSync(sourceMapPath, "utf-8"));
+  } catch (error) {
+    throw new Error(
+      `Could not parse source map ${sourceMapPath}: ${error.message}`,
+    );
+  }
+
+  const debugId = debugIdMatch[1];
+  const existingDebugId = sourceMap.debugId || sourceMap.debug_id;
+  if (existingDebugId && existingDebugId !== debugId) {
+    throw new Error(
+      `Source map debug ID ${existingDebugId} does not match bundle debug ID ${debugId}`,
+    );
+  }
+
+  // The direct Metro .map endpoint does not include the metadata that the
+  // Sentry uploader needs, even though the corresponding bundle has it.
+  sourceMap.debugId = debugId;
+  sourceMap.debug_id = debugId;
+  fs.writeFileSync(sourceMapPath, `${JSON.stringify(sourceMap)}\n`);
+}
+
+function decodeVlq(value, startIndex) {
+  let result = 0;
+  let shift = 0;
+  let index = startIndex;
+
+  while (true) {
+    if (index >= value.length) {
+      throw new Error(`Invalid source-map VLQ segment: ${value}`);
+    }
+
+    const digit = BASE64_VALUES.get(value[index++]);
+    if (digit === undefined) {
+      throw new Error(`Invalid source-map character in segment: ${value}`);
+    }
+
+    result += (digit & 31) * 2 ** shift;
+    if ((digit & 32) === 0) break;
+    shift += 5;
+  }
+
+  return {
+    value:
+      (result & 1) === 1 ? -Math.floor(result / 2) : Math.floor(result / 2),
+    nextIndex: index,
+  };
+}
+
+function encodeVlq(value) {
+  let unsignedValue = value < 0 ? -value * 2 + 1 : value * 2;
+  let encoded = "";
+
+  do {
+    let digit = unsignedValue % 32;
+    unsignedValue = Math.floor(unsignedValue / 32);
+    if (unsignedValue > 0) digit |= 32;
+    encoded += BASE64_CHARS[digit];
+  } while (unsignedValue > 0);
+
+  return encoded;
+}
+
+function decodeMappings(mappings) {
+  let previousSource = 0;
+  let previousOriginalLine = 0;
+  let previousOriginalColumn = 0;
+  let previousName = 0;
+
+  return mappings.split(";").map((line) => {
+    let previousGeneratedColumn = 0;
+    if (!line) return [];
+
+    return line.split(",").map((encodedSegment) => {
+      const values = [];
+      let index = 0;
+
+      while (index < encodedSegment.length) {
+        const decoded = decodeVlq(encodedSegment, index);
+        values.push(decoded.value);
+        index = decoded.nextIndex;
+      }
+
+      if (![1, 4, 5].includes(values.length)) {
+        throw new Error(`Invalid source-map segment: ${encodedSegment}`);
+      }
+
+      previousGeneratedColumn += values[0];
+      const segment = [previousGeneratedColumn];
+
+      if (values.length > 1) {
+        previousSource += values[1];
+        previousOriginalLine += values[2];
+        previousOriginalColumn += values[3];
+        segment.push(
+          previousSource,
+          previousOriginalLine,
+          previousOriginalColumn,
+        );
+
+        if (values.length === 5) {
+          previousName += values[4];
+          segment.push(previousName);
+        }
+      }
+
+      return segment;
+    });
+  });
+}
+
+function encodeMappings(lines) {
+  let previousSource = 0;
+  let previousOriginalLine = 0;
+  let previousOriginalColumn = 0;
+  let previousName = 0;
+
+  return lines
+    .map((segments) => {
+      let previousGeneratedColumn = 0;
+
+      return segments
+        .map((segment) => {
+          let encoded = encodeVlq(segment[0] - previousGeneratedColumn);
+          previousGeneratedColumn = segment[0];
+
+          if (segment.length > 1) {
+            encoded += encodeVlq(segment[1] - previousSource);
+            encoded += encodeVlq(segment[2] - previousOriginalLine);
+            encoded += encodeVlq(segment[3] - previousOriginalColumn);
+            previousSource = segment[1];
+            previousOriginalLine = segment[2];
+            previousOriginalColumn = segment[3];
+
+            if (segment.length === 5) {
+              encoded += encodeVlq(segment[4] - previousName);
+              previousName = segment[4];
+            }
+          }
+
+          return encoded;
+        })
+        .join(",");
+    })
+    .join(";");
+}
+
+function adjustSourceMapMappings(sourceMapPath, rewrites) {
+  if (rewrites.length === 0) return;
+
+  const sourceMap = JSON.parse(fs.readFileSync(sourceMapPath, "utf-8"));
+  const mappings = decodeMappings(sourceMap.mappings);
+  const rewritesByLine = new Map();
+
+  for (const rewrite of rewrites) {
+    const lineRewrites = rewritesByLine.get(rewrite.line) || [];
+    lineRewrites.push(rewrite);
+    rewritesByLine.set(rewrite.line, lineRewrites);
+  }
+
+  for (const [line, lineRewrites] of rewritesByLine) {
+    for (const segment of mappings[line]) {
+      const originalColumn = segment[0];
+      let adjustedColumn = originalColumn;
+
+      for (const rewrite of lineRewrites) {
+        const rewriteEnd = rewrite.column + rewrite.originalLength;
+        if (originalColumn >= rewriteEnd) {
+          adjustedColumn += rewrite.delta;
+        } else if (originalColumn >= rewrite.column) {
+          adjustedColumn = rewrite.column;
+        }
+      }
+
+      segment[0] = adjustedColumn;
+    }
+  }
+
+  sourceMap.mappings = encodeMappings(mappings);
+  fs.writeFileSync(sourceMapPath, `${JSON.stringify(sourceMap)}\n`);
+}
+
+async function uploadSourceMaps() {
+  if (process.env.SENTRY_DISABLE_AUTO_UPLOAD === "true") {
+    console.warn(
+      "Skipping Sentry source-map upload because SENTRY_DISABLE_AUTO_UPLOAD=true",
+    );
+    return;
+  }
+
+  if (!process.env.SENTRY_AUTH_TOKEN) {
+    throw new Error(
+      "SENTRY_AUTH_TOKEN must be set to upload production source maps. Set SENTRY_DISABLE_AUTO_UPLOAD=true only for local builds.",
+    );
+  }
+
+  const uploaderPath = path.join(
+    projectRoot,
+    "node_modules",
+    ".bin",
+    "sentry-expo-upload-sourcemaps",
+  );
+  if (!fs.existsSync(uploaderPath)) {
+    throw new Error(
+      `Sentry source-map uploader not found at ${uploaderPath}. Run pnpm install first.`,
+    );
+  }
+
+  console.log("Uploading JavaScript bundles and source maps to Sentry...");
+  await new Promise((resolve, reject) => {
+    const uploader = spawn(uploaderPath, [sentryUploadRoot], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        SENTRY_ORG: process.env.SENTRY_ORG || "fariszr",
+        SENTRY_PROJECT: process.env.SENTRY_PROJECT || "knocker-app",
+        SENTRY_URL: process.env.SENTRY_URL || "https://de.sentry.io/",
+      },
+      stdio: "inherit",
+    });
+
+    uploader.once("error", reject);
+    uploader.once("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          signal
+            ? `Sentry source-map uploader terminated by ${signal}`
+            : `Sentry source-map uploader exited with status ${code}`,
+        ),
+      );
+    });
+  });
+  console.log("Sentry source maps uploaded");
+}
+
+function stageFinalBundles(timestamp) {
+  for (const platform of ["ios", "android"]) {
+    const bundlePath = path.join(
+      projectRoot,
+      "static-build",
+      timestamp,
+      "_expo",
+      "static",
+      "js",
+      platform,
+      "bundle.js",
+    );
+    const uploadBundlePath = path.join(sentryUploadRoot, platform, "bundle.js");
+
+    fs.copyFileSync(bundlePath, uploadBundlePath);
+  }
 }
 
 async function downloadManifest(platform) {
@@ -308,11 +610,27 @@ function extractAssets(timestamp) {
   const staticBuild = path.join(projectRoot, "static-build");
   const bundles = {
     ios: fs.readFileSync(
-      path.join(staticBuild, timestamp, "_expo", "static", "js", "ios", "bundle.js"),
+      path.join(
+        staticBuild,
+        timestamp,
+        "_expo",
+        "static",
+        "js",
+        "ios",
+        "bundle.js",
+      ),
       "utf-8",
     ),
     android: fs.readFileSync(
-      path.join(staticBuild, timestamp, "_expo", "static", "js", "android", "bundle.js"),
+      path.join(
+        staticBuild,
+        timestamp,
+        "_expo",
+        "static",
+        "js",
+        "android",
+        "bundle.js",
+      ),
       "utf-8",
     ),
   };
@@ -437,10 +755,11 @@ function updateBundleUrls(timestamp, baseUrl) {
       "bundle.js",
     );
     let bundle = fs.readFileSync(bundlePath, "utf-8");
+    const rewrites = [];
 
     bundle = bundle.replace(
       /httpServerLocation:"(\/[^"]+)"/g,
-      (_match, capturedPath) => {
+      (match, capturedPath, offset) => {
         const tempUrl = new URL(`http://localhost:8081${capturedPath}`);
         const unstablePath = tempUrl.searchParams.get("unstable_path");
 
@@ -451,11 +770,24 @@ function updateBundleUrls(timestamp, baseUrl) {
         }
 
         const decodedPath = decodeURIComponent(unstablePath);
-        return `httpServerLocation:"${baseUrl}${basePath}/${timestamp}/_expo/static/js/${decodedPath}"`;
+        const propertyPrefix = 'httpServerLocation:"';
+        const replacement = `${propertyPrefix}${baseUrl}${basePath}/${timestamp}/_expo/static/js/${decodedPath}"`;
+        const lineStart = bundle.lastIndexOf("\n", offset - 1) + 1;
+        rewrites.push({
+          line: bundle.slice(0, lineStart).split("\n").length - 1,
+          column: offset - lineStart + propertyPrefix.length,
+          originalLength: match.length - propertyPrefix.length,
+          delta: replacement.length - match.length,
+        });
+        return replacement;
       },
     );
 
     fs.writeFileSync(bundlePath, bundle);
+    adjustSourceMapMappings(
+      path.join(sentryUploadRoot, platform, "bundle.js.map"),
+      rewrites,
+    );
   };
 
   updateForPlatform("ios");
@@ -553,6 +885,10 @@ async function main() {
     updateBundleUrls(timestamp, baseUrl);
   }
 
+  stageFinalBundles(timestamp);
+  await uploadSourceMaps();
+  cleanupSentryUpload();
+
   console.log("Updating manifests and creating landing page...");
   updateManifests(manifests, timestamp, baseUrl, assetsByHash);
 
@@ -561,11 +897,13 @@ async function main() {
   if (metroProcess) {
     metroProcess.kill();
   }
+  cleanupSentryUpload();
   process.exit(0);
 }
 
 main().catch((error) => {
   console.error("Build failed:", error.message);
+  cleanupSentryUpload();
   if (metroProcess) {
     metroProcess.kill();
   }

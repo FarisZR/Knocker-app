@@ -24,6 +24,7 @@ modules/knocker-native/android/build/
 
 # Metro
 .metro-health-check*
+.sentry-upload/
 
 # debug
 npm-debug.*

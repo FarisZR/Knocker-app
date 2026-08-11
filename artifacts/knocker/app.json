@@ -56,7 +56,15 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "./modules/knocker-native/app.plugin.js"
+      "./modules/knocker-native/app.plugin.js",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://de.sentry.io/",
+          "project": "knocker-app",
+          "organization": "fariszr"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
