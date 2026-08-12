@@ -16,8 +16,8 @@ import org.json.JSONObject
  * picks up the new expiry via the existing native -> JS profile merge.
  *
  * Only one launch-knock batch runs per native/React surface. The batch is
- * replaced when a new surface is created and released after the JS bridge
- * consumes its result.
+ * replaced when a new surface is created; retaining its completed future makes
+ * repeated JS reads idempotent instead of triggering duplicate HTTP requests.
  */
 object LaunchKnocker {
   private const val TAG = "KnockerLaunch"
@@ -45,19 +45,15 @@ object LaunchKnocker {
     }
   }
 
-  /** Returns this surface's result batch and releases it for the next launch. */
-  fun awaitAndConsume(context: Context): List<LaunchKnockResult> {
-    val future = runOnce(context)
-    return try {
-      future.get()
-    } finally {
-      synchronized(this) {
-        if (pending === future) {
-          pending = null
-        }
-      }
-    }
-  }
+  /**
+   * Returns this surface's result batch.
+   *
+   * Keep the completed future until [startForLaunch] replaces it for the next
+   * native/React surface. Clearing it here would let a repeated JS read start a
+   * second knock batch during the same app launch.
+   */
+  fun awaitAndConsume(context: Context): List<LaunchKnockResult> =
+    runOnce(context).get()
 
   private fun performLaunchKnocks(
     context: Context,
