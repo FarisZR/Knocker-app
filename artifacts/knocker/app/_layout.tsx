@@ -20,6 +20,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProfilesProvider } from "@/context/ProfilesContext";
 import { useColors } from "@/hooks/useColors";
+import { startLaunchKnocks } from "knocker-native";
 
 Sentry.init({
   dsn: "https://e7a4df6605d189adfbee103c2dcba868@o4511192693014528.ingest.de.sentry.io/4511882460069969",
@@ -77,10 +78,19 @@ function RootLayoutNav() {
 
 function StartupReadyController() {
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
+    let knockFrame: number | null = null;
+    const readyFrame = requestAnimationFrame(() => {
       void SplashScreen.hideAsync();
+      // Let the first app frame reach the display before encrypted storage and
+      // HTTP work begin. The knock still starts on the very next frame.
+      knockFrame = requestAnimationFrame(() => {
+        startLaunchKnocks();
+      });
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(readyFrame);
+      if (knockFrame !== null) cancelAnimationFrame(knockFrame);
+    };
   }, []);
 
   return null;

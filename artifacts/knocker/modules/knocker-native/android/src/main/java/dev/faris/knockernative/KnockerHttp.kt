@@ -8,7 +8,10 @@ import org.json.JSONObject
 sealed interface KnockOutcome {
   data class Success(
     val expiresAtMillis: Long?,
-    val whitelistedEntry: String?
+    val whitelistedEntry: String?,
+    val expiresInSeconds: Long?,
+    val requestedTtlSeconds: Int?,
+    val ttlCapped: Boolean
   ) : KnockOutcome
 
   data class Failure(
@@ -64,9 +67,18 @@ object KnockerHttp {
       }
 
       val json = payload?.let { JSONObject(it) } ?: JSONObject()
+      val requestedTtl = profile.ttlSeconds?.takeIf { it > 0 }
+      val expiresInSeconds = json.optNullableLong("expires_in_seconds")
+      val ttlCapped = requestedTtl != null &&
+        expiresInSeconds != null &&
+        expiresInSeconds > 0 &&
+        expiresInSeconds < requestedTtl.toLong() - 5L
       KnockOutcome.Success(
         expiresAtMillis = json.optNullableLong("expires_at")?.times(1000L),
-        whitelistedEntry = json.optNullableString("whitelisted_entry")
+        whitelistedEntry = json.optNullableString("whitelisted_entry"),
+        expiresInSeconds = expiresInSeconds,
+        requestedTtlSeconds = requestedTtl,
+        ttlCapped = ttlCapped
       )
     } catch (error: Exception) {
       val message = when (error) {

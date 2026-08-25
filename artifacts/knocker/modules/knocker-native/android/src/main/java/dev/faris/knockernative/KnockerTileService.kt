@@ -199,17 +199,17 @@ abstract class KnockerTileService : TileService() {
   companion object {
     fun refreshAll(context: android.content.Context) {
       val appContext = context.applicationContext
-      tileComponents.forEach { component ->
+      tileComponents(appContext).forEach { component ->
         requestListeningState(appContext, component)
       }
     }
 
-    private val tileComponents = listOf(
-      ComponentName("dev.faris.knocker", KnockerTileService1::class.java.name),
-      ComponentName("dev.faris.knocker", KnockerTileService2::class.java.name),
-      ComponentName("dev.faris.knocker", KnockerTileService3::class.java.name),
-      ComponentName("dev.faris.knocker", KnockerTileService4::class.java.name),
-      ComponentName("dev.faris.knocker", KnockerTileService5::class.java.name),
+    private fun tileComponents(context: android.content.Context) = listOf(
+      ComponentName(context.packageName, KnockerTileService1::class.java.name),
+      ComponentName(context.packageName, KnockerTileService2::class.java.name),
+      ComponentName(context.packageName, KnockerTileService3::class.java.name),
+      ComponentName(context.packageName, KnockerTileService4::class.java.name),
+      ComponentName(context.packageName, KnockerTileService5::class.java.name),
     )
   }
 }
