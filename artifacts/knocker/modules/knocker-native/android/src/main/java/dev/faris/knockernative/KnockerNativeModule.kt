@@ -13,6 +13,12 @@ class KnockerNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KnockerNative")
 
+    // Prepare only the lightweight per-surface result holder here. Encrypted
+    // storage and HTTP begin explicitly after the first app frame is visible.
+    OnCreate {
+      LaunchKnocker.prepareForLaunch()
+    }
+
     AsyncFunction("syncProfiles") { profilesJson: String ->
       KnockerStore.replaceProfiles(context, profilesJson)
       KnockerTileService.refreshAll(context)
@@ -20,6 +26,18 @@ class KnockerNativeModule : Module() {
 
     AsyncFunction("getProfilesJson") {
       KnockerStore.readProfilesJson(context)
+    }
+
+    AsyncFunction("startLaunchKnocks") {
+      appContext.reactContext?.let { context ->
+        LaunchKnocker.startForLaunch(context)
+      }
+      null
+    }
+
+    AsyncFunction("getLaunchKnockResultsJson") {
+      val results = LaunchKnocker.awaitAndConsume()
+      LaunchKnocker.resultsToJson(results)
     }
 
     AsyncFunction("scheduleRenewal") { profileId: String, fireAtMs: Double ->

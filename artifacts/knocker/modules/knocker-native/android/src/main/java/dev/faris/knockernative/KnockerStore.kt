@@ -17,7 +17,9 @@ data class StoredProfile(
   val autoRenew: Boolean,
   val autoRenewSafetyWindowSec: Int,
   val tileSlot: Int?,
-  val expiresAt: Long?
+  val expiresAt: Long?,
+  val knockOnOpen: Boolean = false,
+  val configurationFingerprint: String = ""
 ) {
   fun canKnock(): Boolean {
     return endpointUrl.isNotBlank() && apiKey.isNotBlank()
@@ -70,12 +72,19 @@ object KnockerStore {
   fun updateExpiry(
     context: Context,
     profileId: String,
-    expiresAt: Long?
+    expiresAt: Long?,
+    expectedConfigurationFingerprint: String? = null
   ): StoredProfile? {
     synchronized(profileLock) {
       val profiles = readProfiles(context).toMutableList()
       val index = profiles.indexOfFirst { it.id == profileId }
       if (index < 0) return null
+      if (
+        expectedConfigurationFingerprint != null &&
+        profiles[index].configurationFingerprint != expectedConfigurationFingerprint
+      ) {
+        return null
+      }
 
       val updated = profiles[index].withExpiresAt(expiresAt)
       profiles[index] = updated
@@ -118,7 +127,9 @@ object KnockerStore {
               autoRenew = objectJson.optBoolean("autoRenew", false),
               autoRenewSafetyWindowSec = objectJson.optStrictNullableInt("autoRenewSafetyWindowSec") ?: 300,
               tileSlot = objectJson.optStrictNullableInt("tileSlot"),
-              expiresAt = objectJson.optStrictNullableLong("expiresAt")
+              expiresAt = objectJson.optStrictNullableLong("expiresAt"),
+              knockOnOpen = objectJson.optBoolean("knockOnOpen", false),
+              configurationFingerprint = objectJson.optString("configurationFingerprint")
             )
           )
         }
@@ -141,6 +152,8 @@ object KnockerStore {
       put("autoRenewSafetyWindowSec", autoRenewSafetyWindowSec)
       putNullable("tileSlot", tileSlot)
       putNullable("expiresAt", expiresAt)
+      put("knockOnOpen", knockOnOpen)
+      put("configurationFingerprint", configurationFingerprint)
     }
   }
 
