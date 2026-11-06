@@ -23,7 +23,9 @@ data class StoredProfile(
   val grantNetworkId: String? = null,
   val grantNetworkType: String? = null,
   val knockOnOpen: Boolean = false,
-  val configurationFingerprint: String = ""
+  val configurationFingerprint: String = "",
+  val grantConfigurationFingerprint: String = "",
+  val grantRecordedAt: Long? = null
 ) {
   fun canKnock(): Boolean {
     return endpointUrl.isNotBlank() && apiKey.isNotBlank()
@@ -39,7 +41,8 @@ data class StoredProfile(
     whitelistedAt = grant.whitelistedAtMillis,
     whitelistedEntry = grant.whitelistedEntry,
     grantNetworkId = grant.networkId,
-    grantNetworkType = grant.networkType
+    grantNetworkType = grant.networkType,
+    grantRecordedAt = grant.completedAtMillis
   )
 }
 
@@ -59,11 +62,10 @@ object KnockerStore {
       val previous = readProfiles(context).associateBy { it.id }
       val merged = profiles.map { incoming ->
         val cached = previous[incoming.id]
-        if (cached != null && cached.configurationFingerprint == incoming.configurationFingerprint &&
-          (cached.whitelistedAt ?: 0L) > (incoming.whitelistedAt ?: 0L)) {
+        if (cached != null && sameGrantTarget(cached, incoming) && newerGrant(cached, incoming)) {
           incoming.copy(expiresAt = cached.expiresAt, whitelistedAt = cached.whitelistedAt,
             whitelistedEntry = cached.whitelistedEntry, grantNetworkId = cached.grantNetworkId,
-            grantNetworkType = cached.grantNetworkType)
+            grantNetworkType = cached.grantNetworkType, grantRecordedAt = cached.grantRecordedAt)
         } else incoming
       }
       writeProfiles(context, merged)
@@ -106,6 +108,24 @@ object KnockerStore {
     }
   }
 
+  private fun sameGrantTarget(a: StoredProfile, b: StoredProfile): Boolean {
+    if (a.grantConfigurationFingerprint.isNotEmpty() && b.grantConfigurationFingerprint.isNotEmpty())
+      return a.grantConfigurationFingerprint == b.grantConfigurationFingerprint
+    return a.endpointUrl.trimEnd('/') == b.endpointUrl.trimEnd('/') && a.apiKey == b.apiKey &&
+      a.ipOverride?.trim().orEmpty() == b.ipOverride?.trim().orEmpty()
+  }
+
+  private fun newerGrant(a: StoredProfile, b: StoredProfile): Boolean {
+    if (a.expiresAt == null) return false
+    if (b.whitelistedAt != null) {
+      if (a.whitelistedAt == null) return false
+      if (a.whitelistedAt != b.whitelistedAt) return a.whitelistedAt > b.whitelistedAt
+    } else if (a.whitelistedAt != null) return true
+    if (a.grantRecordedAt != null && b.grantRecordedAt != null && a.grantRecordedAt != b.grantRecordedAt)
+      return a.grantRecordedAt > b.grantRecordedAt
+    return a.expiresAt > (b.expiresAt ?: 0L)
+  }
+
   private fun preferences(context: Context): SharedPreferences {
     return KnockerPrefs.preferences(context)
   }
@@ -146,7 +166,9 @@ object KnockerStore {
               grantNetworkId = objectJson.optNullableString("grantNetworkId"),
               grantNetworkType = objectJson.optNullableString("grantNetworkType"),
               knockOnOpen = objectJson.optBoolean("knockOnOpen", false),
-              configurationFingerprint = objectJson.optString("configurationFingerprint")
+              configurationFingerprint = objectJson.optString("configurationFingerprint"),
+              grantConfigurationFingerprint = objectJson.optString("grantConfigurationFingerprint"),
+              grantRecordedAt = objectJson.optStrictNullableLong("grantRecordedAt")
             )
           )
         }
@@ -175,6 +197,8 @@ object KnockerStore {
       putNullable("grantNetworkType", grantNetworkType)
       put("knockOnOpen", knockOnOpen)
       put("configurationFingerprint", configurationFingerprint)
+      put("grantConfigurationFingerprint", grantConfigurationFingerprint)
+      putNullable("grantRecordedAt", grantRecordedAt)
     }
   }
 

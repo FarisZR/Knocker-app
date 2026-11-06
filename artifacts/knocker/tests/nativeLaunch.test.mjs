@@ -59,3 +59,42 @@ test("native errors and malformed results resolve fallback rather than hanging s
     assert.deepEqual(await bridge.awaitLaunchKnockResults(), []);
   }
 });
+
+test(
+  "a slow native connection lookup is bounded",
+  { timeout: 1000 },
+  async () => {
+    const bridge = load({ getNetworkIdentity: () => new Promise(() => {}) });
+    assert.equal(await bridge.getNetworkIdentity(), null);
+  },
+);
+test("pending events are shared and a stale initial snapshot cannot overwrite them", async () => {
+  let listener,
+    initial,
+    removed = false;
+  const states = [];
+  const bridge = load({
+    addListener: (_event, callback) => {
+      listener = callback;
+      return {
+        remove: () => {
+          removed = true;
+        },
+      };
+    },
+    getPendingKnockIdsJson: () =>
+      new Promise((resolve) => {
+        initial = resolve;
+      }),
+  });
+  const unsubscribe = bridge.subscribeToNativeKnocks((ids) => states.push(ids));
+  listener({ profileIds: ["native-profile"] });
+  initial("[]");
+  await new Promise(setImmediate);
+  assert.deepEqual(states, [["native-profile"]]);
+  listener({ profileIds: [] });
+  unsubscribe();
+  listener({ profileIds: ["late"] });
+  assert.deepEqual(states, [["native-profile"], []]);
+  assert.equal(removed, true);
+});

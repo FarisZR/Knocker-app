@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import org.json.JSONArray
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -15,7 +16,22 @@ class KnockerNativeModule : Module() {
     Name("KnockerNative")
 
     // Allocate only lightweight state on module creation; no storage or HTTP.
-    OnCreate { LaunchKnocker.prepareForLaunch() }
+    Events("onKnockStateChanged")
+    OnCreate {
+      LaunchKnocker.prepareForLaunch()
+      KnockerRequests.addObserver(pendingObserver)
+    }
+    OnDestroy { KnockerRequests.removeObserver(pendingObserver) }
+
+    AsyncFunction("getPendingKnockIdsJson") { JSONArray(KnockerRequests.pendingIds()).toString() }
+    AsyncFunction("knockProfileJson") { profileId: String, fingerprint: String, promise: Promise ->
+      val profile = KnockerStore.findProfileById(context, profileId)
+      if (profile == null || profile.configurationFingerprint != fingerprint) promise.resolve(null)
+      else KnockerRequests.knock(context, profile).whenComplete { result, error ->
+        if (error == null) promise.resolve(result.toJson().toString())
+        else promise.reject("KNOCK_FAILED", "Native knock failed", error)
+      }
+    }
 
     AsyncFunction("startLaunchKnocks") {
       LaunchKnocker.startForLaunch(context)
@@ -70,6 +86,10 @@ class KnockerNativeModule : Module() {
       intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       context.startActivity(intent)
     }
+  }
+
+  private val pendingObserver: (List<String>) -> Unit = { ids ->
+    sendEvent("onKnockStateChanged", mapOf("profileIds" to ids))
   }
 
   private val context: Context

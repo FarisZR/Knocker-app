@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, View, type TextInputProps } from "react-native";
 import {
   Host,
@@ -21,16 +21,20 @@ export function MaterialInput({
   accessibilityLabel,
 }: TextInputProps) {
   const text = useNativeState(value);
+  const [editVersion, setEditVersion] = useState(0);
   useEffect(() => {
-    if (text.value !== value) text.value = value;
-  }, [value, text]);
+    if (text.get() !== value) text.set(value);
+  }, [value, text, editVersion]);
   const flat = StyleSheet.flatten(style);
   return (
     <View style={{ flex: flat?.flex, minWidth: 0 }}>
       <Host matchContents={{ vertical: true }} style={{ width: "100%" }}>
         <OutlinedTextField
           value={text}
-          onValueChange={onChangeText}
+          onValueChange={(next) => {
+            onChangeText?.(next);
+            setEditVersion((version) => version + 1);
+          }}
           singleLine
           visualTransformation={secureTextEntry ? "password" : "none"}
           keyboardOptions={{

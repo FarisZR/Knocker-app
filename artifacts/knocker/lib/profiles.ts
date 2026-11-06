@@ -20,6 +20,7 @@ export interface Profile {
   whitelistedEntry: string | null;
   expiresAt: number | null;
   whitelistedAt: number | null;
+  grantRecordedAt: number | null;
   grantNetworkId: string | null;
   grantNetworkType: string | null;
 }
@@ -48,6 +49,7 @@ export function newProfile(): Profile {
     whitelistedEntry: null,
     expiresAt: null,
     whitelistedAt: null,
+    grantRecordedAt: null,
     grantNetworkId: null,
     grantNetworkType: null,
   };

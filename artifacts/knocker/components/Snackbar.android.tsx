@@ -1,5 +1,7 @@
-import React, { useEffect } from "react";
-import { View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { snackbarBottom } from "@/lib/homeActionsLayout";
 import {
   Host,
   Surface,
@@ -21,6 +23,9 @@ import { useProfiles } from "@/context/ProfilesContext";
 export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
   const { snackbar, dismissSnackbar } = useProfiles();
   const c = useMaterialColors();
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [contentHeight, setContentHeight] = useState(0);
   useEffect(() => {
     if (!snackbar || snackbar.persistent || snackbar.retry) return;
     const timer = setTimeout(dismissSnackbar, 4500);
@@ -33,11 +38,12 @@ export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
       accessible={false}
       collapsable={false}
       importantForAccessibility="no"
+      onLayout={(event) => setContentHeight(event.nativeEvent.layout.height)}
       style={{
         position: "absolute",
         left: 16,
         right: 16,
-        bottom: bottomOffset,
+        bottom: snackbarBottom(bottomOffset, height, insets.top, contentHeight),
       }}
     >
       <Host matchContents={{ vertical: true }} style={{ width: "100%" }}>
@@ -59,10 +65,16 @@ export function Snackbar({ bottomOffset }: { bottomOffset: number }) {
             verticalArrangement={{ spacedBy: 4 }}
           >
             <Text
+              maxLines={2}
+              overflow="ellipsis"
               style={{ typography: "titleSmall" }}
             >{`${snackbar.tone === "success" ? "✓ " : snackbar.tone === "error" ? "! " : ""}${snackbar.text}`}</Text>
             {snackbar.detail ? (
-              <Text style={{ typography: "bodyMedium" }}>
+              <Text
+                maxLines={3}
+                overflow="ellipsis"
+                style={{ typography: "bodyMedium" }}
+              >
                 {snackbar.detail}
               </Text>
             ) : null}

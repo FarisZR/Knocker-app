@@ -9,7 +9,11 @@ import React, {
   useState,
 } from "react";
 import { AppState } from "react-native";
-import { getNetworkIdentity, type NativeNetworkIdentity } from "knocker-native";
+import type { NativeNetworkIdentity } from "knocker-native";
+import {
+  currentNetworkIdentity,
+  recordNetworkState,
+} from "@/lib/networkIdentity";
 import { lookupPublicAddresses, type PublicAddresses } from "@/lib/publicIp";
 
 const STORAGE_KEY = "knocker.publicIpChecks.v1";
@@ -38,7 +42,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async (checkPublic = true) => {
     const version = ++generation.current;
-    const local = await getNetworkIdentity();
+    const local = await currentNetworkIdentity();
     if (version !== generation.current || AppState.currentState !== "active")
       return;
     const changed =
@@ -100,7 +104,8 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {});
     void refresh(false);
-    const network = Network.addNetworkStateListener(() => {
+    const network = Network.addNetworkStateListener((state) => {
+      recordNetworkState(state);
       void refresh(false);
     });
     const app = AppState.addEventListener("change", (state) => {

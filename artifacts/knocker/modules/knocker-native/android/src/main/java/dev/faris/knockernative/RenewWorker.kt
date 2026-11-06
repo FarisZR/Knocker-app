@@ -17,36 +17,16 @@ class RenewWorker(
       ?: return Result.failure()
     val profile = KnockerStore.findProfileById(applicationContext, profileId) ?: return Result.failure()
 
-    return when (val knockResult = KnockerHttp.knock(profile, applicationContext)) {
-      is KnockOutcome.Success -> {
-        val updated = KnockerStore.updateGrant(applicationContext, profileId, knockResult, profile.configurationFingerprint)
-        val current = updated ?: profile
-        val nextFireAt = updated?.renewalAtMillis()
-        if (nextFireAt != null) {
-          KnockerRenewScheduler.schedule(applicationContext, profileId, nextFireAt)
-        } else if (updated != null) {
-          KnockerRenewScheduler.cancel(applicationContext, profileId)
-        }
-        KnockerTileNotifier.notifySuccess(
-          applicationContext,
-          current.tileSlot ?: 0,
-          current,
-          knockResult.whitelistedEntry
-        )
-        KnockerTileService.refreshAll(applicationContext)
-        Result.success()
-      }
-      is KnockOutcome.Failure -> {
-        KnockerTileNotifier.notifyFailure(
-          applicationContext,
-          profile.tileSlot ?: 0,
-          profile,
-          knockResult.message
-        )
-        KnockerTileService.refreshAll(applicationContext)
-        Result.failure()
-      }
+    if (!profile.autoRenew) return Result.success()
+    val result = runCatching { KnockerRequests.knock(applicationContext, profile).get() }.getOrNull()
+    val current = KnockerStore.findProfileById(applicationContext, profileId) ?: profile
+    if (result?.ok == true) {
+      KnockerTileNotifier.notifySuccess(applicationContext, current.tileSlot ?: 0, current, result.whitelistedEntry)
+    } else {
+      KnockerTileNotifier.notifyFailure(applicationContext, current.tileSlot ?: 0, current, result?.message ?: "Native knock failed")
     }
+    KnockerTileService.refreshAll(applicationContext)
+    return if (result?.ok == true) Result.success() else Result.failure()
   }
 
   companion object {

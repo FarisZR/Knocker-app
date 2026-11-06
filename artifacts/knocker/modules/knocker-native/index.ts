@@ -13,11 +13,13 @@ export interface NativeProfileSnapshot {
   tileSlot: number | null;
   expiresAt: number | null;
   whitelistedAt: number | null;
+  grantRecordedAt: number | null;
   whitelistedEntry: string | null;
   grantNetworkId: string | null;
   grantNetworkType: string | null;
   knockOnOpen: boolean;
   configurationFingerprint: string;
+  grantConfigurationFingerprint: string;
 }
 
 export interface NativeLaunchKnockResult {
@@ -44,6 +46,12 @@ export interface NativeNetworkIdentity {
 }
 
 interface KnockerNativeAndroid {
+  addListener?(
+    event: string,
+    callback: (event: { profileIds: string[] }) => void,
+  ): { remove(): void };
+  getPendingKnockIdsJson?(): Promise<string>;
+  knockProfileJson?(id: string, configuration: string): Promise<string | null>;
   getNetworkIdentity(): Promise<NativeNetworkIdentity>;
   syncProfiles(profilesJson: string): Promise<void>;
   getProfilesJson(): Promise<string>;
@@ -61,6 +69,36 @@ const native =
 
 export const isNativeAvailable: boolean =
   Platform.OS === "android" && native != null;
+
+export async function knockProfileNative(
+  id: string,
+  configuration: string,
+): Promise<NativeLaunchKnockResult | null> {
+  if (!native?.knockProfileJson) return null;
+  const raw = await native.knockProfileJson(id, configuration);
+  return raw == null ? null : (JSON.parse(raw) as NativeLaunchKnockResult);
+}
+
+export function subscribeToNativeKnocks(
+  callback: (ids: string[]) => void,
+): () => void {
+  let active = true;
+  let observedEvent = false;
+  const subscription = native?.addListener?.("onKnockStateChanged", (event) => {
+    observedEvent = true;
+    if (active) callback(event.profileIds);
+  });
+  void native
+    ?.getPendingKnockIdsJson?.()
+    .then((raw) => {
+      if (active && !observedEvent) callback(JSON.parse(raw));
+    })
+    .catch(() => {});
+  return () => {
+    active = false;
+    subscription?.remove();
+  };
+}
 
 let launchStarted = false;
 let resolveLaunchResults: (results: NativeLaunchKnockResult[]) => void;
@@ -152,9 +190,17 @@ export const TILE_SLOT_COUNT = 5;
 /** Local connection identity only: no SSID, location, public IP or network request. */
 export async function getNetworkIdentity(): Promise<NativeNetworkIdentity | null> {
   if (!native?.getNetworkIdentity) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await native.getNetworkIdentity();
+    return await Promise.race([
+      native.getNetworkIdentity(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), 150);
+      }),
+    ]);
   } catch {
     return null;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

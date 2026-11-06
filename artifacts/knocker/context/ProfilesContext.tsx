@@ -10,7 +10,14 @@ import React, {
 } from "react";
 import { AppState } from "react-native";
 
-import { knock, type KnockResult } from "@/lib/knock";
+import type { KnockResult } from "@/lib/knock";
+import { performKnock } from "@/lib/performKnock";
+import {
+  grantStart,
+  mergeGrantsForSave,
+  prepareProfileSave,
+} from "@/lib/grants";
+import { grantConfigurationFingerprint } from "@/lib/profileConfiguration";
 import { knockBatch } from "@/lib/knockBatch";
 import { pendingKnockFeedback } from "@/lib/knockFeedback";
 import {
@@ -28,7 +35,7 @@ import {
 } from "@/lib/profiles";
 import {
   isNativeAvailable as isKnockerNativeAvailable,
-  getNetworkIdentity,
+  subscribeToNativeKnocks,
   awaitLaunchKnockResults,
   type NativeLaunchKnockResult,
   loadProfilesFromNative,
@@ -69,19 +76,28 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     new Set(),
   );
   const pendingCounts = useRef(new Map<string, number>());
-  const beginKnocks = useCallback((ids: string[]) => {
-    for (const id of ids)
-      pendingCounts.current.set(id, (pendingCounts.current.get(id) ?? 0) + 1);
-    setPendingKnocks(new Set(pendingCounts.current.keys()));
-    return () => {
-      for (const id of ids) {
-        const count = (pendingCounts.current.get(id) ?? 1) - 1;
-        if (count > 0) pendingCounts.current.set(id, count);
-        else pendingCounts.current.delete(id);
-      }
-      setPendingKnocks(new Set(pendingCounts.current.keys()));
-    };
+  const nativePending = useRef<ReadonlySet<string>>(new Set());
+  const publishPending = useCallback(() => {
+    setPendingKnocks(
+      new Set([...pendingCounts.current.keys(), ...nativePending.current]),
+    );
   }, []);
+  const beginKnocks = useCallback(
+    (ids: string[]) => {
+      for (const id of ids)
+        pendingCounts.current.set(id, (pendingCounts.current.get(id) ?? 0) + 1);
+      publishPending();
+      return () => {
+        for (const id of ids) {
+          const count = (pendingCounts.current.get(id) ?? 1) - 1;
+          if (count > 0) pendingCounts.current.set(id, count);
+          else pendingCounts.current.delete(id);
+        }
+        publishPending();
+      };
+    },
+    [publishPending],
+  );
   const profilesRef = useRef<Profile[]>([]);
   profilesRef.current = profiles;
 
@@ -99,11 +115,13 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         tileSlot: p.tileSlot,
         expiresAt: p.expiresAt,
         whitelistedAt: p.whitelistedAt,
+        grantRecordedAt: p.grantRecordedAt,
         whitelistedEntry: p.whitelistedEntry,
         grantNetworkId: p.grantNetworkId,
         grantNetworkType: p.grantNetworkType,
         knockOnOpen: p.knockOnOpen,
         configurationFingerprint: nativeConfigurationFingerprint(p),
+        grantConfigurationFingerprint: grantConfigurationFingerprint(p),
       })),
     [],
   );
@@ -116,13 +134,28 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       const write = persistenceQueue.current
         .catch(() => {})
         .then(async () => {
-          await saveProfiles(next);
+          let saved = next;
           if (isKnockerNativeAvailable) {
+            saved = mergeGrantsForSave(saved, await loadProfilesFromNative());
             try {
-              await syncProfilesToNative(toNativeSnapshot(next));
+              await syncProfilesToNative(toNativeSnapshot(saved));
+              saved = mergeGrantsForSave(saved, await loadProfilesFromNative());
             } catch (error) {
               console.warn("Failed to sync profiles to native storage.", error);
             }
+          }
+          await saveProfiles(saved);
+          const merged = mergeGrantsForSave(
+            profilesRef.current,
+            toNativeSnapshot(saved),
+          );
+          if (
+            merged.some(
+              (profile, index) => profile !== profilesRef.current[index],
+            )
+          ) {
+            profilesRef.current = merged;
+            setProfiles(merged);
           }
         });
       persistenceQueue.current = write;
@@ -150,13 +183,11 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const runKnock = useCallback(
     async (id: string, feedbackMode: KnockFeedbackMode = "snackbar") => {
       const profile = profilesRef.current.find((p) => p.id === id);
-      if (!profile) return null;
+      if (!profile || pendingCounts.current.has(id)) return null;
       const finish = beginKnocks([id]);
       try {
         // Capture local identity in parallel; never wait for it to start a knock.
-        const networkPromise = getNetworkIdentity();
-        const result: KnockResult = await knock(profile);
-        const network = await networkPromise;
+        const result: KnockResult = await performKnock(profile);
         const current = profilesRef.current.find(
           (candidate) => candidate.id === id,
         );
@@ -175,9 +206,12 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
             lastError: null,
             whitelistedEntry: result.whitelistedEntry,
             expiresAt: result.expiresAt,
-            whitelistedAt: result.expiresAt - result.expiresInSeconds * 1000,
-            grantNetworkId: network?.id ?? null,
-            grantNetworkType: network?.type ?? null,
+            whitelistedAt:
+              result.whitelistedAt ??
+              grantStart(result.expiresAt, result.expiresInSeconds, now),
+            grantRecordedAt: result.completedAtMillis ?? now,
+            grantNetworkId: result.grantNetworkId ?? null,
+            grantNetworkType: result.grantNetworkType ?? null,
           });
           if (feedbackMode === "snackbar") {
             const minutes = Math.round(result.expiresInSeconds / 60);
@@ -225,20 +259,20 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const knockAll = useCallback(async () => {
-    const list = profilesRef.current;
+    const list = profilesRef.current.filter(
+      (profile) => !pendingCounts.current.has(profile.id),
+    );
     if (list.length === 0) return;
     const finish = beginKnocks(list.map((p) => p.id));
     try {
-      const networkPromise = getNetworkIdentity();
       showSnackbar({
         ...pendingKnockFeedback(list.length),
         tone: "info",
         persistent: true,
       });
-      const settled = (await knockBatch(list, knock)).map(
+      const settled = (await knockBatch(list, performKnock)).map(
         ({ item, result }) => ({ p: item, r: result }),
       );
-      const network = await networkPromise;
       const now = Date.now();
       const next = profilesRef.current.map((existing) => {
         const found = settled.find((s) => s.p.id === existing.id);
@@ -256,9 +290,12 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
             lastError: null,
             whitelistedEntry: found.r.whitelistedEntry,
             expiresAt: found.r.expiresAt,
-            whitelistedAt: found.r.expiresAt - found.r.expiresInSeconds * 1000,
-            grantNetworkId: network?.id ?? null,
-            grantNetworkType: network?.type ?? null,
+            whitelistedAt:
+              found.r.whitelistedAt ??
+              grantStart(found.r.expiresAt, found.r.expiresInSeconds, now),
+            grantRecordedAt: found.r.completedAtMillis ?? now,
+            grantNetworkId: found.r.grantNetworkId ?? null,
+            grantNetworkType: found.r.grantNetworkType ?? null,
           };
         }
         return {
@@ -304,7 +341,11 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   }, [persist, showSnackbar, beginKnocks]);
 
   const upsert = useCallback(
-    async (p: Profile) => {
+    async (candidate: Profile) => {
+      const p = prepareProfileSave(
+        candidate,
+        profilesRef.current.find((profile) => profile.id === candidate.id),
+      );
       const exists = profilesRef.current.some((x) => x.id === p.id);
       const next = exists
         ? profilesRef.current.map((x) => (x.id === p.id ? p : x))
@@ -367,12 +408,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         currentTargets,
         nativeResults,
       );
-      const networkPromise = getNetworkIdentity();
       const settled = await knockBatch(missing, async (profile) => ({
-        result: await knock(profile),
+        result: await performKnock(profile),
         completedAtMillis: Date.now(),
       }));
-      const network = await networkPromise;
       if (cancelled) return;
       const jsResults: NativeLaunchKnockResult[] = settled.map(
         ({ item: profile, result: { result, completedAtMillis } }) => ({
@@ -389,10 +428,17 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           ttlCapped: result.ok && result.ttlCapped,
           configurationFingerprint: nativeConfigurationFingerprint(profile),
           whitelistedAtMillis: result.ok
-            ? result.expiresAt - result.expiresInSeconds * 1000
+            ? (result.whitelistedAt ??
+              grantStart(
+                result.expiresAt,
+                result.expiresInSeconds,
+                completedAtMillis,
+              ))
             : null,
-          grantNetworkId: network?.id ?? null,
-          grantNetworkType: network?.type ?? null,
+          grantNetworkId: result.ok ? (result.grantNetworkId ?? null) : null,
+          grantNetworkType: result.ok
+            ? (result.grantNetworkType ?? null)
+            : null,
           completedAtMillis,
         }),
       );
@@ -473,6 +519,29 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     });
     return () => subscription.remove();
   }, [loaded, persist]);
+
+  useEffect(
+    () =>
+      subscribeToNativeKnocks((ids) => {
+        const finished = [...nativePending.current].some(
+          (id) => !ids.includes(id),
+        );
+        nativePending.current = new Set(ids);
+        publishPending();
+        if (finished && loaded)
+          void loadProfilesFromNative()
+            .then((snapshots) => {
+              const current = profilesRef.current;
+              const next = mergeExpiryFromNative(current, snapshots);
+              if (next.some((profile, index) => profile !== current[index]))
+                void persist(next);
+            })
+            .catch((error) =>
+              console.warn("Failed to refresh native knock state.", error),
+            );
+      }),
+    [loaded, persist, publishPending],
+  );
 
   // Reschedule renewals whenever profiles change. Gate is keyed by
   // (profileId, expiresAt) so a single expiry value can only trigger one

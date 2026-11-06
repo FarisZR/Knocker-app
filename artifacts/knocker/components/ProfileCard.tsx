@@ -27,9 +27,9 @@ export function ProfileCard({
 }) {
   const router = useRouter();
   const colors = useColors();
-  const { knockOne } = useProfiles();
+  const { knockOne, pendingKnocks } = useProfiles();
   const [now, setNow] = useState(Date.now());
-  const [knocking, setKnocking] = useState(false);
+  const knocking = pendingKnocks.has(profile.id);
 
   useEffect(() => {
     if (!profile.expiresAt) return;
@@ -41,13 +41,8 @@ export function ProfileCard({
   const isError = profile.lastKnockStatus === "error";
 
   const onKnock = async () => {
-    setKnocking(true);
     performKnockHaptic();
-    try {
-      await knockOne(profile.id);
-    } finally {
-      setKnocking(false);
-    }
+    await knockOne(profile.id);
   };
 
   const openProfile = () => {
@@ -105,7 +100,11 @@ export function ProfileCard({
             </Text>
           </View>
           <View style={styles.statusRow}>
-            {isActive ? (
+            {knocking ? (
+              <Text style={[styles.statusText, { color: colors.primary }]}>
+                Knocking…
+              </Text>
+            ) : isActive ? (
               <>
                 <Feather name="check-circle" size={13} color={colors.success} />
                 <Text style={[styles.statusText, { color: colors.success }]}>
@@ -150,6 +149,16 @@ export function ProfileCard({
               </>
             )}
           </View>
+          {isActive && isError ? (
+            <Text
+              style={[
+                styles.statusText,
+                { color: colors.destructive, marginTop: 6 },
+              ]}
+            >
+              Renewal failed · {profile.lastError || "Try again"}
+            </Text>
+          ) : null}
         </View>
 
         <AnimatedPressable

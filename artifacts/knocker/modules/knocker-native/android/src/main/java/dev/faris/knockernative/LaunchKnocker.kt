@@ -83,19 +83,12 @@ object LaunchKnocker {
       }
 
       Log.i(TAG, "Dispatching cached launch knock batch.")
-      // This function itself occupies one of the shared IO workers. Use that
-      // worker for the first request and schedule the remainder, so a four-
-      // profile launch can still put all four requests in flight together.
-      val resultFutures = targets.drop(1).map { profile ->
-        CompletableFuture.supplyAsync(
-          { ProfileKnocker.knock(context, profile) },
-          KnockerExecutors.io
-        )
+      val started = targets.map { KnockerRequests.knock(context, it) }
+      CompletableFuture.allOf(*started.toTypedArray()).whenComplete { _, error ->
+        if (error == null) future.complete(started.map { it.join() })
+        else future.complete(emptyList())
+        KnockerTileService.refreshAll(context)
       }
-      val firstResult = ProfileKnocker.knock(context, targets.first())
-      val results = listOf(firstResult) + resultFutures.map { it.join() }
-      future.complete(results)
-      KnockerTileService.refreshAll(context)
     } catch (error: Exception) {
       Log.w(TAG, "Launch knock batch failed.", error)
       future.complete(emptyList())
@@ -111,22 +104,23 @@ object LaunchKnocker {
   }
 }
 
-private object ProfileKnocker {
+object ProfileKnocker {
   fun knock(context: Context, profile: StoredProfile): LaunchKnockResult {
     return when (val outcome = KnockerHttp.knock(profile, context)) {
       is KnockOutcome.Success -> {
-        val updated = KnockerStore.updateGrant(
+        // The HTTP result remains valid even if local persistence/scheduling fails.
+        val updated = runCatching { KnockerStore.updateGrant(
           context,
           profile.id,
           outcome,
           profile.configurationFingerprint
-        )
+        ) }.getOrNull()
         val nextFireAt = updated?.renewalAtMillis()
-        if (nextFireAt != null) {
-          KnockerRenewScheduler.schedule(context, profile.id, nextFireAt)
-        } else if (updated != null) {
-          KnockerRenewScheduler.cancel(context, profile.id)
+        runCatching {
+          if (nextFireAt != null) KnockerRenewScheduler.schedule(context, profile.id, nextFireAt)
+          else if (updated != null) KnockerRenewScheduler.cancel(context, profile.id)
         }
+
         LaunchKnockResult(
           profileId = profile.id,
           name = profile.name,
@@ -140,14 +134,15 @@ private object ProfileKnocker {
           configurationFingerprint = profile.configurationFingerprint,
           whitelistedAtMillis = outcome.whitelistedAtMillis,
           grantNetworkId = outcome.networkId,
-          grantNetworkType = outcome.networkType
+          grantNetworkType = outcome.networkType,
+          completedAtMillis = outcome.completedAtMillis
         )
       }
       is KnockOutcome.Failure -> LaunchKnockResult(
         profileId = profile.id,
         name = profile.name,
         ok = false,
-        message = outcome.message,
+        message = outcome.status?.let { "$it — ${outcome.message}" } ?: outcome.message,
         whitelistedEntry = null,
         expiresInSeconds = null,
         expiresAtMillis = null,

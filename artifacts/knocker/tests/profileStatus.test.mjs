@@ -34,3 +34,10 @@ test("remaining lifetime uses the granted interval and clamps at both ends", () 
     null,
   );
 });
+
+test("a reversed grant interval has no remaining fraction", () => {
+  assert.equal(
+    grantRemainingFraction({ expiresAt: 1000, whitelistedAt: 2000 }, 1500),
+    null,
+  );
+});

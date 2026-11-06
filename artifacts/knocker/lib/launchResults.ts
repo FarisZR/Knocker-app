@@ -1,4 +1,5 @@
 import { nativeConfigurationFingerprint } from "./profileConfiguration";
+import { isNewerGrant } from "./grants";
 import type { Profile } from "./profiles";
 import type {
   NativeLaunchKnockResult,
@@ -59,6 +60,7 @@ export function applyLaunchResults(
           lastKnockStatus: "success",
           expiresAt: result.expiresAtMillis,
           whitelistedAt: result.whitelistedAtMillis,
+          grantRecordedAt: result.completedAtMillis,
           whitelistedEntry: result.whitelistedEntry,
           grantNetworkId: result.grantNetworkId,
           grantNetworkType: result.grantNetworkType,
@@ -81,15 +83,12 @@ export function mergeExpiryFromNative(
       cached.expiresAt == null
     )
       return profile;
-    if (
-      cached.expiresAt <= (profile.expiresAt ?? 0) &&
-      (cached.whitelistedAt ?? 0) <= (profile.whitelistedAt ?? 0)
-    )
-      return profile;
+    if (!isNewerGrant(cached, profile)) return profile;
     return {
       ...profile,
       expiresAt: cached.expiresAt,
       whitelistedAt: cached.whitelistedAt,
+      grantRecordedAt: cached.grantRecordedAt,
       whitelistedEntry: cached.whitelistedEntry,
       grantNetworkId: cached.grantNetworkId,
       grantNetworkType: cached.grantNetworkType,

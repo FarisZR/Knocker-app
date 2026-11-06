@@ -1,4 +1,5 @@
 import { useWindowDimensions } from "react-native";
+import { homeActionsHeight } from "@/lib/homeActionsLayout";
 import { useProfiles } from "@/context/ProfilesContext";
 import { performKnockHaptic } from "@/lib/haptics";
 import React from "react";
@@ -73,7 +74,7 @@ export function TileChips({ value, onChange, profiles, currentId }: TileProps) {
               key={slot ?? "off"}
               selected={value === slot}
               enabled={!owner || value === slot}
-              onClick={() => onChange(slot)}
+              onClick={() => onChange(value === slot ? null : slot)}
               modifiers={[
                 semantics({
                   contentDescription: owner
@@ -106,10 +107,7 @@ export function HomeActions({
     <Host
       style={{
         width: 280,
-        height: Math.min(
-          hasProfiles ? 144 + pinned.length * 64 : 72,
-          height * 0.55,
-        ),
+        height: homeActionsHeight(hasProfiles, pinned.length, height),
       }}
     >
       <Column

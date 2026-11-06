@@ -87,3 +87,15 @@ Automated validation passed: workspace typechecking, all 20 Expo Doctor checks, 
 The arrival gaps above verify concurrent requests in the controlled test, not total app startup latency. The eight-second server delay is intentional fixture behavior. These checks used the rebuilt `com.fariszr.knocker` release APK after the PR #14 integration.
 
 Physical-device haptics, a live Caddy deployment and background alarm delivery still need device validation. Quick Settings slot assignment was exercised in the editor, but actual tile invocation was not verified: the emulator's expanded Quick Settings panel repeatedly failed accessibility snapshots (`mw537c6k-75ad8959`), so that test path was stopped.
+
+## CodeRabbit follow-up
+
+The review fixes coordinate all Android request sources (launch, tiles, renewal workers and foreground actions) through one per-profile/configuration future registry. Native pending-state events feed the shared UI state, and the foreground bridge consumes the same result rather than sending a competing fetch. Three JVM tests cover shared futures, independent profile dispatch and retry after failure; run them with `./gradlew :knocker-native:testDebugUnitTest` in the generated Android directory. The JavaScript suite now has 40 tests.
+
+Grant ordering uses server grant start time before expiry, with a recording timestamp to distinguish same-second grants. Both native and JS profile synchronization preserve newer grant metadata for the same endpoint/key/normalized target. Changing that target clears grant and attempt metadata; display and renewal-setting edits preserve it. Missing grant duration falls back to receipt time. JS HTTP fallback results never await local connection sampling, and native identity reads are bounded.
+
+Native HTTP opens its connection on the captured Android `Network`. Local identity includes transport state and a conservative non-VPN topology signal to detect VPN transport changes without SSID/location access or public-IP lookups. Expo Network supplies offline/reconnect/transport fallback identity when the custom module is absent. Real VPN handover remains a physical-device validation item.
+
+UI fixes retain modal editor drafts through widening/rotation, refresh clean embedded editors after saved configuration changes, reconcile normalized native text after every edit, restore selected-slot toggling, show generic-card renewal errors and shared pending state, and keep snackbar actions inside the available height. Android floating actions remain in the list pane on wide layouts so they do not cover editor fields.
+
+Device follow-up covered blank TTL plus rejected nonnumeric input, slot clear/reselect, dirty rotation and Keep editing, saving back into the wide editor with the saved name, preserving the active grant on rename, and clearing grant/IP feedback after endpoint changes. Release assembly and signature verification passed. The current local deliverable is `builds/knocker-material3-review.apk` (excluded from Git), with a neighboring SHA-256 file.

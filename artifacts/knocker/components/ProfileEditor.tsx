@@ -1,3 +1,5 @@
+import { nativeConfigurationFingerprint } from "@/lib/profileConfiguration";
+import { prepareProfileSave } from "@/lib/grants";
 import { MaterialInput as TextInput } from "@/components/MaterialControls";
 import {
   EditorActions,
@@ -68,9 +70,20 @@ export function ProfileEditor({
   const baselineAllowIpOverrideRef = useRef(allowIpOverride);
   const initializedProfileIdRef = useRef<string | null>(null);
 
+  const isDirty =
+    JSON.stringify(draft) !== JSON.stringify(baselineRef.current) ||
+    allowIpOverride !== baselineAllowIpOverrideRef.current;
+
   useEffect(() => {
     if (!loaded) return;
-    if (initializedProfileIdRef.current === profileId) return;
+    if (
+      initializedProfileIdRef.current === profileId &&
+      (isDirty ||
+        !existing ||
+        nativeConfigurationFingerprint(existing) ===
+          nativeConfigurationFingerprint(baselineRef.current))
+    )
+      return;
     const next = existing ?? newProfile();
     const nextAllowIpOverride = Boolean(
       next.ipOverride && next.ipOverride.length > 0,
@@ -81,11 +94,7 @@ export function ProfileEditor({
     baselineRef.current = next;
     baselineAllowIpOverrideRef.current = nextAllowIpOverride;
     initializedProfileIdRef.current = profileId;
-  }, [existing, isNew, loaded, profileId]);
-
-  const isDirty =
-    JSON.stringify(draft) !== JSON.stringify(baselineRef.current) ||
-    allowIpOverride !== baselineAllowIpOverrideRef.current;
+  }, [existing, isNew, loaded, profileId, isDirty]);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -107,28 +116,17 @@ export function ProfileEditor({
   const showSaveAction = !embedded || isDirty;
 
   const onSave = async () => {
-    const sanitized: Profile = {
-      ...draft,
-      name: draft.name.trim(),
-      endpointUrl: draft.endpointUrl.trim(),
-      apiKey: draft.apiKey.trim(),
-      ipOverride:
-        allowIpOverride && draft.ipOverride ? draft.ipOverride.trim() : null,
-      lastKnockStatus: existing
-        ? existing.lastKnockStatus
-        : draft.lastKnockStatus,
-      lastKnockAt: existing ? existing.lastKnockAt : draft.lastKnockAt,
-      lastError: existing ? existing.lastError : draft.lastError,
-      whitelistedEntry: existing
-        ? existing.whitelistedEntry
-        : draft.whitelistedEntry,
-      expiresAt: existing ? existing.expiresAt : draft.expiresAt,
-      whitelistedAt: existing ? existing.whitelistedAt : draft.whitelistedAt,
-      grantNetworkId: existing ? existing.grantNetworkId : draft.grantNetworkId,
-      grantNetworkType: existing
-        ? existing.grantNetworkType
-        : draft.grantNetworkType,
-    };
+    const sanitized: Profile = prepareProfileSave(
+      {
+        ...draft,
+        name: draft.name.trim(),
+        endpointUrl: draft.endpointUrl.trim(),
+        apiKey: draft.apiKey.trim(),
+        ipOverride:
+          allowIpOverride && draft.ipOverride ? draft.ipOverride.trim() : null,
+      },
+      existing,
+    );
     await upsert(sanitized);
     setDraft(sanitized);
     baselineRef.current = sanitized;

@@ -41,6 +41,7 @@ import { useColors } from "@/hooks/useColors";
 import { useAdaptiveLayout } from "@/hooks/useAdaptiveLayout";
 import { useProfiles } from "@/context/ProfilesContext";
 import { performKnockHaptic, performTapHaptic } from "@/lib/haptics";
+import { homeActionsHeight } from "@/lib/homeActionsLayout";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -195,6 +196,12 @@ export default function HomeScreen() {
   const showDetailPane = selectedProfileId !== null;
   const floatingActionBottom =
     bottomPad + 16 + (showTwoPanes && editorDirty ? 76 : 0);
+  const actionClearance =
+    Platform.OS === "android"
+      ? floatingActionBottom +
+        homeActionsHeight(profiles.length > 0, pinned.length, height) +
+        16
+      : bottomPad + 220;
   const animatedFloatingActionBottom = useSharedValue(floatingActionBottom);
   useEffect(() => {
     animatedFloatingActionBottom.value = withTiming(floatingActionBottom, {
@@ -408,22 +415,15 @@ export default function HomeScreen() {
               contentContainerStyle={{
                 paddingHorizontal: 16,
                 paddingTop: 8,
-                paddingBottom:
-                  bottomPad +
-                  (Platform.OS === "android" ? 176 + pinned.length * 64 : 220),
+                paddingBottom: actionClearance,
               }}
               showsVerticalScrollIndicator={false}
             />
           )}
 
-          {!showTwoPanes ? floatingActions : null}
+          {!showTwoPanes || Platform.OS === "android" ? floatingActions : null}
 
-          <Snackbar
-            bottomOffset={
-              bottomPad +
-              (Platform.OS === "android" ? 176 + pinned.length * 64 : 220)
-            }
-          />
+          <Snackbar bottomOffset={actionClearance} />
         </View>
 
         {showTwoPanes ? (
@@ -456,7 +456,7 @@ export default function HomeScreen() {
           ) : null}
         </View>
       </View>
-      {showTwoPanes ? floatingActions : null}
+      {showTwoPanes && Platform.OS !== "android" ? floatingActions : null}
     </View>
   );
 }

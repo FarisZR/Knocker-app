@@ -15,7 +15,8 @@ sealed interface KnockOutcome {
     val networkType: String,
     val expiresInSeconds: Long?,
     val requestedTtlSeconds: Int?,
-    val ttlCapped: Boolean
+    val ttlCapped: Boolean,
+    val completedAtMillis: Long = System.currentTimeMillis()
   ) : KnockOutcome
 
   data class Failure(
@@ -26,7 +27,8 @@ sealed interface KnockOutcome {
 
 object KnockerHttp {
   fun knock(profile: StoredProfile, context: Context): KnockOutcome {
-    val network = KnockerNetwork.snapshot(context)
+    val captured = KnockerNetwork.capture(context)
+    val network = captured.identity
     if (!profile.canKnock()) {
       return KnockOutcome.Failure(null, "Profile is not fully configured")
     }
@@ -44,7 +46,7 @@ object KnockerHttp {
 
     return try {
       val url = URL(profile.endpointUrl.trimEnd('/') + "/knock")
-      connection = (url.openConnection() as HttpURLConnection).apply {
+      connection = ((captured.network?.openConnection(url) ?: url.openConnection()) as HttpURLConnection).apply {
         requestMethod = "POST"
         connectTimeout = 10_000
         readTimeout = 10_000

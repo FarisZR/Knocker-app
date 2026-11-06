@@ -83,3 +83,25 @@ test("enabled checks omit credentials and tolerate unavailable IPv6", async () =
     ),
   );
 });
+
+test("ignores non-OK responses and valid addresses from the wrong family", async () => {
+  for (const ok of [false, true]) {
+    const result = await lookupPublicAddresses(
+      true,
+      new AbortController().signal,
+      async (url) => ({
+        ok,
+        json: async () => ({
+          ip: url.includes("api6")
+            ? ok
+              ? "203.0.113.42"
+              : "2001:db8::1"
+            : ok
+              ? "2001:db8::1"
+              : "203.0.113.42",
+        }),
+      }),
+    );
+    assert.deepEqual(result, {});
+  }
+});

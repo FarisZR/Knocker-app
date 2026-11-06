@@ -13,6 +13,8 @@ export default function ProfileEditScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { showTwoPanes } = useAdaptiveLayout();
+  // A modal editor that is already open owns its draft until explicitly closed.
+  const [editorMounted] = useState(!showTwoPanes);
   const [dirty, setDirty] = useState(false);
   const disablePrevention = usePreventRemove(dirty, ({ repeat }) => {
     const discard = () => {
@@ -31,13 +33,18 @@ export default function ProfileEditScreen() {
         ],
       );
   });
-  const finish = () => {
+  const finish = (savedId?: string) => {
     setDirty(false);
     disablePrevention();
-    router.back();
+    if (showTwoPanes)
+      router.dismissTo({
+        pathname: "/",
+        params: { profile: savedId ?? profileId },
+      });
+    else router.back();
   };
   const profileId = id || "new";
-  if (showTwoPanes)
+  if (showTwoPanes && !editorMounted)
     return (
       <Redirect href={{ pathname: "/", params: { profile: profileId } }} />
     );
@@ -46,9 +53,9 @@ export default function ProfileEditScreen() {
       key={profileId}
       profileId={profileId}
       onDirtyChange={setDirty}
-      onSaved={finish}
-      onDeleted={finish}
-      onCancel={finish}
+      onSaved={(profile) => finish(profile.id)}
+      onDeleted={() => finish()}
+      onCancel={() => finish()}
     />
   );
 }
