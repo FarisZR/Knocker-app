@@ -113,13 +113,24 @@ export function ProfileCard({
   const failed = profile.lastKnockStatus === "error";
   const greenContainer = dark ? "#153B28" : "#C9F2D8";
   const greenContent = dark ? "#B5F0CB" : "#074D2B";
-  const fill = knocking
-    ? c.primaryContainer
-    : active
-      ? greenContainer
+  // Keep an existing permission green during renewal. Every other state uses
+  // the content role paired with its actual container, including dynamic colors.
+  const fill = active
+    ? greenContainer
+    : knocking
+      ? c.primaryContainer
       : selected
         ? c.secondaryContainer
         : c.surfaceContainer;
+  const content = active
+    ? greenContent
+    : knocking
+      ? c.onPrimaryContainer
+      : selected
+        ? c.onSecondaryContainer
+        : c.onSurface;
+  const supportingContent =
+    active || knocking || selected ? content : c.onSurfaceVariant;
   const statusFill = active
     ? colors.success
     : failed
@@ -145,6 +156,7 @@ export function ProfileCard({
       <Host matchContents={{ vertical: true }} style={{ width: "100%" }}>
         <Surface
           color={fill}
+          contentColor={content}
           shape={Shape.RoundedCorner({ cornerRadii: corners })}
           onClick={open}
           selected={selected}
@@ -158,13 +170,7 @@ export function ProfileCard({
           ]}
         >
           <Column
-            modifiers={[
-              fillMaxWidth(),
-              background(fill, {
-                animationSpec: spring({ dampingRatio: 1, stiffness: 500 }),
-              }),
-              padding(16, 18, 16, 16),
-            ]}
+            modifiers={[fillMaxWidth(), padding(16, 18, 16, 16)]}
             verticalArrangement={{ spacedBy: 12 }}
           >
             <Row
@@ -192,14 +198,17 @@ export function ProfileCard({
                   background(
                     active
                       ? greenContainer
-                      : failed
+                      : failed && !knocking
                         ? c.errorContainer
                         : c.primaryContainer,
                   ),
                 ]}
               >
                 {knocking ? (
-                  <LoadingIndicator modifiers={[size(44, 44)]} />
+                  <LoadingIndicator
+                    color={active ? greenContent : c.onPrimaryContainer}
+                    modifiers={[size(44, 44)]}
+                  />
                 ) : active ? (
                   <CircularProgressIndicator
                     progress={remaining ?? 1}
@@ -243,7 +252,7 @@ export function ProfileCard({
                   }}
                   maxLines={1}
                   overflow="ellipsis"
-                  color={active ? greenContent : c.onSurface}
+                  color={content}
                 >
                   {profile.name || "Untitled profile"}
                 </Text>
@@ -251,7 +260,7 @@ export function ProfileCard({
                   style={{ typography: "bodyMedium" }}
                   maxLines={1}
                   overflow="ellipsis"
-                  color={active ? greenContent : c.onSurfaceVariant}
+                  color={supportingContent}
                 >
                   {formatHostname(profile.endpointUrl) || "No endpoint"}
                 </Text>
@@ -273,6 +282,16 @@ export function ProfileCard({
                 colors={{
                   containerColor: active ? colors.success : c.primary,
                   contentColor: active ? colors.onSuccess : c.onPrimary,
+                  ...(knocking
+                    ? {
+                        disabledContainerColor: active
+                          ? colors.success
+                          : c.primary,
+                        disabledContentColor: active
+                          ? colors.onSuccess
+                          : c.onPrimary,
+                      }
+                    : {}),
                 }}
                 contentPadding={{ start: 18, end: 18, top: 16, bottom: 16 }}
                 modifiers={[
@@ -318,11 +337,7 @@ export function ProfileCard({
               <Text
                 style={{ typography: "labelSmall" }}
                 color={
-                  active && failed
-                    ? c.error
-                    : active
-                      ? greenContent
-                      : c.onSurfaceVariant
+                  active && failed && !knocking ? c.error : supportingContent
                 }
               >
                 {[
@@ -341,7 +356,7 @@ export function ProfileCard({
               >
                 <Text
                   style={{ typography: "bodyMedium", fontWeight: "600" }}
-                  color={active ? greenContent : c.onSurface}
+                  color={content}
                 >
                   {active ? "Whitelisted IP" : "Last whitelisted IP"} ·{" "}
                   {profile.whitelistedEntry}
@@ -349,7 +364,11 @@ export function ProfileCard({
                 {active ? (
                   <Text
                     style={{ typography: "bodySmall" }}
-                    color={ipChanged || networkWarning ? c.error : greenContent}
+                    color={
+                      (ipChanged || networkWarning) && !knocking
+                        ? c.error
+                        : supportingContent
+                    }
                   >
                     {networkNote}
                   </Text>
@@ -359,6 +378,7 @@ export function ProfileCard({
             <Box modifiers={[fillMaxWidth(), height(4)]}>
               {knocking ? (
                 <LinearWavyProgressIndicator
+                  color={content}
                   modifiers={[fillMaxWidth(), height(4)]}
                 />
               ) : null}

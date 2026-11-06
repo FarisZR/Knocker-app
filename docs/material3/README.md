@@ -112,3 +112,10 @@ Production functions touched by this PR now document their contracts and timing/
 
 
 Second-round validation passed: 48 JS tests, 9 native JVM tests, workspace typechecking, release assembly and APK signature verification. The rebuilt APK was installed and cold-launched on the Android 16 emulator. The fixture recorded exactly one request for each startup profile, 27 ms apart; the successful profile retained its ring, IP and grant after saving the renamed draft. Final runtime logs contained no AndroidRuntime or ReactNativeJS errors. The save completed after the slow response, so the device rename-in-flight timing test was inconclusive because the Save selector failed; the exact timing regression is covered by JS and JVM tests. See `screenshots/review-grant-after-rename.png` for the resulting release UI.
+
+
+## Loading-state contrast fix
+
+The pending card used `primaryContainer` while its text still used the active green or generic surface foreground. It now uses the content role paired with the visible container for the name, endpoint, IP details and supporting labels. An existing active grant keeps its green container during renewal. Spinner and progress colors follow their actual background, and pending card/pinned/bulk buttons provide explicit readable disabled colors while remaining non-interactive. Removing the redundant animated inner background keeps container and text changes together and adds no request delay.
+
+Validation: mobile typechecking, optimized release assembly, APK signature verification and emulator installation passed. On Android 16, checked an initial dark-theme knock, an active dark-theme renewal, and initial/active knocks together in the light theme. Loading labels and controls remained readable, and the successful response restored the grant ring. No AndroidRuntime or ReactNativeJS errors appeared in the installed-build session. Captures: `pending-contrast-dark.png`, `renewal-contrast-dark.png`, and `pending-contrast-light.png` under `screenshots/`.

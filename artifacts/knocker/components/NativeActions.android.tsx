@@ -16,6 +16,7 @@ import {
   Text,
   Switch,
   FilterChip,
+  useMaterialColors,
 } from "@expo/ui/jetpack-compose";
 import {
   fillMaxWidth,
@@ -104,6 +105,7 @@ export function HomeActions({
 }: HomeActionsProps) {
   const { profiles, pendingKnocks, knockOne } = useProfiles();
   const { height } = useWindowDimensions();
+  const c = useMaterialColors();
   const pinned = profiles.filter((p) => p.pinnedToHome);
   return (
     <Host
@@ -129,6 +131,14 @@ export function HomeActions({
           <FilledTonalButton
             key={profile.id}
             enabled={!pendingKnocks.has(profile.id)}
+            colors={
+              pendingKnocks.has(profile.id)
+                ? {
+                    disabledContainerColor: c.secondaryContainer,
+                    disabledContentColor: c.onSecondaryContainer,
+                  }
+                : undefined
+            }
             onClick={() => {
               performKnockHaptic();
               void knockOne(profile.id);
@@ -139,7 +149,10 @@ export function HomeActions({
             ]}
           >
             {pendingKnocks.has(profile.id) ? (
-              <LoadingIndicator modifiers={[size(24, 24)]} />
+              <LoadingIndicator
+                color={c.onSecondaryContainer}
+                modifiers={[size(24, 24)]}
+              />
             ) : null}
             <Text maxLines={1}>
               {pendingKnocks.has(profile.id)
@@ -151,6 +164,14 @@ export function HomeActions({
         {hasProfiles ? (
           <Button
             enabled={pendingKnocks.size === 0}
+            colors={
+              pendingKnocks.size > 0
+                ? {
+                    disabledContainerColor: c.primary,
+                    disabledContentColor: c.onPrimary,
+                  }
+                : undefined
+            }
             onClick={onKnockAll}
             contentPadding={{ start: 28, end: 28, top: 22, bottom: 22 }}
             modifiers={[semantics({ contentDescription: "Knock all servers" })]}
