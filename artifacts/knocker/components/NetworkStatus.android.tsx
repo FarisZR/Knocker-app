@@ -11,6 +11,7 @@ import {
 import { fillMaxWidth, weight } from "@expo/ui/jetpack-compose/modifiers";
 import { useNetworkStatus } from "@/context/NetworkContext";
 
+/** Explains optional public-IP disclosure before enabling checks; local network feedback works without it. */
 export function NetworkStatus() {
   const { connection, checksEnabled, checking, setChecksEnabled, refresh } =
     useNetworkStatus();

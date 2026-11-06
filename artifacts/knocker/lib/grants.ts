@@ -1,7 +1,10 @@
 import type { Profile } from "./profiles";
 import { normalizedGrantTarget } from "./profileConfiguration";
 import type { NativeProfileSnapshot } from "knocker-native";
+import type { KnockResult } from "./knock";
+import { nativeConfigurationFingerprint } from "./profileConfiguration";
 
+/** Orders permission grants by their start and receipt times, never expiry alone. */
 export function isNewerGrant(
   candidate: {
     whitelistedAt?: number | null;
@@ -29,6 +32,7 @@ export function isNewerGrant(
   return candidate.expiresAt > (current.expiresAt ?? 0);
 }
 
+/** Reconstructs the interval start, using receipt time when duration is absent. */
 export function grantStart(
   expiresAt: number,
   duration: number | null,
@@ -72,6 +76,67 @@ export function prepareProfileSave(
   };
 }
 
+/** Keeps attempt feedback when the cached permission predates a newer attempt. */
+export function hasNewerAttempt(
+  profile: Profile,
+  grant: { grantRecordedAt?: number | null; whitelistedAt?: number | null },
+): boolean {
+  return (
+    (profile.lastKnockAt ?? 0) >
+    (grant.grantRecordedAt ?? grant.whitelistedAt ?? 0)
+  );
+}
+
+/** Checks only permission identity for successes; errors require the sent settings. */
+export function acceptsKnockResult(
+  current: Profile,
+  sent: Profile,
+  result: KnockResult,
+): boolean {
+  return result.ok
+    ? normalizedGrantTarget(current) === normalizedGrantTarget(sent)
+    : nativeConfigurationFingerprint(current) ===
+        nativeConfigurationFingerprint(sent);
+}
+
+/** Applies a completed request without discarding a newer grant or attempt. */
+export function applyKnockResult(
+  current: Profile,
+  sent: Profile,
+  result: KnockResult,
+  receivedAt = Date.now(),
+): Profile {
+  if (!acceptsKnockResult(current, sent, result)) return current;
+  const completedAt = result.completedAtMillis ?? receivedAt;
+  let next = current;
+  if (result.ok) {
+    const grant = {
+      expiresAt: result.expiresAt,
+      whitelistedAt:
+        result.whitelistedAt ??
+        grantStart(result.expiresAt, result.expiresInSeconds, completedAt),
+      grantRecordedAt: completedAt,
+      whitelistedEntry: result.whitelistedEntry,
+      grantNetworkId: result.grantNetworkId ?? null,
+      grantNetworkType: result.grantNetworkType ?? null,
+    };
+    if (isNewerGrant(grant, current)) next = { ...current, ...grant };
+  }
+  const latestOutcome = Math.max(
+    current.lastKnockAt ?? 0,
+    current.grantRecordedAt ?? current.whitelistedAt ?? 0,
+  );
+  if (completedAt >= latestOutcome)
+    next = {
+      ...next,
+      lastKnockAt: completedAt,
+      lastKnockStatus: result.ok ? "success" : "error",
+      lastError: result.ok ? null : result.message,
+    };
+  return next;
+}
+
+/** Imports newer permission metadata for the same target while retaining local settings. */
 export function mergeGrantsForSave(
   profiles: Profile[],
   snapshots: NativeProfileSnapshot[],
@@ -85,8 +150,7 @@ export function mergeGrantsForSave(
       !isNewerGrant(cached, profile)
     )
       return profile;
-    const newerAttempt =
-      (profile.lastKnockAt ?? 0) > (cached.whitelistedAt ?? 0);
+    const newerAttempt = hasNewerAttempt(profile, cached);
     return {
       ...profile,
       expiresAt: cached.expiresAt,

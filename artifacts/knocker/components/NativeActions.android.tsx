@@ -60,6 +60,7 @@ export function MaterialToggle({ label, value, onChange }: ToggleProps) {
     </Host>
   );
 }
+/** Offers exclusive tile slots and lets the selected slot be cleared with another tap. */
 export function TileChips({ value, onChange, profiles, currentId }: TileProps) {
   return (
     <Host matchContents={{ vertical: true }} style={{ width: "100%" }}>
@@ -95,6 +96,7 @@ export function TileChips({ value, onChange, profiles, currentId }: TileProps) {
     </Host>
   );
 }
+/** Renders native grouped add, bulk and pinned actions, sharing the current pending state. */
 export function HomeActions({
   onNew,
   onKnockAll,

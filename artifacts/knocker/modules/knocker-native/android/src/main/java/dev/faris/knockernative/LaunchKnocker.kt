@@ -69,6 +69,7 @@ object LaunchKnocker {
     return current.results
   }
 
+  /** Collects every dispatched outcome; one exceptional request cannot erase its siblings. */
   private fun performLaunchKnocks(
     context: Context,
     future: CompletableFuture<List<LaunchKnockResult>>
@@ -83,10 +84,14 @@ object LaunchKnocker {
       }
 
       Log.i(TAG, "Dispatching cached launch knock batch.")
-      val started = targets.map { KnockerRequests.knock(context, it) }
-      CompletableFuture.allOf(*started.toTypedArray()).whenComplete { _, error ->
-        if (error == null) future.complete(started.map { it.join() })
-        else future.complete(emptyList())
+      val started = targets.map { profile ->
+        try { KnockerRequests.knock(context, profile) }
+        catch (_: Exception) { CompletableFuture.completedFuture(LaunchKnockResult.failure(profile, "Native knock failed")) }
+      }
+      collectRequestResults(started) { index, _ ->
+        LaunchKnockResult.failure(targets[index], "Native knock failed")
+      }.thenAccept { results ->
+        future.complete(results)
         KnockerTileService.refreshAll(context)
       }
     } catch (error: Exception) {
@@ -95,6 +100,7 @@ object LaunchKnocker {
     }
   }
 
+  /** Serializes all outcomes, including failures, so JS does not redispatch known requests. */
   fun resultsToJson(results: List<LaunchKnockResult>): String {
     val array = JSONArray()
     for (result in results) {
@@ -105,15 +111,15 @@ object LaunchKnocker {
 }
 
 object ProfileKnocker {
+  /** Persists access separately from the HTTP result and schedules from current preferences. */
   fun knock(context: Context, profile: StoredProfile): LaunchKnockResult {
     return when (val outcome = KnockerHttp.knock(profile, context)) {
       is KnockOutcome.Success -> {
         // The HTTP result remains valid even if local persistence/scheduling fails.
         val updated = runCatching { KnockerStore.updateGrant(
           context,
-          profile.id,
-          outcome,
-          profile.configurationFingerprint
+          profile,
+          outcome
         ) }.getOrNull()
         val nextFireAt = updated?.renewalAtMillis()
         runCatching {
@@ -132,24 +138,15 @@ object ProfileKnocker {
           requestedTtlSeconds = outcome.requestedTtlSeconds,
           ttlCapped = outcome.ttlCapped,
           configurationFingerprint = profile.configurationFingerprint,
+          grantConfigurationFingerprint = profile.grantConfigurationFingerprint,
           whitelistedAtMillis = outcome.whitelistedAtMillis,
           grantNetworkId = outcome.networkId,
           grantNetworkType = outcome.networkType,
           completedAtMillis = outcome.completedAtMillis
         )
       }
-      is KnockOutcome.Failure -> LaunchKnockResult(
-        profileId = profile.id,
-        name = profile.name,
-        ok = false,
-        message = outcome.status?.let { "$it — ${outcome.message}" } ?: outcome.message,
-        whitelistedEntry = null,
-        expiresInSeconds = null,
-        expiresAtMillis = null,
-        requestedTtlSeconds = profile.ttlSeconds,
-        ttlCapped = false,
-        configurationFingerprint = profile.configurationFingerprint
-      )
+      is KnockOutcome.Failure -> LaunchKnockResult.failure(profile,
+        outcome.status?.let { "$it — ${outcome.message}" } ?: outcome.message)
     }
   }
 }
@@ -165,11 +162,24 @@ data class LaunchKnockResult(
   val requestedTtlSeconds: Int?,
   val ttlCapped: Boolean,
   val configurationFingerprint: String,
+  val grantConfigurationFingerprint: String = "",
   val whitelistedAtMillis: Long? = null,
   val grantNetworkId: String? = null,
   val grantNetworkType: String? = null,
   val completedAtMillis: Long = System.currentTimeMillis()
 ) {
+  companion object {
+    /** A known failure still covers its dispatched target, preventing automatic duplicate HTTP. */
+    fun failure(profile: StoredProfile, message: String) = LaunchKnockResult(
+      profileId = profile.id, name = profile.name, ok = false, message = message,
+      whitelistedEntry = null, expiresInSeconds = null, expiresAtMillis = null,
+      requestedTtlSeconds = profile.ttlSeconds, ttlCapped = false,
+      configurationFingerprint = profile.configurationFingerprint,
+      grantConfigurationFingerprint = profile.grantConfigurationFingerprint
+    )
+  }
+
+  /** Retains request identity and receipt time for safe JS reconciliation after edits. */
   fun toJson(): JSONObject {
     return JSONObject().apply {
       put("profileId", profileId)
@@ -182,6 +192,7 @@ data class LaunchKnockResult(
       requestedTtlSeconds?.let { put("requestedTtlSeconds", it) } ?: put("requestedTtlSeconds", JSONObject.NULL)
       put("ttlCapped", ttlCapped)
       put("configurationFingerprint", configurationFingerprint)
+      put("grantConfigurationFingerprint", grantConfigurationFingerprint)
       put("whitelistedAtMillis", whitelistedAtMillis ?: JSONObject.NULL)
       put("grantNetworkId", grantNetworkId ?: JSONObject.NULL)
       put("grantNetworkType", grantNetworkType ?: JSONObject.NULL)

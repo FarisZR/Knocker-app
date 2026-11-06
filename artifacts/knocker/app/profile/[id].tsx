@@ -9,6 +9,7 @@ import { Alert, Platform } from "react-native";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { useAdaptiveLayout } from "@/hooks/useAdaptiveLayout";
 
+/** Preserves an open modal draft across rotation and confirms navigation away from edits. */
 export default function ProfileEditScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -16,6 +17,7 @@ export default function ProfileEditScreen() {
   // A modal editor that is already open owns its draft until explicitly closed.
   const [editorMounted] = useState(!showTwoPanes);
   const [dirty, setDirty] = useState(false);
+  /** Requires an explicit discard before repeating navigation that would lose an edited draft. */
   const disablePrevention = usePreventRemove(dirty, ({ repeat }) => {
     const discard = () => {
       setDirty(false);
@@ -33,6 +35,7 @@ export default function ProfileEditScreen() {
         ],
       );
   });
+  /** Closes a compact editor or selects its saved profile in the wide home pane. */
   const finish = (savedId?: string) => {
     setDirty(false);
     disablePrevention();

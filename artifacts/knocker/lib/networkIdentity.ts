@@ -4,6 +4,7 @@ import { getNetworkIdentity, type NativeNetworkIdentity } from "knocker-native";
 const session = Date.now().toString(36);
 let epoch = 0;
 let previous = "";
+/** Creates a session-scoped fallback identity that advances after transport or connectivity changes. */
 export function recordNetworkState(
   state: Network.NetworkState,
 ): NativeNetworkIdentity {
@@ -31,6 +32,7 @@ export function recordNetworkState(
   };
 }
 
+/** Uses local Android identity when available, with a bounded Expo Network fallback. */
 export async function currentNetworkIdentity(): Promise<NativeNetworkIdentity | null> {
   const native = await getNetworkIdentity();
   if (native) return native;

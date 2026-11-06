@@ -1,3 +1,4 @@
+import { nativeKnockResult } from "./nativeKnockResult";
 import { knockProfileNative } from "knocker-native";
 import { knock, type KnockResult } from "./knock";
 import { nativeConfigurationFingerprint } from "./profileConfiguration";
@@ -12,32 +13,18 @@ export async function performKnock(profile: Profile): Promise<KnockResult> {
       profile.id,
       nativeConfigurationFingerprint(profile),
     );
-    if (native)
-      return native.ok
-        ? {
-            ok: true,
-            whitelistedEntry: native.whitelistedEntry ?? "",
-            expiresAt: native.expiresAtMillis ?? 0,
-            expiresInSeconds: native.expiresInSeconds ?? 0,
-            requestedTtlSeconds: native.requestedTtlSeconds,
-            ttlCapped: native.ttlCapped,
-            whitelistedAt:
-              native.whitelistedAtMillis ?? native.completedAtMillis,
-            grantNetworkId: native.grantNetworkId,
-            grantNetworkType: native.grantNetworkType,
-            completedAtMillis: native.completedAtMillis,
-          }
-        : {
-            ok: false,
-            status: null,
-            message: native.message ?? "Native knock failed",
-          };
+    if (native) return nativeKnockResult(native);
   } catch {
-    return { ok: false, status: null, message: "Native knock failed" };
+    return {
+      ok: false,
+      status: null,
+      message: "Native knock failed",
+      completedAtMillis: Date.now(),
+    };
   }
   const connection = captureConnection();
   const result = await knock(profile);
-  if (!result.ok) return result;
+  if (!result.ok) return { ...result, completedAtMillis: Date.now() };
   const now = Date.now();
   const network = connection();
   return {

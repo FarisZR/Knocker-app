@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadTypeScript } from "./load-typescript.mjs";
-const { nativeConfigurationFingerprint: fingerprint } = loadTypeScript(
-  new URL("../lib/profileConfiguration.ts", import.meta.url),
-);
+const {
+  nativeConfigurationFingerprint: fingerprint,
+  grantConfigurationFingerprint: grantFingerprint,
+} = loadTypeScript(new URL("../lib/profileConfiguration.ts", import.meta.url));
 const { selectLaunchResults, applyLaunchResults, mergeExpiryFromNative } =
   loadTypeScript(new URL("../lib/launchResults.ts", import.meta.url));
 const profile = {
@@ -94,12 +95,11 @@ test("launch results populate the remaining-time ring, returned IP and local net
   assert.equal(merged.grantNetworkId, "boot:network");
   assert.equal(merged.lastKnockStatus, "success");
 });
-test("removed, disabled, edited profiles and newer attempts reject old launch results", () => {
+test("removed, disabled and edited profiles reject legacy launch results", () => {
   assert.deepEqual(applyLaunchResults([], [result]), []);
   for (const current of [
     { ...profile, knockOnOpen: false },
     { ...profile, endpointUrl: "https://changed.test" },
-    { ...profile, lastKnockAt: 5000, lastKnockStatus: "error" },
   ]) {
     assert.equal(applyLaunchResults([current], [result])[0], current);
   }
@@ -139,4 +139,54 @@ test("an earlier launch result cannot overwrite a newer grant merged from a tile
     whitelistedEntry: "198.51.100.1",
   };
   assert.equal(applyLaunchResults([newer], [result])[0], newer);
+});
+
+test("launch results survive display edits without triggering a second HTTP request", () => {
+  const edited = {
+    ...profile,
+    name: "Renamed",
+    pinnedToHome: false,
+    autoRenew: true,
+    tileSlot: 2,
+  };
+  for (const ok of [true, false]) {
+    const outcome = {
+      ...result,
+      ok,
+      message: ok ? null : "Native knock failed",
+      grantConfigurationFingerprint: grantFingerprint(profile),
+    };
+    const selected = selectLaunchResults([edited], [outcome]);
+    assert.deepEqual(selected.missing, []);
+    assert.deepEqual(selected.matching, [outcome]);
+    const [merged] = applyLaunchResults([edited], [outcome]);
+    assert.equal(merged.name, edited.name);
+    assert.equal(merged.lastKnockStatus, ok ? "success" : "error");
+    if (ok) assert.equal(merged.expiresAt, result.expiresAtMillis);
+  }
+});
+test("disabling launch while a request runs retains its permission without scheduling fallback", () => {
+  const disabled = { ...profile, knockOnOpen: false, ttlSeconds: 60 };
+  const outcome = {
+    ...result,
+    grantConfigurationFingerprint: grantFingerprint(profile),
+  };
+  assert.deepEqual(selectLaunchResults([disabled], [outcome]).missing, []);
+  assert.equal(
+    applyLaunchResults([disabled], [outcome])[0].expiresAt,
+    result.expiresAtMillis,
+  );
+});
+test("late launch success can merge access while preserving a newer failed attempt", () => {
+  const current = {
+    ...profile,
+    lastKnockAt: 5000,
+    lastKnockStatus: "error",
+    lastError: "Timeout",
+  };
+  const [merged] = applyLaunchResults([current], [result]);
+  assert.equal(merged.expiresAt, result.expiresAtMillis);
+  assert.equal(merged.lastKnockAt, 5000);
+  assert.equal(merged.lastKnockStatus, "error");
+  assert.equal(merged.lastError, "Timeout");
 });

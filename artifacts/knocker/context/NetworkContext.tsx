@@ -27,6 +27,7 @@ interface NetworkStatus {
 }
 const NetworkContext = createContext<NetworkStatus | null>(null);
 
+/** Tracks local connections independently of the opt-in, foreground-only public-IP checks. */
 export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [connection, setConnection] = useState<NativeNetworkIdentity | null>(
     null,
@@ -40,6 +41,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const controller = useRef<AbortController | null>(null);
   const generation = useRef(0);
 
+  /** Refreshes local identity first, then performs a cancellable IP check only when enabled. */
   const refresh = useCallback(async (checkPublic = true) => {
     const version = ++generation.current;
     const local = await currentNetworkIdentity();
@@ -77,6 +79,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  /** Persists explicit consent and immediately cancels and clears checks when disabled. */
   const setChecksEnabled = useCallback(
     (enabled: boolean) => {
       userChangedPreference.current = true;
@@ -155,6 +158,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Requires the shared network provider so consent and address checks stay consistent. */
 export function useNetworkStatus() {
   const context = useContext(NetworkContext);
   if (!context)

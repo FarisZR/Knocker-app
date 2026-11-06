@@ -29,6 +29,7 @@ abstract class KnockerTileService : TileService() {
     renderCurrentState()
   }
 
+  /** Shows pending feedback immediately and attaches to shared native work off the main thread. */
   override fun onClick() {
     super.onClick()
 
@@ -85,6 +86,7 @@ abstract class KnockerTileService : TileService() {
     refreshCurrentStateSoon()
   }
 
+  /** Reads the latest slot assignment and schedules active-grant expiry feedback off the main thread. */
   protected fun renderCurrentState() {
     KnockerExecutors.io.execute {
       val profile = KnockerStore.findProfileBySlot(applicationContext, slot)
@@ -110,6 +112,7 @@ abstract class KnockerTileService : TileService() {
     }
   }
 
+  /** Updates system tile state on the main thread while tolerating an unavailable tile instance. */
   private fun renderTile(profile: StoredProfile?, state: Int, subtitle: String?) {
     mainHandler.post {
       val tile = qsTile ?: return@post
@@ -126,6 +129,7 @@ abstract class KnockerTileService : TileService() {
     return "Tile $slot - $status"
   }
 
+  /** Marks a tile active only while its persisted permission is unexpired. */
   private fun currentTileState(profile: StoredProfile): Int {
     val expiresAt = profile.expiresAt ?: return Tile.STATE_INACTIVE
     return if (expiresAt > System.currentTimeMillis()) {
@@ -139,6 +143,7 @@ abstract class KnockerTileService : TileService() {
     return profile.name.takeIf { it.isNotBlank() } ?: "Profile"
   }
 
+  /** Formats the remaining grant time for the system tile subtitle. */
   private fun currentStatus(profile: StoredProfile): String {
     val expiresAt = profile.expiresAt ?: return "Ready"
     val minutes = ((expiresAt - System.currentTimeMillis()) / 60_000L).coerceAtLeast(0L)
@@ -149,6 +154,7 @@ abstract class KnockerTileService : TileService() {
     mainHandler.postDelayed({ renderCurrentState() }, 1500L)
   }
 
+  /** Schedules a refresh at permission expiry only for grants that remain active. */
   private fun refreshCurrentStateAtExpiry(profile: StoredProfile) {
     val expiresAt = profile.expiresAt ?: return
     val delay = (expiresAt - System.currentTimeMillis()).coerceAtLeast(0L)
@@ -162,6 +168,7 @@ abstract class KnockerTileService : TileService() {
     }
   }
 
+  /** Collapses Quick Settings into the installed app using the supported Android launch API. */
   private fun openApp() {
     mainHandler.post {
       val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return@post

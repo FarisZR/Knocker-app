@@ -1,6 +1,7 @@
 import ipaddr from "ipaddr.js";
 import type { Profile } from "./profiles";
 
+/** Builds a deterministic change marker; this hash is not an authentication mechanism. */
 function hashConfiguration(value: string, seed: number): number {
   let hash = seed;
   for (let index = 0; index < value.length; index += 1) {
@@ -70,6 +71,7 @@ export function normalizedGrantTarget(
   ]);
 }
 
+/** Identifies a canonical permission target without coupling grants to display settings. */
 export function grantConfigurationFingerprint(
   profile: Pick<Profile, "endpointUrl" | "apiKey" | "ipOverride">,
 ): string {

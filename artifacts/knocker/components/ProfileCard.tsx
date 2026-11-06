@@ -13,6 +13,7 @@ import { formatCountdown, formatHostname } from "@/lib/format";
 import { performKnockHaptic } from "@/lib/haptics";
 import type { Profile } from "@/lib/profiles";
 
+/** Provides the cross-platform profile fallback with shared pending and renewal-error feedback. */
 export function ProfileCard({
   profile,
   index = 0,
@@ -45,6 +46,7 @@ export function ProfileCard({
     await knockOne(profile.id);
   };
 
+  /** Uses the embedded selection handler when supplied, otherwise the current router. */
   const openProfile = () => {
     if (onOpen) {
       onOpen(profile.id);

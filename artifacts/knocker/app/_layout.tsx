@@ -51,6 +51,7 @@ function reportErrorBoundaryError(error: Error, componentStack: string): void {
 
 const queryClient = new QueryClient();
 
+/** Keeps route navigation available while optional startup work runs separately. */
 function RootLayoutNav() {
   const colors = useColors();
   return (

@@ -26,6 +26,7 @@ sealed interface KnockOutcome {
 }
 
 object KnockerHttp {
+  /** Sends one bounded request on the captured Android network and returns grant or failure metadata. */
   fun knock(profile: StoredProfile, context: Context): KnockOutcome {
     val captured = KnockerNetwork.capture(context)
     val network = captured.identity
@@ -100,6 +101,7 @@ object KnockerHttp {
     }
   }
 
+  /** Consumes and closes a response stream, treating empty payloads as absent. */
   private fun InputStream?.readTextSafely(): String? {
     if (this == null) return null
     return use { input ->
@@ -107,6 +109,7 @@ object KnockerHttp {
     }.takeIf { it.isNotBlank() }
   }
 
+  /** Prefers the server error field but retains plain-text failures for useful feedback. */
   private fun extractErrorMessage(raw: String): String {
     return try {
       val json = JSONObject(raw)
@@ -116,11 +119,13 @@ object KnockerHttp {
     }
   }
 
+  /** Keeps missing grant times nullable rather than interpreting them as epoch zero. */
   private fun JSONObject.optNullableLong(key: String): Long? {
     if (isNull(key) || !has(key)) return null
     return optLong(key)
   }
 
+  /** Omits absent or blank server text from the result metadata. */
   private fun JSONObject.optNullableString(key: String): String? {
     if (isNull(key) || !has(key)) return null
     return optString(key).takeIf { it.isNotBlank() }

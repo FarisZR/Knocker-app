@@ -39,6 +39,7 @@ import { formatCountdown, formatHostname } from "@/lib/format";
 import { performKnockHaptic } from "@/lib/haptics";
 import type { Profile } from "@/lib/profiles";
 
+/** Renders native profile actions, shared request feedback and the draining grant ring without entrance delays. */
 export function ProfileCard({
   profile,
   index = 0,
@@ -129,6 +130,7 @@ export function ProfileCard({
     : failed
       ? c.onErrorContainer
       : c.onSecondaryContainer;
+  /** Opens this profile through the embedded editor callback or the current route instance. */
   const open = () =>
     onOpen ? onOpen(profile.id) : router.push(`/profile/${profile.id}`);
   const spatial = spring({ dampingRatio: 0.72, stiffness: 450 });

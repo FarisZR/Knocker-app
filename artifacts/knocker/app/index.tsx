@@ -43,6 +43,7 @@ import { useProfiles } from "@/context/ProfilesContext";
 import { performKnockHaptic, performTapHaptic } from "@/lib/haptics";
 import { homeActionsHeight } from "@/lib/homeActionsLayout";
 
+/** Shows saved profiles immediately and adapts editing and actions to the available panes. */
 export default function HomeScreen() {
   const router = useRouter();
   const colors = useColors();
@@ -104,6 +105,7 @@ export default function HomeScreen() {
     setSelectedProfileId(profileId);
   }, []);
 
+  /** Switches embedded profiles only after unsaved changes are handled. */
   const requestSelection = useCallback(
     (profileId: string | null) => {
       if (profileId === selectedProfileId) return;
@@ -148,6 +150,7 @@ export default function HomeScreen() {
     return () => subscription.remove();
   }, [requestSelection, selectedProfileId, showTwoPanes]);
 
+  /** Opens a new draft in the detail pane or the compact editor route. */
   const onNew = () => {
     performTapHaptic();
     if (showTwoPanes) {
@@ -165,6 +168,7 @@ export default function HomeScreen() {
     void knockOne(id);
   };
 
+  /** Uses embedded editing on wide windows and a modal route on compact windows. */
   const onOpenProfile = (profileId: string) => {
     if (showTwoPanes) {
       requestSelection(profileId);
@@ -173,11 +177,13 @@ export default function HomeScreen() {
     router.push(`/profile/${profileId}`);
   };
 
+  /** Selects a surviving profile after deleting the current embedded draft. */
   const onEditorDeleted = (profileId: string) => {
     const remaining = profiles.filter((profile) => profile.id !== profileId);
     commitSelection(remaining[0]?.id ?? "new");
   };
 
+  /** Returns a cancelled new draft to the prior saved profile when possible. */
   const onEditorCancel = () => {
     if (!showTwoPanes) {
       commitSelection(null);
@@ -213,7 +219,7 @@ export default function HomeScreen() {
     bottom: animatedFloatingActionBottom.value,
   }));
   const floatingActions =
-    Platform.OS === "android" ? (
+    !loaded ? null : Platform.OS === "android" ? (
       <Animated.View
         style={[
           {

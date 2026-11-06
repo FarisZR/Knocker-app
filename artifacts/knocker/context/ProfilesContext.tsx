@@ -14,6 +14,8 @@ import type { KnockResult } from "@/lib/knock";
 import { performKnock } from "@/lib/performKnock";
 import {
   grantStart,
+  acceptsKnockResult,
+  applyKnockResult,
   mergeGrantsForSave,
   prepareProfileSave,
 } from "@/lib/grants";
@@ -68,6 +70,7 @@ const ProfilesContext = createContext<ProfilesContextValue | null>(null);
 
 type KnockFeedbackMode = "snackbar" | "silent";
 
+/** Hydrates saved profiles while cached Android launch requests run independently. */
 export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -82,6 +85,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       new Set([...pendingCounts.current.keys(), ...nativePending.current]),
     );
   }, []);
+  /** Counts overlapping JS consumers without hiding native requests still in flight. */
   const beginKnocks = useCallback(
     (ids: string[]) => {
       for (const id of ids)
@@ -99,6 +103,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     [publishPending],
   );
   const profilesRef = useRef<Profile[]>([]);
+  const loadedRef = useRef(false);
   profilesRef.current = profiles;
 
   const toNativeSnapshot = useCallback(
@@ -127,6 +132,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  /** Serializes snapshots and merges native grants around storage writes. */
   const persist = useCallback(
     (next: Profile[]) => {
       profilesRef.current = next;
@@ -164,22 +170,13 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     [toNativeSnapshot],
   );
 
-  const updateOne = useCallback(
-    async (id: string, patch: Partial<Profile>) => {
-      const next = profilesRef.current.map((p) =>
-        p.id === id ? { ...p, ...patch } : p,
-      );
-      await persist(next);
-    },
-    [persist],
-  );
-
   const showSnackbar = useCallback((s: Omit<SnackbarState, "id">) => {
     setSnackbar({ ...s, id: Date.now() });
   }, []);
 
   const dismissSnackbar = useCallback(() => setSnackbar(null), []);
 
+  /** Dispatches immediately, then reconciles the result against the current target. */
   const runKnock = useCallback(
     async (id: string, feedbackMode: KnockFeedbackMode = "snackbar") => {
       const profile = profilesRef.current.find((p) => p.id === id);
@@ -191,35 +188,21 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const current = profilesRef.current.find(
           (candidate) => candidate.id === id,
         );
-        if (
-          !current ||
-          nativeConfigurationFingerprint(current) !==
-            nativeConfigurationFingerprint(profile)
-        )
+        if (!current || !acceptsKnockResult(current, profile, result))
           return result;
-        const now = Date.now();
+        const updated = applyKnockResult(current, profile, result);
+        const write = persist(
+          profilesRef.current.map((p) => (p.id === id ? updated : p)),
+        );
         if (feedbackMode === "snackbar") performResultHaptic(result.ok);
         if (result.ok) {
-          await updateOne(id, {
-            lastKnockStatus: "success",
-            lastKnockAt: now,
-            lastError: null,
-            whitelistedEntry: result.whitelistedEntry,
-            expiresAt: result.expiresAt,
-            whitelistedAt:
-              result.whitelistedAt ??
-              grantStart(result.expiresAt, result.expiresInSeconds, now),
-            grantRecordedAt: result.completedAtMillis ?? now,
-            grantNetworkId: result.grantNetworkId ?? null,
-            grantNetworkType: result.grantNetworkType ?? null,
-          });
           if (feedbackMode === "snackbar") {
             const minutes = Math.round(result.expiresInSeconds / 60);
             const baseDetail = result.whitelistedEntry
               ? `${result.whitelistedEntry} · ${minutes}m`
               : `${minutes}m`;
             showSnackbar({
-              text: `Knocked ${profile.name || "profile"}`,
+              text: `Knocked ${current.name || "profile"}`,
               detail: result.ttlCapped
                 ? `${baseDetail} · TTL capped by server`
                 : baseDetail,
@@ -227,14 +210,9 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
             });
           }
         } else {
-          await updateOne(id, {
-            lastKnockStatus: "error",
-            lastKnockAt: now,
-            lastError: result.message,
-          });
           if (feedbackMode === "snackbar") {
             showSnackbar({
-              text: `${profile.name || "Profile"} failed`,
+              text: `${current.name || "Profile"} failed`,
               detail: result.message,
               tone: "error",
               retry: () => {
@@ -243,12 +221,13 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
             });
           }
         }
+        await write;
         return result;
       } finally {
         finish();
       }
     },
-    [updateOne, showSnackbar, beginKnocks],
+    [persist, showSnackbar, beginKnocks],
   );
 
   const knockOne = useCallback(
@@ -258,6 +237,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     [runKnock],
   );
 
+  /** Runs independent requests concurrently and retains edits made during the batch. */
   const knockAll = useCallback(async () => {
     const list = profilesRef.current.filter(
       (profile) => !pendingCounts.current.has(profile.id),
@@ -273,37 +253,9 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       const settled = (await knockBatch(list, performKnock)).map(
         ({ item, result }) => ({ p: item, r: result }),
       );
-      const now = Date.now();
       const next = profilesRef.current.map((existing) => {
         const found = settled.find((s) => s.p.id === existing.id);
-        if (
-          !found ||
-          nativeConfigurationFingerprint(existing) !==
-            nativeConfigurationFingerprint(found.p)
-        )
-          return existing;
-        if (found.r.ok) {
-          return {
-            ...existing,
-            lastKnockStatus: "success" as const,
-            lastKnockAt: now,
-            lastError: null,
-            whitelistedEntry: found.r.whitelistedEntry,
-            expiresAt: found.r.expiresAt,
-            whitelistedAt:
-              found.r.whitelistedAt ??
-              grantStart(found.r.expiresAt, found.r.expiresInSeconds, now),
-            grantRecordedAt: found.r.completedAtMillis ?? now,
-            grantNetworkId: found.r.grantNetworkId ?? null,
-            grantNetworkType: found.r.grantNetworkType ?? null,
-          };
-        }
-        return {
-          ...existing,
-          lastKnockStatus: "error" as const,
-          lastKnockAt: now,
-          lastError: found.r.message,
-        };
+        return found ? applyKnockResult(existing, found.p, found.r) : existing;
       });
       const write = persist(next);
       const successes = settled.filter((s) => s.r.ok).length;
@@ -340,8 +292,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     }
   }, [persist, showSnackbar, beginKnocks]);
 
+  /** Saves only after hydration, keeping grants unless their permission target changed. */
   const upsert = useCallback(
     async (candidate: Profile) => {
+      if (!loadedRef.current) throw new Error("Profiles are still loading");
       const p = prepareProfileSave(
         candidate,
         profilesRef.current.find((profile) => profile.id === candidate.id),
@@ -363,8 +317,10 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     [persist],
   );
 
+  /** Removes a hydrated profile snapshot before deleting its separate secret. */
   const remove = useCallback(
     async (id: string) => {
+      if (!loadedRef.current) throw new Error("Profiles are still loading");
       await persist(profilesRef.current.filter((x) => x.id !== id));
       await deleteProfileSecret(id);
     },
@@ -382,6 +338,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       profilesRef.current = list;
       setProfiles(list);
+      loadedRef.current = true;
       setLoaded(true);
       const launchIds = new Set(
         list.filter((p) => p.knockOnOpen).map((p) => p.id),
@@ -427,6 +384,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
             : profile.ttlSeconds,
           ttlCapped: result.ok && result.ttlCapped,
           configurationFingerprint: nativeConfigurationFingerprint(profile),
+          grantConfigurationFingerprint: grantConfigurationFingerprint(profile),
           whitelistedAtMillis: result.ok
             ? (result.whitelistedAt ??
               grantStart(
@@ -593,6 +551,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Requires the shared provider so screens cannot create competing profile stores. */
 export function useProfiles(): ProfilesContextValue {
   const ctx = useContext(ProfilesContext);
   if (!ctx) throw new Error("useProfiles must be used inside ProfilesProvider");

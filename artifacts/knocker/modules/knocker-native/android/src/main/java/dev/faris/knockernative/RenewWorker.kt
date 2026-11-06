@@ -12,6 +12,7 @@ class RenewWorker(
   appContext: Context,
   params: WorkerParameters
 ) : Worker(appContext, params) {
+  /** Renews the current enabled profile through shared request work and reports its persisted outcome. */
   override fun doWork(): Result {
     val profileId = inputData.getString(KEY_PROFILE_ID)?.takeIf { it.isNotBlank() }
       ?: return Result.failure()

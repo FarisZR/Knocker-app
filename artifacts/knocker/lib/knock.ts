@@ -19,6 +19,7 @@ export interface KnockFailure {
   ok: false;
   status: number | null;
   message: string;
+  completedAtMillis?: number;
 }
 
 export type KnockResult = KnockSuccess | KnockFailure;
@@ -27,6 +28,7 @@ function trimSlash(url: string): string {
   return url.replace(/\/+$/, "");
 }
 
+/** Sends one bounded HTTP knock and interprets grant duration, server caps and errors. */
 export async function knock(profile: Profile): Promise<KnockResult> {
   const url = `${trimSlash(profile.endpointUrl)}/knock`;
   const body: Record<string, unknown> = {};

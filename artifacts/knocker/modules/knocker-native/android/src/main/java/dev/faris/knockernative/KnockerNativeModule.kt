@@ -12,6 +12,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 class KnockerNativeModule : Module() {
+  /** Exposes asynchronous storage and request bridges while preparing launch state without starting HTTP. */
   override fun definition() = ModuleDefinition {
     Name("KnockerNative")
 
@@ -95,6 +96,7 @@ class KnockerNativeModule : Module() {
   private val context: Context
     get() = requireNotNull(appContext.reactContext)
 
+  /** Handles pre-Android-12 devices without requiring exact-alarm permission checks. */
   private fun canScheduleExactAlarms(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
     val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return false

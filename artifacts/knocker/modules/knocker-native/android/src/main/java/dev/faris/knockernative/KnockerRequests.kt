@@ -13,13 +13,15 @@ object KnockerRequests {
   fun pendingIds(): List<String> = requests.keys().map { it.id }.distinct().sorted()
   fun addObserver(observer: (List<String>) -> Unit) { observers.add(observer) }
   fun removeObserver(observer: (List<String>) -> Unit) { observers.remove(observer) }
+  /** Publishes one consistent pending-ID snapshot while isolating observer failures. */
   @Synchronized private fun notifyObservers() {
     val ids = pendingIds()
     observers.forEach { runCatching { it(ids) } }
   }
 
+  /** Shares the actual HTTP request across display edits while keeping distinct targets independent. */
   fun knock(context: Context, profile: StoredProfile): CompletableFuture<LaunchKnockResult> =
-    requests.submit(Key(profile.id, profile.configurationFingerprint)) {
+    requests.submit(Key(profile.id, profile.requestIdentity())) {
       ProfileKnocker.knock(context.applicationContext, profile)
     }
 }

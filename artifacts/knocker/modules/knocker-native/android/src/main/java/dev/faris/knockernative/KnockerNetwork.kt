@@ -15,6 +15,7 @@ object KnockerNetwork {
 
   fun snapshot(context: Context): Identity = capture(context).identity
 
+  /** Captures the default network and a boot-scoped identity without public-IP or SSID requests. */
   fun capture(context: Context): Connection = runCatching {
     val manager = context.getSystemService(ConnectivityManager::class.java)
     val network = manager?.activeNetwork

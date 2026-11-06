@@ -55,6 +55,7 @@ export function newProfile(): Profile {
   };
 }
 
+/** Reads the separate platform secret, tolerating unavailable storage as an empty key. */
 async function getSecret(id: string): Promise<string> {
   try {
     if (Platform.OS === "web") {
@@ -68,6 +69,7 @@ async function getSecret(id: string): Promise<string> {
   }
 }
 
+/** Writes keys outside the profile snapshot using the platform secret store. */
 async function setSecret(id: string, value: string): Promise<void> {
   try {
     if (Platform.OS === "web") {
@@ -90,6 +92,7 @@ async function deleteSecret(id: string): Promise<void> {
   await setSecret(id, "");
 }
 
+/** Hydrates saved profile metadata and keys with defaults for optional fields. */
 export async function loadProfiles(): Promise<Profile[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);

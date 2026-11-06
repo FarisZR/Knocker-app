@@ -23,6 +23,7 @@ export interface NativeProfileSnapshot {
 }
 
 export interface NativeLaunchKnockResult {
+  grantConfigurationFingerprint?: string;
   profileId: string;
   name: string;
   ok: boolean;
@@ -70,6 +71,7 @@ const native =
 export const isNativeAvailable: boolean =
   Platform.OS === "android" && native != null;
 
+/** Uses the Android request coordinator or signals that the JS HTTP fallback is needed. */
 export async function knockProfileNative(
   id: string,
   configuration: string,
@@ -79,6 +81,7 @@ export async function knockProfileNative(
   return raw == null ? null : (JSON.parse(raw) as NativeLaunchKnockResult);
 }
 
+/** Merges native pending events without letting a stale initial read replace a newer event. */
 export function subscribeToNativeKnocks(
   callback: (ids: string[]) => void,
 ): () => void {
@@ -135,6 +138,7 @@ export async function awaitLaunchKnockResults(): Promise<
   return launchResultsPromise;
 }
 
+/** Replaces the native profile cache used by launch, tiles and background renewal. */
 export async function syncProfiles(
   profiles: NativeProfileSnapshot[],
 ): Promise<void> {
@@ -142,6 +146,7 @@ export async function syncProfiles(
   await native.syncProfiles(JSON.stringify(profiles));
 }
 
+/** Reads native snapshots defensively so missing or malformed caches allow JS fallback. */
 export async function loadProfilesFromNative(): Promise<
   NativeProfileSnapshot[]
 > {
@@ -157,6 +162,7 @@ export async function loadProfilesFromNative(): Promise<
   }
 }
 
+/** Schedules native renewal when the platform module is available. */
 export async function scheduleRenewal(
   profileId: string,
   fireAtMs: number,
@@ -165,21 +171,25 @@ export async function scheduleRenewal(
   await native.scheduleRenewal(profileId, fireAtMs);
 }
 
+/** Cancels a profile alarm without requiring the Android module on other platforms. */
 export async function cancelRenewal(profileId: string): Promise<void> {
   if (!native) return;
   await native.cancelRenewal(profileId);
 }
 
+/** Clears native renewal alarms when the platform module is present. */
 export async function cancelAllRenewals(): Promise<void> {
   if (!native) return;
   await native.cancelAllRenewals();
 }
 
+/** Reports exact-alarm access without opening a permission screen. */
 export async function canScheduleExactAlarms(): Promise<boolean> {
   if (!native) return false;
   return native.canScheduleExactAlarms();
 }
 
+/** Opens Android exact-alarm settings only when explicitly invoked by the user. */
 export async function openExactAlarmSettings(): Promise<void> {
   if (!native) return;
   await native.openExactAlarmSettings();

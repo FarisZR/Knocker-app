@@ -16,7 +16,7 @@ Native module creation only allocates a per-launch result holder. After the firs
 
 JavaScript consumes those results and dispatches only profiles missing a matching native result. A native HTTP failure remains a result, so it is not silently sent again through JavaScript. Empty/stale caches, unavailable native modules and unsupported platforms retain concurrent JS fallback. The original batching and feedback tests from #14 are included in the portable test runner.
 
-Fingerprints cover saved configuration and exclude grant/attempt metadata. Native store updates and JS reconciliation reject results from edited profiles. A delayed batch cannot overwrite a newer attempt/grant. Native snapshot replacement preserves newer grants for matching configurations, and queued JS writes prevent storage operations from finishing out of order. Result feedback is published before launch/bulk persistence finishes.
+Fingerprints cover saved configuration and exclude grant/attempt metadata. Native store updates and JS reconciliation reject grants only when the permission target (endpoint, key or normalized IP/CIDR) changes; display and renewal-setting edits retain valid in-flight grants. A delayed batch cannot overwrite a newer attempt/grant. Native snapshot replacement preserves newer grants for matching permission targets, and queued JS writes prevent storage operations from finishing out of order. Result feedback is published before launch/bulk persistence finishes.
 
 ## Connection and IP feedback
 
@@ -90,7 +90,7 @@ Physical-device haptics, a live Caddy deployment and background alarm delivery s
 
 ## CodeRabbit follow-up
 
-The review fixes coordinate all Android request sources (launch, tiles, renewal workers and foreground actions) through one per-profile/configuration future registry. Native pending-state events feed the shared UI state, and the foreground bridge consumes the same result rather than sending a competing fetch. Three JVM tests cover shared futures, independent profile dispatch and retry after failure; run them with `./gradlew :knocker-native:testDebugUnitTest` in the generated Android directory. The JavaScript suite now has 40 tests.
+The review fixes coordinate all Android request sources (launch, tiles, renewal workers and foreground actions) through one per-profile/HTTP-input future registry. Native pending-state events feed the shared UI state, and the foreground bridge consumes the same result rather than sending a competing fetch. Nine JVM tests cover shared futures, independent dispatch, retries, edited-profile grant reconciliation and partially failed startup batches; run them with `./gradlew :knocker-native:testDebugUnitTest` in the generated Android directory. The JavaScript suite now has 48 tests.
 
 Grant ordering uses server grant start time before expiry, with a recording timestamp to distinguish same-second grants. Both native and JS profile synchronization preserve newer grant metadata for the same endpoint/key/normalized target. Changing that target clears grant and attempt metadata; display and renewal-setting edits preserve it. Missing grant duration falls back to receipt time. JS HTTP fallback results never await local connection sampling, and native identity reads are bounded.
 
@@ -99,3 +99,16 @@ Native HTTP opens its connection on the captured Android `Network`. Local identi
 UI fixes retain modal editor drafts through widening/rotation, refresh clean embedded editors after saved configuration changes, reconcile normalized native text after every edit, restore selected-slot toggling, show generic-card renewal errors and shared pending state, and keep snackbar actions inside the available height. Android floating actions remain in the list pane on wide layouts so they do not cover editor fields.
 
 Device follow-up covered blank TTL plus rejected nonnumeric input, slot clear/reselect, dirty rotation and Keep editing, saving back into the wide editor with the saved name, preserving the active grant on rename, and clearing grant/IP feedback after endpoint changes. Release assembly and signature verification passed. The current local deliverable is `builds/knocker-material3-review.apk` (excluded from Git), with a neighboring SHA-256 file.
+
+## Second review follow-up
+
+Successful in-flight grants survive renaming, pinning, slot changes and TTL/renewal edits. Native persistence applies them to the latest saved profile and schedules renewal from its current settings. Results carry a separate permission-target fingerprint, and the shared request registry keys only HTTP inputs, so display edits neither lose grants nor create duplicate requests. Both JS merge paths retain the status and error of a later failed attempt while still recovering a valid earlier grant.
+
+Each native launch future settles independently. An exceptional request becomes an explicit failure result, preserving successful siblings and preventing automatic JS fallback for a request that was already dispatched. Android floating actions stay hidden during profile hydration, and profile mutation APIs reject pre-hydration writes. This does not delay the independent cached native startup batch.
+
+The Android package ID is deliberately `com.fariszr.knocker`, matching PR #14. The previous ID was `dev.faris.knocker`; this is a separate installation under the authorized hard cutover, with no profile migration. It does not update an existing installation using the previous ID.
+
+Production functions touched by this PR now document their contracts and timing/persistence invariants for the requested docstring coverage check.
+
+
+Second-round validation passed: 48 JS tests, 9 native JVM tests, workspace typechecking, release assembly and APK signature verification. The rebuilt APK was installed and cold-launched on the Android 16 emulator. The fixture recorded exactly one request for each startup profile, 27 ms apart; the successful profile retained its ring, IP and grant after saving the renamed draft. Final runtime logs contained no AndroidRuntime or ReactNativeJS errors. The save completed after the slow response, so the device rename-in-flight timing test was inconclusive because the Save selector failed; the exact timing regression is covered by JS and JVM tests. See `screenshots/review-grant-after-rename.png` for the resulting release UI.

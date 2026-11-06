@@ -10,11 +10,13 @@ const path = require("node:path");
 const TILE_SLOT_COUNT = 5;
 const PACKAGE = "dev.faris.knockernative";
 
+/** Adds or replaces a manifest attribute while preserving the other attributes. */
 function ensureAttr(node, name, value) {
   node.$ = node.$ || {};
   node.$[name] = value;
 }
 
+/** Installs the five tile services and private renewal receiver idempotently during prebuild. */
 function withKnockerManifest(config) {
   return withAndroidManifest(config, (cfg) => {
     const manifest = cfg.modResults;
@@ -86,6 +88,7 @@ function withKnockerPermissions(config) {
   ]);
 }
 
+/** Adds the local-module lint exception without replacing existing lint configuration. */
 function withKnockerLint(config) {
   return withDangerousMod(config, [
     "android",

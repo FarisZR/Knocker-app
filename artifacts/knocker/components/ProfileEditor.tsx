@@ -40,6 +40,7 @@ interface ProfileEditorProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
+/** Owns an editable draft; clean drafts refresh from storage while dirty drafts survive layout changes. */
 export function ProfileEditor({
   profileId,
   embedded = false,
@@ -115,6 +116,7 @@ export function ProfileEditor({
     draft.apiKey.trim().length > 0;
   const showSaveAction = !embedded || isDirty;
 
+  /** Normalizes user input and preserves grants only when the permission target is unchanged. */
   const onSave = async () => {
     const sanitized: Profile = prepareProfileSave(
       {
@@ -135,6 +137,7 @@ export function ProfileEditor({
     onSaved(sanitized);
   };
 
+  /** Confirms removal before deleting both the profile and its securely stored key. */
   const onDelete = () => {
     if (isNew) return;
     const doIt = async () => {
@@ -458,6 +461,7 @@ export function ProfileEditor({
   );
 }
 
+/** Groups fields with platform-appropriate Material or fallback typography. */
 function Section({
   title,
   children,
@@ -489,6 +493,7 @@ function Section({
   );
 }
 
+/** Adds supporting text while letting native text fields own their Android labels. */
 function Field({
   label,
   sub,
@@ -517,6 +522,7 @@ function Field({
   );
 }
 
+/** Selects an unoccupied Quick Settings slot with native chips or the platform fallback. */
 function TileSlotPicker({
   value,
   profiles,
@@ -628,6 +634,7 @@ function TileSlotPicker({
   );
 }
 
+/** Pairs explanatory text with an accessible native Android or fallback switch. */
 function ToggleRow({
   label,
   sub,

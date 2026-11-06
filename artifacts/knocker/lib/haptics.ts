@@ -5,6 +5,7 @@ function ignoreHapticFailure(promise: Promise<void>) {
   void promise.catch(() => {});
 }
 
+/** Acknowledges a dispatched knock without waiting for haptic completion. */
 export function performKnockHaptic() {
   if (Platform.OS !== "web") {
     ignoreHapticFailure(
@@ -13,6 +14,7 @@ export function performKnockHaptic() {
   }
 }
 
+/** Provides optional navigation feedback without delaying the action. */
 export function performTapHaptic() {
   if (Platform.OS !== "web") {
     ignoreHapticFailure(
@@ -21,6 +23,7 @@ export function performTapHaptic() {
   }
 }
 
+/** Signals success or failure asynchronously on platforms that support haptics. */
 export function performResultHaptic(success: boolean) {
   if (Platform.OS === "android") {
     ignoreHapticFailure(
