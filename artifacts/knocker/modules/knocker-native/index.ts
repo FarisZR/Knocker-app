@@ -16,6 +16,25 @@ export interface NativeProfileSnapshot {
   whitelistedEntry: string | null;
   grantNetworkId: string | null;
   grantNetworkType: string | null;
+  knockOnOpen: boolean;
+  configurationFingerprint: string;
+}
+
+export interface NativeLaunchKnockResult {
+  profileId: string;
+  name: string;
+  ok: boolean;
+  message: string | null;
+  whitelistedEntry: string | null;
+  expiresInSeconds: number | null;
+  expiresAtMillis: number | null;
+  requestedTtlSeconds: number | null;
+  ttlCapped: boolean;
+  configurationFingerprint: string;
+  whitelistedAtMillis: number | null;
+  grantNetworkId: string | null;
+  grantNetworkType: string | null;
+  completedAtMillis: number;
 }
 
 export interface NativeNetworkIdentity {
@@ -28,6 +47,8 @@ interface KnockerNativeAndroid {
   getNetworkIdentity(): Promise<NativeNetworkIdentity>;
   syncProfiles(profilesJson: string): Promise<void>;
   getProfilesJson(): Promise<string>;
+  startLaunchKnocks(): Promise<void>;
+  getLaunchKnockResultsJson(): Promise<string>;
   scheduleRenewal(profileId: string, fireAtMs: number): Promise<void>;
   cancelRenewal(profileId: string): Promise<void>;
   cancelAllRenewals(): Promise<void>;
@@ -40,6 +61,41 @@ const native =
 
 export const isNativeAvailable: boolean =
   Platform.OS === "android" && native != null;
+
+let launchStarted = false;
+let resolveLaunchResults: (results: NativeLaunchKnockResult[]) => void;
+const launchResultsPromise = new Promise<NativeLaunchKnockResult[]>(
+  (resolve) => {
+    resolveLaunchResults = resolve;
+  },
+);
+
+/** Called after the first visible frame; never starts work during module import. */
+export function startLaunchKnocks(): void {
+  if (launchStarted) return;
+  launchStarted = true;
+  if (!native?.startLaunchKnocks || !native?.getLaunchKnockResultsJson) {
+    resolveLaunchResults([]);
+    return;
+  }
+  void Promise.resolve()
+    .then(() => native.startLaunchKnocks())
+    .then(() => native.getLaunchKnockResultsJson())
+    .then((raw) => {
+      const parsed = JSON.parse(raw);
+      resolveLaunchResults(Array.isArray(parsed) ? parsed : []);
+    })
+    .catch(() => resolveLaunchResults([]));
+}
+
+/** Reading results never starts a second batch or waits on the UI thread. */
+export async function awaitLaunchKnockResults(): Promise<
+  NativeLaunchKnockResult[]
+> {
+  if (!native?.startLaunchKnocks || !native?.getLaunchKnockResultsJson)
+    return [];
+  return launchResultsPromise;
+}
 
 export async function syncProfiles(
   profiles: NativeProfileSnapshot[],

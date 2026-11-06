@@ -12,7 +12,10 @@ sealed interface KnockOutcome {
     val whitelistedEntry: String?,
     val whitelistedAtMillis: Long,
     val networkId: String?,
-    val networkType: String
+    val networkType: String,
+    val expiresInSeconds: Long?,
+    val requestedTtlSeconds: Int?,
+    val ttlCapped: Boolean
   ) : KnockOutcome
 
   data class Failure(
@@ -69,6 +72,8 @@ object KnockerHttp {
       }
 
       val json = payload?.let { JSONObject(it) } ?: JSONObject()
+      val seconds = json.optNullableLong("expires_in_seconds")
+      val requestedTtl = profile.ttlSeconds?.takeIf { it > 0 }
       KnockOutcome.Success(
         expiresAtMillis = json.optNullableLong("expires_at")?.times(1000L),
         whitelistedEntry = json.optNullableString("whitelisted_entry"),
@@ -77,7 +82,10 @@ object KnockerHttp {
           if (seconds != null && seconds > 0) expiry - seconds * 1000L else System.currentTimeMillis()
         } ?: System.currentTimeMillis(),
         networkId = network.id,
-        networkType = network.type
+        networkType = network.type,
+        expiresInSeconds = seconds,
+        requestedTtlSeconds = requestedTtl,
+        ttlCapped = requestedTtl != null && seconds != null && seconds > 0 && seconds < requestedTtl.toLong() - 5L
       )
     } catch (error: Exception) {
       val message = when (error) {

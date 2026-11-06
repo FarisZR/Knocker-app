@@ -19,7 +19,7 @@ class RenewWorker(
 
     return when (val knockResult = KnockerHttp.knock(profile, applicationContext)) {
       is KnockOutcome.Success -> {
-        val updated = KnockerStore.updateGrant(applicationContext, profileId, knockResult)
+        val updated = KnockerStore.updateGrant(applicationContext, profileId, knockResult, profile.configurationFingerprint)
         val current = updated ?: profile
         val nextFireAt = updated?.renewalAtMillis()
         if (nextFireAt != null) {

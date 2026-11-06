@@ -8,6 +8,16 @@ Android profile cards, knock/save buttons, outlined text fields, switches, tile 
 
 The bottom-right floating action cluster retains New profile, every pinned knock shortcut, and Knock all. It scrolls when needed. Compact grouped server rows use shape badges, emphasized type, green active containers, a draining remaining-lifetime ring in place of the active badge and an inline countdown, the whitelisted IP, a morphing loading indicator, wavy progress, and native spring transitions. All knock entry points share pending state, so pinned and bulk knocks animate the affected rows too. Error feedback stays visible until retry or dismissal.
 
+## Startup performance and PR #14
+
+This implementation supersedes [PR #14](https://github.com/FarisZR/Knocker-app/pull/14), including its native cached launch batching, concurrent JS fallback/manual batches, consistent pending and persistent result feedback, failed-profile retry, configuration fingerprints, package identifier (`com.fariszr.knocker`), tile component resolution and clean prebuild support. It retains SDK 58 and the native Expressive UI.
+
+Native module creation only allocates a per-launch result holder. After the first app frame, the startup controller starts one cached Android batch on the next frame. Encrypted native storage and HTTP run on the IO pool, without waiting for JavaScript profile/key hydration, fonts, animations, permission dialogs or public-IP checks. Up to four native requests run concurrently. Repeated starts or result readers share the batch; the Expo module queue stays free while HTTP is pending.
+
+JavaScript consumes those results and dispatches only profiles missing a matching native result. A native HTTP failure remains a result, so it is not silently sent again through JavaScript. Empty/stale caches, unavailable native modules and unsupported platforms retain concurrent JS fallback. The original batching and feedback tests from #14 are included in the portable test runner.
+
+Fingerprints cover saved configuration and exclude grant/attempt metadata. Native store updates and JS reconciliation reject results from edited profiles. A delayed batch cannot overwrite a newer attempt/grant. Native snapshot replacement preserves newer grants for matching configurations, and queued JS writes prevent storage operations from finishing out of order. Result feedback is published before launch/bulk persistence finishes.
+
 ## Connection and IP feedback
 
 Android reads the default connection locally using `ConnectivityManager`: Wi-Fi, cellular, Ethernet or VPN, plus an opaque network handle scoped to the device boot. This does not contact an IP service or access SSID/location. A different connection warns that the public IP **may** have changed; it cannot prove an address change on its own. A router can change its public address without changing the phone's connection.
@@ -40,7 +50,7 @@ WorkManager is updated to 2.12.0. The local module ships consumer keep rules for
 
 ## Controlled UI validation
 
-`node artifacts/knocker/scripts/ui-test-server.mjs` starts a loopback-only Caddy-shaped fixture. Expose it through an HTTPS tunnel for an emulator/device: `/ok` accepts knocks, `/denied` returns a 403, and responses wait 1.4 seconds so in-flight feedback can be inspected. Use fake keys. The fixture returns the documentation IP `203.0.113.42` and is never included in the app's runtime.
+`node artifacts/knocker/scripts/ui-test-server.mjs` starts a loopback-only Caddy-shaped fixture. Expose it through an HTTPS tunnel for an emulator/device: `/ok` accepts knocks, `/denied` returns a 403, and responses wait 1.4 seconds so in-flight feedback can be inspected. `/slow` waits eight seconds to validate leaving the app before the response. Use fake keys. The fixture returns the documentation IP `203.0.113.42` and is never included in the app's runtime.
 
 ## References
 
@@ -68,7 +78,12 @@ The optimized, embedded-bundle APK was installed on the Pixel 7 Android 16 emula
 | Editor | Masked key, HTTPS validation, save, native switches/chips, occupied tile slot, unsaved-change protection and delete/cancel exercised |
 | System configuration | Light/dark palette and extra-large text; navigation remains functional after font configuration changes |
 | Release runtime | No AndroidRuntime or ReactNativeJS errors during the final installed-build session |
+| Cached native startup | Two profiles sent exactly once per cold launch, with native dispatch confirmed by `KnockerLaunch` logs; fixture requests arrived 6 ms apart on the first run and 8 ms apart on the second |
+| Leave app while startup is pending | Back left the new app at 15:25:27 UTC; the slow response completed at 15:25:32; returning displayed the native grant/ring/IP without a new startup batch |
+| Launch retry | Retried only the denied profile; the successful slow profile received no extra request |
 
-Automated validation passed: workspace typechecking, all 20 Expo Doctor checks, Expo dependency compatibility, web export, and 10 tests covering grant expiry/fractions, address-family normalization, CIDRs, unavailable families and the opt-out request guard.
+Automated validation passed: workspace typechecking, all 20 Expo Doctor checks, Expo dependency compatibility, web export, and 24 tests covering grant expiry/fractions, IP privacy/comparison, immediate concurrent dispatch, startup bridge idempotence, native fallback and configuration-safe result merging.
+
+The arrival gaps above verify concurrent requests in the controlled test, not total app startup latency. The eight-second server delay is intentional fixture behavior. These checks used the rebuilt `com.fariszr.knocker` release APK after the PR #14 integration.
 
 Physical-device haptics, a live Caddy deployment and background alarm delivery still need device validation. Quick Settings slot assignment was exercised in the editor, but actual tile invocation was not verified: the emulator's expanded Quick Settings panel repeatedly failed accessibility snapshots (`mw537c6k-75ad8959`), so that test path was stopped.

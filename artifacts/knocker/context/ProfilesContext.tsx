@@ -11,16 +11,26 @@ import React, {
 import { AppState } from "react-native";
 
 import { knock, type KnockResult } from "@/lib/knock";
+import { knockBatch } from "@/lib/knockBatch";
+import { pendingKnockFeedback } from "@/lib/knockFeedback";
+import {
+  applyLaunchResults,
+  selectLaunchResults,
+  mergeExpiryFromNative,
+} from "@/lib/launchResults";
 import { scheduleRenewals } from "@/lib/autoRenew";
 import {
   deleteProfileSecret,
   loadProfiles,
+  nativeConfigurationFingerprint,
   saveProfiles,
   type Profile,
 } from "@/lib/profiles";
 import {
   isNativeAvailable as isKnockerNativeAvailable,
   getNetworkIdentity,
+  awaitLaunchKnockResults,
+  type NativeLaunchKnockResult,
   loadProfilesFromNative,
   syncProfiles as syncProfilesToNative,
   type NativeProfileSnapshot,
@@ -75,39 +85,9 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const profilesRef = useRef<Profile[]>([]);
   profilesRef.current = profiles;
 
-  const persist = useCallback(async (next: Profile[]) => {
-    profilesRef.current = next;
-    setProfiles(next);
-    await saveProfiles(next);
-    if (isKnockerNativeAvailable) {
-      const snapshot: NativeProfileSnapshot[] = next.map((p) => ({
-        id: p.id,
-        name: p.name,
-        endpointUrl: p.endpointUrl,
-        apiKey: p.apiKey,
-        ttlSeconds: p.ttlSeconds,
-        ipOverride: p.ipOverride,
-        autoRenew: p.autoRenew,
-        autoRenewSafetyWindowSec: p.autoRenewSafetyWindowSec,
-        tileSlot: p.tileSlot,
-        expiresAt: p.expiresAt,
-        whitelistedAt: p.whitelistedAt,
-        whitelistedEntry: p.whitelistedEntry,
-        grantNetworkId: p.grantNetworkId,
-        grantNetworkType: p.grantNetworkType,
-      }));
-      // Wait for native storage so a just-saved tile mapping works immediately.
-      try {
-        await syncProfilesToNative(snapshot);
-      } catch (error) {
-        console.warn("Failed to sync profiles to native storage.", error);
-      }
-    }
-  }, []);
-
   const toNativeSnapshot = useCallback(
-    (list: Profile[]): NativeProfileSnapshot[] => {
-      return list.map((p) => ({
+    (list: Profile[]): NativeProfileSnapshot[] =>
+      list.map((p) => ({
         id: p.id,
         name: p.name,
         endpointUrl: p.endpointUrl,
@@ -122,41 +102,33 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         whitelistedEntry: p.whitelistedEntry,
         grantNetworkId: p.grantNetworkId,
         grantNetworkType: p.grantNetworkType,
-      }));
-    },
+        knockOnOpen: p.knockOnOpen,
+        configurationFingerprint: nativeConfigurationFingerprint(p),
+      })),
     [],
   );
 
-  const mergeExpiryFromNative = useCallback(
-    (
-      jsProfiles: Profile[],
-      nativeProfiles: NativeProfileSnapshot[],
-    ): Profile[] => {
-      if (nativeProfiles.length === 0) return jsProfiles;
-      const nativeById = new Map(nativeProfiles.map((p) => [p.id, p]));
-      return jsProfiles.map((profile) => {
-        const nativeProfile = nativeById.get(profile.id);
-        if (!nativeProfile || nativeProfile.expiresAt == null) return profile;
-        if (
-          profile.expiresAt == null ||
-          nativeProfile.expiresAt > profile.expiresAt ||
-          (nativeProfile.whitelistedAt ?? 0) > (profile.whitelistedAt ?? 0)
-        ) {
-          return {
-            ...profile,
-            expiresAt: nativeProfile.expiresAt,
-            whitelistedAt: nativeProfile.whitelistedAt,
-            whitelistedEntry: nativeProfile.whitelistedEntry,
-            grantNetworkId: nativeProfile.grantNetworkId,
-            grantNetworkType: nativeProfile.grantNetworkType,
-            lastKnockStatus: "success",
-            lastError: null,
-          };
-        }
-        return profile;
-      });
+  const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  const persist = useCallback(
+    (next: Profile[]) => {
+      profilesRef.current = next;
+      setProfiles(next);
+      const write = persistenceQueue.current
+        .catch(() => {})
+        .then(async () => {
+          await saveProfiles(next);
+          if (isKnockerNativeAvailable) {
+            try {
+              await syncProfilesToNative(toNativeSnapshot(next));
+            } catch (error) {
+              console.warn("Failed to sync profiles to native storage.", error);
+            }
+          }
+        });
+      persistenceQueue.current = write;
+      return write;
     },
-    [],
+    [toNativeSnapshot],
   );
 
   const updateOne = useCallback(
@@ -185,6 +157,15 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const networkPromise = getNetworkIdentity();
         const result: KnockResult = await knock(profile);
         const network = await networkPromise;
+        const current = profilesRef.current.find(
+          (candidate) => candidate.id === id,
+        );
+        if (
+          !current ||
+          nativeConfigurationFingerprint(current) !==
+            nativeConfigurationFingerprint(profile)
+        )
+          return result;
         const now = Date.now();
         if (feedbackMode === "snackbar") performResultHaptic(result.ok);
         if (result.ok) {
@@ -249,14 +230,24 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     const finish = beginKnocks(list.map((p) => p.id));
     try {
       const networkPromise = getNetworkIdentity();
-      const settled = await Promise.all(
-        list.map(async (p) => ({ p, r: await knock(p) })),
+      showSnackbar({
+        ...pendingKnockFeedback(list.length),
+        tone: "info",
+        persistent: true,
+      });
+      const settled = (await knockBatch(list, knock)).map(
+        ({ item, result }) => ({ p: item, r: result }),
       );
       const network = await networkPromise;
       const now = Date.now();
       const next = profilesRef.current.map((existing) => {
         const found = settled.find((s) => s.p.id === existing.id);
-        if (!found) return existing;
+        if (
+          !found ||
+          nativeConfigurationFingerprint(existing) !==
+            nativeConfigurationFingerprint(found.p)
+        )
+          return existing;
         if (found.r.ok) {
           return {
             ...existing,
@@ -277,7 +268,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           lastError: found.r.message,
         };
       });
-      await persist(next);
+      const write = persist(next);
       const successes = settled.filter((s) => s.r.ok).length;
       const failures = settled.length - successes;
       performResultHaptic(failures === 0);
@@ -306,6 +297,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
               }
             : undefined,
       });
+      await write;
     } finally {
       finish();
     }
@@ -338,91 +330,131 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     [persist],
   );
 
-  // Initial load
+  // Hydrate the UI independently of the cached Android batch. RootLayout starts
+  // native HTTP after the first frame; reading the promise never starts work.
   useEffect(() => {
     let cancelled = false;
+    let finish: (() => void) | undefined;
     void (async () => {
-      const nativeProfilesPromise = isKnockerNativeAvailable
-        ? loadProfilesFromNative()
-        : Promise.resolve<NativeProfileSnapshot[]>([]);
+      const nativeResultsPromise = awaitLaunchKnockResults();
       const list = await loadProfiles();
       if (cancelled) return;
       profilesRef.current = list;
       setProfiles(list);
       setLoaded(true);
-
-      if (isKnockerNativeAvailable) {
-        void (async () => {
-          const nativeProfiles = await nativeProfilesPromise;
-          if (cancelled) return;
-
-          const mergedProfiles = mergeExpiryFromNative(
-            profilesRef.current,
-            nativeProfiles,
-          );
-          profilesRef.current = mergedProfiles;
-          setProfiles(mergedProfiles);
-
-          // Push the freshly loaded snapshot into the native store so tiles &
-          // alarms have current data even if no edit happens this session.
-          void syncProfilesToNative(toNativeSnapshot(mergedProfiles));
-        })();
-      }
-
-      const launchProfiles = list.filter((p) => p.knockOnOpen);
-      if (launchProfiles.length === 0) return;
-      const settled = await Promise.all(
-        launchProfiles.map(async (profile) => ({
-          profile,
-          result: await runKnock(profile.id, "silent"),
-        })),
+      const launchIds = new Set(
+        list.filter((p) => p.knockOnOpen).map((p) => p.id),
       );
+      if (launchIds.size) {
+        finish = beginKnocks([...launchIds]);
+        showSnackbar({
+          ...pendingKnockFeedback(
+            launchIds.size,
+            "Startup request sent · waiting for Knocker server",
+          ),
+          tone: "info",
+          persistent: true,
+        });
+      }
+
+      // Do not sync a pre-launch snapshot over a native grant that is in flight.
+      const nativeResults = await nativeResultsPromise;
       if (cancelled) return;
-      const successes = settled.filter((s) => s.result?.ok).length;
-      const failures = settled.length - successes;
-      const cappedCount = settled.filter(
-        (s) => s.result?.ok && s.result.ttlCapped,
-      ).length;
-      const failedNames = settled
-        .filter((s) => s.result && !s.result.ok)
-        .map((s) => s.profile.name || "unnamed")
-        .slice(0, 2)
-        .join(", ");
-      const detailParts: string[] = [
-        `${successes}/${launchProfiles.length} profile${launchProfiles.length === 1 ? "" : "s"} whitelisted`,
-      ];
-      if (failures > 0) {
-        detailParts.push(
-          `${failures} failed${failedNames ? ` · ${failedNames}${failures > 2 ? ", …" : ""}` : ""}`,
-        );
-      }
-      if (cappedCount > 0) {
-        detailParts.push(`${cappedCount} TTL capped by server`);
-      }
-      showSnackbar({
-        text:
-          failures > 0
+      const currentTargets = profilesRef.current.filter((p) =>
+        launchIds.has(p.id),
+      );
+      const { matching, missing } = selectLaunchResults(
+        currentTargets,
+        nativeResults,
+      );
+      const networkPromise = getNetworkIdentity();
+      const settled = await knockBatch(missing, async (profile) => ({
+        result: await knock(profile),
+        completedAtMillis: Date.now(),
+      }));
+      const network = await networkPromise;
+      if (cancelled) return;
+      const jsResults: NativeLaunchKnockResult[] = settled.map(
+        ({ item: profile, result: { result, completedAtMillis } }) => ({
+          profileId: profile.id,
+          name: profile.name,
+          ok: result.ok,
+          message: result.ok ? null : result.message,
+          whitelistedEntry: result.ok ? result.whitelistedEntry : null,
+          expiresInSeconds: result.ok ? result.expiresInSeconds : null,
+          expiresAtMillis: result.ok ? result.expiresAt : null,
+          requestedTtlSeconds: result.ok
+            ? result.requestedTtlSeconds
+            : profile.ttlSeconds,
+          ttlCapped: result.ok && result.ttlCapped,
+          configurationFingerprint: nativeConfigurationFingerprint(profile),
+          whitelistedAtMillis: result.ok
+            ? result.expiresAt - result.expiresInSeconds * 1000
+            : null,
+          grantNetworkId: network?.id ?? null,
+          grantNetworkType: network?.type ?? null,
+          completedAtMillis,
+        }),
+      );
+      const nativeProfiles = isKnockerNativeAvailable
+        ? await loadProfilesFromNative()
+        : [];
+      if (cancelled) return;
+      const allResults = selectLaunchResults(profilesRef.current, [
+        ...matching,
+        ...jsResults,
+      ]).matching;
+      const next = applyLaunchResults(
+        mergeExpiryFromNative(profilesRef.current, nativeProfiles),
+        allResults,
+      );
+      // Publish results before disk writes or native snapshot synchronization.
+      const write = persist(next);
+      if (allResults.length) {
+        const successes = allResults.filter((result) => result.ok).length;
+        const failed = allResults.filter((result) => !result.ok);
+        const capped = allResults.filter(
+          (result) => result.ok && result.ttlCapped,
+        ).length;
+        const detail = [
+          `${successes}/${allResults.length} profile${allResults.length === 1 ? "" : "s"} whitelisted`,
+        ];
+        if (failed.length)
+          detail.push(
+            `${failed.length} failed · ${failed
+              .map((result) => result.name || "unnamed")
+              .slice(0, 2)
+              .join(", ")}`,
+          );
+        if (capped) detail.push(`${capped} TTL capped by server`);
+        showSnackbar({
+          text: failed.length
             ? "Launch knock finished with issues"
             : "Launch knock succeeded",
-        detail: detailParts.join(" · "),
-        tone: failures > 0 ? "error" : cappedCount > 0 ? "info" : "success",
-        persistent: true,
-        retry:
-          failures > 0
+          detail: detail.join(" · "),
+          tone: failed.length ? "error" : capped ? "info" : "success",
+          persistent: true,
+          retry: failed.length
             ? () => {
-                for (const failed of settled) {
-                  if (failed.result && !failed.result.ok) {
-                    void runKnock(failed.profile.id);
-                  }
-                }
+                for (const result of failed) void runKnock(result.profileId);
               }
             : undefined,
+        });
+      } else if (launchIds.size) dismissSnackbar();
+      await write;
+    })()
+      .catch((error) => {
+        console.warn("Failed to reconcile launch knocks.", error);
+      })
+      .finally(() => {
+        finish?.();
       });
-    })();
     return () => {
       cancelled = true;
+      finish?.();
+      finish = undefined;
     };
-  }, [mergeExpiryFromNative, runKnock, showSnackbar, toNativeSnapshot]);
+  }, [beginKnocks, dismissSnackbar, persist, runKnock, showSnackbar]);
 
   // Tiles and background renewals can finish while the activity is stopped.
   useEffect(() => {
@@ -434,13 +466,13 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const merged = mergeExpiryFromNative(previous, nativeProfiles);
         if (!merged.some((profile, index) => profile !== previous[index]))
           return;
-        profilesRef.current = merged;
-        setProfiles(merged);
-        void saveProfiles(merged);
+        void persist(merged).catch((error) => {
+          console.warn("Failed to persist native grant updates.", error);
+        });
       });
     });
     return () => subscription.remove();
-  }, [loaded, mergeExpiryFromNative]);
+  }, [loaded, persist]);
 
   // Reschedule renewals whenever profiles change. Gate is keyed by
   // (profileId, expiresAt) so a single expiry value can only trigger one

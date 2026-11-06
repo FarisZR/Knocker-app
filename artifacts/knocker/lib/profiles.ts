@@ -116,3 +116,5 @@ export async function saveProfiles(profiles: Profile[]): Promise<void> {
 export async function deleteProfileSecret(id: string): Promise<void> {
   await deleteSecret(id);
 }
+
+export { nativeConfigurationFingerprint } from "./profileConfiguration";

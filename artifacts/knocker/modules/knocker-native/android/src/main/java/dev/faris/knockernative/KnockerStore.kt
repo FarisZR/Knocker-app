@@ -21,7 +21,9 @@ data class StoredProfile(
   val whitelistedAt: Long? = null,
   val whitelistedEntry: String? = null,
   val grantNetworkId: String? = null,
-  val grantNetworkType: String? = null
+  val grantNetworkType: String? = null,
+  val knockOnOpen: Boolean = false,
+  val configurationFingerprint: String = ""
 ) {
   fun canKnock(): Boolean {
     return endpointUrl.isNotBlank() && apiKey.isNotBlank()
@@ -54,7 +56,17 @@ object KnockerStore {
     }
 
     synchronized(profileLock) {
-      writeProfiles(context, profiles)
+      val previous = readProfiles(context).associateBy { it.id }
+      val merged = profiles.map { incoming ->
+        val cached = previous[incoming.id]
+        if (cached != null && cached.configurationFingerprint == incoming.configurationFingerprint &&
+          (cached.whitelistedAt ?: 0L) > (incoming.whitelistedAt ?: 0L)) {
+          incoming.copy(expiresAt = cached.expiresAt, whitelistedAt = cached.whitelistedAt,
+            whitelistedEntry = cached.whitelistedEntry, grantNetworkId = cached.grantNetworkId,
+            grantNetworkType = cached.grantNetworkType)
+        } else incoming
+      }
+      writeProfiles(context, merged)
     }
   }
 
@@ -78,12 +90,14 @@ object KnockerStore {
   fun updateGrant(
     context: Context,
     profileId: String,
-    grant: KnockOutcome.Success
+    grant: KnockOutcome.Success,
+    expectedConfigurationFingerprint: String
   ): StoredProfile? {
     synchronized(profileLock) {
       val profiles = readProfiles(context).toMutableList()
       val index = profiles.indexOfFirst { it.id == profileId }
-      if (index < 0) return null
+      if (index < 0 || profiles[index].configurationFingerprint != expectedConfigurationFingerprint) return null
+      if ((profiles[index].whitelistedAt ?: 0L) > grant.whitelistedAtMillis) return null
 
       val updated = profiles[index].withGrant(grant)
       profiles[index] = updated
@@ -130,7 +144,9 @@ object KnockerStore {
               whitelistedAt = objectJson.optStrictNullableLong("whitelistedAt"),
               whitelistedEntry = objectJson.optNullableString("whitelistedEntry"),
               grantNetworkId = objectJson.optNullableString("grantNetworkId"),
-              grantNetworkType = objectJson.optNullableString("grantNetworkType")
+              grantNetworkType = objectJson.optNullableString("grantNetworkType"),
+              knockOnOpen = objectJson.optBoolean("knockOnOpen", false),
+              configurationFingerprint = objectJson.optString("configurationFingerprint")
             )
           )
         }
@@ -157,6 +173,8 @@ object KnockerStore {
       putNullable("whitelistedEntry", whitelistedEntry)
       putNullable("grantNetworkId", grantNetworkId)
       putNullable("grantNetworkType", grantNetworkType)
+      put("knockOnOpen", knockOnOpen)
+      put("configurationFingerprint", configurationFingerprint)
     }
   }
 

@@ -6,12 +6,28 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 class KnockerNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KnockerNative")
+
+    // Allocate only lightweight state on module creation; no storage or HTTP.
+    OnCreate { LaunchKnocker.prepareForLaunch() }
+
+    AsyncFunction("startLaunchKnocks") {
+      LaunchKnocker.startForLaunch(context)
+      null
+    }
+
+    // Do not block Expo's module queue while HTTP runs on the IO pool.
+    AsyncFunction("getLaunchKnockResultsJson") { promise: Promise ->
+      LaunchKnocker.resultsFuture().whenComplete { results, error ->
+        promise.resolve(LaunchKnocker.resultsToJson(if (error == null) results else emptyList()))
+      }
+    }
 
     AsyncFunction("getNetworkIdentity") { KnockerNetwork.snapshot(context).toMap() }
 

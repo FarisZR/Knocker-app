@@ -1,8 +1,11 @@
 const {
   withAndroidManifest,
   AndroidConfig,
+  withDangerousMod,
   withPlugins,
 } = require("expo/config-plugins");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 
 const TILE_SLOT_COUNT = 5;
 const PACKAGE = "dev.faris.knockernative";
@@ -42,8 +45,7 @@ function withKnockerManifest(config) {
           action: [
             {
               $: {
-                "android:name":
-                  "android.service.quicksettings.action.QS_TILE",
+                "android:name": "android.service.quicksettings.action.QS_TILE",
               },
             },
           ],
@@ -53,8 +55,7 @@ function withKnockerManifest(config) {
       node["meta-data"] = [
         {
           $: {
-            "android:name":
-              "android.service.quicksettings.ACTIVE_TILE",
+            "android:name": "android.service.quicksettings.ACTIVE_TILE",
             "android:value": "true",
           },
         },
@@ -85,6 +86,45 @@ function withKnockerPermissions(config) {
   ]);
 }
 
+function withKnockerLint(config) {
+  return withDangerousMod(config, [
+    "android",
+    async (cfg) => {
+      const lintPath = path.join(
+        cfg.modRequest.platformProjectRoot,
+        "app",
+        "lint.xml",
+      );
+      let contents;
+      try {
+        contents = await fs.readFile(lintPath, "utf8");
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        contents = '<?xml version="1.0" encoding="UTF-8"?>\n<lint>\n</lint>\n';
+      }
+
+      if (!contents.includes('id="Instantiatable"')) {
+        if (!contents.includes("</lint>")) {
+          throw new Error(
+            `Cannot update malformed Android lint config: ${lintPath}`,
+          );
+        }
+        contents = contents.replace(
+          "</lint>",
+          '  <!-- Expo/local-module components are compiled separately from the app lint model. -->\n  <issue id="Instantiatable" severity="ignore" />\n</lint>',
+        );
+        await fs.writeFile(lintPath, contents);
+      }
+
+      return cfg;
+    },
+  ]);
+}
+
 module.exports = function withKnockerNative(config) {
-  return withPlugins(config, [withKnockerPermissions, withKnockerManifest]);
+  return withPlugins(config, [
+    withKnockerPermissions,
+    withKnockerManifest,
+    withKnockerLint,
+  ]);
 };

@@ -1,3 +1,4 @@
+import { startLaunchKnocks } from "knocker-native";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -82,10 +83,17 @@ function RootLayoutNav() {
 
 function StartupReadyController() {
   useEffect(() => {
+    let knockFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
       void SplashScreen.hideAsync();
+      // Begin the cached native batch on the next frame, without awaiting JS
+      // profile/key hydration, animations, font loading or public-IP checks.
+      knockFrame = requestAnimationFrame(startLaunchKnocks);
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (knockFrame !== null) cancelAnimationFrame(knockFrame);
+    };
   }, []);
 
   return null;

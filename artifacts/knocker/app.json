@@ -11,7 +11,7 @@
       "supportsTablet": false
     },
     "android": {
-      "package": "dev.faris.knocker",
+      "package": "com.fariszr.knocker",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "monochromeImage": "./assets/images/adaptive-icon.png",

@@ -13,10 +13,13 @@ createServer(async (req, res) => {
     ttl = Math.min(300, Math.max(10, JSON.parse(raw || "{}").ttl || 300));
   } catch {}
   console.log(`${new Date().toISOString()} POST ${req.url}`);
-  await new Promise((resolve) => setTimeout(resolve, 1400));
+  await new Promise((resolve) =>
+    setTimeout(resolve, req.url.includes("/slow/") ? 8000 : 1400),
+  );
   res.setHeader("Content-Type", "application/json");
   if (req.url.includes("/denied/")) {
     res.writeHead(403).end(JSON.stringify({ error: "Demo key denied" }));
+    console.log(`${new Date().toISOString()} REPLY 403 ${req.url}`);
     return;
   }
   res.end(
@@ -26,6 +29,7 @@ createServer(async (req, res) => {
       expires_in_seconds: ttl,
     }),
   );
+  console.log(`${new Date().toISOString()} REPLY 200 ${req.url}`);
 }).listen(port, "127.0.0.1", () =>
   console.log(`UI fixture: http://127.0.0.1:${port}`),
 );

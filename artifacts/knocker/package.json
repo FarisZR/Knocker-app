@@ -10,8 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "android:debug": "expo run:android",
     "android:release": "expo run:android --variant release",
-    "android:apk": "expo prebuild --platform android && cd android && ./gradlew assembleRelease && echo \"\\nAPK: $(pwd)/app/build/outputs/apk/release/app-release.apk\"",
-    "test": "node --test tests/*.test.mjs"
+    "android:apk": "expo prebuild --platform android --clean --no-install --skip-dependency-update expo,react,react-native && cd android && ./gradlew assembleRelease",
+    "test": "node --test tests/*.test.mjs",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "devDependencies": {
     "@babel/core": "^7.29.13",
