@@ -3,11 +3,12 @@
 package dev.faris.knockernative
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -103,7 +104,7 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
         if (!state.loaded) item {
           LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading profiles" })
         }
-        items(state.profiles, key = { profile -> profile.optString("id") }) { profile ->
+        itemsIndexed(state.profiles, key = { index, _ -> state.profileRenderKeys[index] }) { _, profile ->
           NativeProfileCard(profile, state, now, onOpen, onKnock)
         }
       }
@@ -118,6 +119,7 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val colors = MaterialTheme.colorScheme
   val dark = isSystemInDarkTheme()
   val id = profile.optString("id"); val name = profile.optString("name").ifBlank { "Untitled profile" }
+  val hasIdentity = !profile.textOrNull("id").isNullOrBlank()
   val pending = id in state.pending
   val expiry = profile.optLong("expiresAt"); val start = profile.optLong("whitelistedAt")
   val active = expiry > now
@@ -145,7 +147,7 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
     shape = MaterialTheme.shapes.extraLarge,
     colors = CardDefaults.elevatedCardColors(containerColor = if (showNotice) noticeColor else fill, contentColor = content),
     elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (showNotice) 3.dp else 1.dp)) {
-    Surface(onClick = { onOpen(id) }, color = fill, contentColor = content,
+    Surface(onClick = { onOpen(id) }, enabled = hasIdentity, color = fill, contentColor = content,
       modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Edit $name" },
       shape = MaterialTheme.shapes.extraLarge, shadowElevation = if (showNotice) 2.dp else 0.dp
     ) {
@@ -169,7 +171,7 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
             Text(profile.optString("endpointUrl").removePrefix("https://").trimEnd('/'), color = supporting,
               style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
-          Button(onClick = { onKnock(id) }, enabled = !pending && profile.optString("apiKey").isNotBlank(), shapes = ButtonDefaults.shapes(),
+          Button(onClick = { onKnock(id) }, enabled = hasIdentity && !pending && profile.optString("apiKey").isNotBlank(), shapes = ButtonDefaults.shapes(),
             colors = ButtonDefaults.buttonColors(containerColor = if (active) success else colors.primary,
               contentColor = if (active) onSuccess else colors.onPrimary,
               disabledContainerColor = if (active) success else colors.primary,
@@ -193,7 +195,11 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
         if (pending) LinearWavyProgressIndicator(Modifier.fillMaxWidth(), color = content)
       }
     }
-    if (showNotice) {
+    AnimatedVisibility(visible = showNotice,
+      enter = expandVertically(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(), expandFrom = Alignment.Top) +
+        fadeIn(animationSpec = MaterialTheme.motionScheme.fastEffectsSpec()),
+      exit = shrinkVertically(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(), shrinkTowards = Alignment.Top) +
+        fadeOut(animationSpec = MaterialTheme.motionScheme.fastEffectsSpec())) {
       Surface(color = noticeColor, contentColor = noticeContent,
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Connection notice for $name" }) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

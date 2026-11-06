@@ -3,6 +3,7 @@
 package dev.faris.knockernative
 
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -129,5 +130,45 @@ class NativeAppTest {
         JSONObject().put("token", token).put("ok", true).put("message", "Profile deleted")))
     }
     compose.onNodeWithContentDescription("Knocker").assertExists()
+  }
+
+  @Test fun malformedProfileIdsRenderEveryRowWithoutDuplicateKeyCrashes() {
+    val json = loaded().json.put("profiles", org.json.JSONArray("""[
+      {"id":"same","name":"First server"}, {"id":"same","name":"Second server"},
+      {"name":"Third server"}, {"name":"Fourth server"}
+    ]"""))
+    compose.setContent { MaterialExpressiveTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    for (name in listOf("First server", "Second server", "Third server", "Fourth server"))
+      compose.onNodeWithText(name).assertExists()
+    compose.onNodeWithContentDescription("Edit Third server").assertIsNotEnabled()
+    compose.onNodeWithContentDescription("Edit Fourth server").assertIsNotEnabled()
+  }
+
+  @Test fun warningAnimatesWithoutDelayingAKnock() {
+    val json = loaded().json
+    val now = System.currentTimeMillis()
+    json.getJSONArray("profiles").getJSONObject(0).put("expiresAt", now + 60000)
+      .put("whitelistedAt", now).put("grantNetworkId", "wifi")
+    json.getJSONObject("network").put("connection", JSONObject().put("id", "wifi").put("isConnected", true))
+    val state = mutableStateOf(NativeUiState(json))
+    val knocks = mutableListOf<String>()
+    compose.setContent { MaterialExpressiveTheme {
+      NativeHome(state.value, SnackbarHostState(), {}, {}, { knocks.add(it) }, {}, {})
+    } }
+    compose.mainClock.autoAdvance = false
+    compose.runOnIdle {
+      val changed = JSONObject(json.toString())
+      changed.getJSONObject("network").getJSONObject("connection").put("id", "cellular")
+      state.value = NativeUiState(changed)
+    }
+    compose.mainClock.advanceTimeByFrame()
+    compose.mainClock.advanceTimeByFrame()
+    val notice = compose.onNodeWithContentDescription("Connection notice for Home server")
+    val initialHeight = notice.fetchSemanticsNode().boundsInRoot.height
+    compose.onNodeWithContentDescription("Knock Home server").performClick()
+    compose.runOnIdle { assertEquals(listOf("home"), knocks) }
+    compose.mainClock.advanceTimeBy(2000)
+    assertTrue("The footer expands with native motion", notice.fetchSemanticsNode().boundsInRoot.height > initialHeight)
+    compose.mainClock.autoAdvance = true
   }
 }

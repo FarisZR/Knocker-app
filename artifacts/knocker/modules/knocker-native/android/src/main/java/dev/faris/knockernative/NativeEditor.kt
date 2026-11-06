@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 internal fun NativeEditor(id: String, state: NativeUiState, snackbar: SnackbarHostState, saving: Boolean, error: String?,
   onDirty: (Boolean) -> Unit, onBack: () -> Unit, onSave: (ProfileForm) -> Unit, onDelete: (String) -> Unit,
   feedback: (String) -> Unit) {
-  val current = state.profiles.firstOrNull { it.optString("id") == id }?.let(ProfileForm::from)
+  val current = state.profiles.firstOrNull { !it.textOrNull("id").isNullOrBlank() && it.optString("id") == id }?.let(ProfileForm::from)
   if (!state.loaded || (id != "new" && current == null)) {
     // Restored routes can outlive their profile. Never turn one into a new draft,
     // and let a deletion's acknowledgement arrive before leaving its route.

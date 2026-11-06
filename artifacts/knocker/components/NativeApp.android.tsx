@@ -94,7 +94,10 @@ export function NativeApp() {
     } catch (error) {
       // Only editor commands own this acknowledgement channel. An unrelated
       // knock failure must not replace a save/delete result awaiting Compose.
-      if (!action.token) return;
+      if (!action.token) {
+        console.warn("Native action failed.", error);
+        return;
+      }
       setOperation({
         token: action.token,
         ok: false,
