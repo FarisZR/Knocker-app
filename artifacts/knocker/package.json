@@ -58,7 +58,6 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "@expo/ui": "~58.0.27",
     "@sentry/react-native": "~8.28.0",
     "expo": "~58.0.23",
     "expo-network": "~58.0.4",
@@ -67,14 +66,5 @@
     "knocker-native": "link:./modules/knocker-native",
     "react": "19.3.0",
     "react-native": "0.88.1"
-  },
-  "expo": {
-    "autolinking": {
-      "android": {
-        "buildFromSource": [
-          "expo-ui"
-        ]
-      }
-    }
   }
 }

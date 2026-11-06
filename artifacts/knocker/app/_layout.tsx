@@ -8,7 +8,7 @@ import {
 } from "@expo-google-fonts/inter";
 import Feather from "@expo/vector-icons/Feather";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Slot, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as Sentry from "@sentry/react-native";
@@ -54,6 +54,7 @@ const queryClient = new QueryClient();
 /** Keeps route navigation available while optional startup work runs separately. */
 function RootLayoutNav() {
   const colors = useColors();
+  if (Platform.OS === "android") return <Slot />;
   return (
     <Stack
       screenOptions={{
@@ -61,10 +62,7 @@ function RootLayoutNav() {
         headerTintColor: colors.foreground,
         headerShadowVisible: false,
         headerTitleStyle: {
-          fontFamily:
-            Platform.OS === "android"
-              ? "sans-serif-medium"
-              : "Inter_600SemiBold",
+          fontFamily: "Inter_600SemiBold",
         },
         animation: "slide_from_right",
         contentStyle: { backgroundColor: colors.background },
@@ -100,7 +98,7 @@ function StartupReadyController() {
   return null;
 }
 
-function RootLayout() {
+function FallbackFonts() {
   useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -108,6 +106,14 @@ function RootLayout() {
     Inter_700Bold,
     ...Feather.font,
   });
+  return null;
+}
+
+function RootLayout() {
+  const Container =
+    Platform.OS === "android" ? React.Fragment : GestureHandlerRootView;
+  const KeyboardContainer =
+    Platform.OS === "android" ? React.Fragment : KeyboardProvider;
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -136,8 +142,9 @@ function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary onError={reportErrorBoundaryError}>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView>
-            <KeyboardProvider>
+          <Container>
+            <KeyboardContainer>
+              {Platform.OS !== "android" ? <FallbackFonts /> : null}
               {/*
                 Load fonts and profiles in the background, but hide the splash
                 as soon as the first frame is ready so startup stays responsive.
@@ -149,8 +156,8 @@ function RootLayout() {
                   <RootLayoutNav />
                 </NetworkProvider>
               </ProfilesProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+            </KeyboardContainer>
+          </Container>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

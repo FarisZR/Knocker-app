@@ -8,7 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import type { KnockResult } from "@/lib/knock";
 import { performKnock } from "@/lib/performKnock";
@@ -50,6 +50,7 @@ export interface SnackbarState {
   text: string;
   detail?: string;
   tone: "success" | "error" | "info";
+  outcome?: "success" | "error";
   persistent?: boolean;
   retry?: () => void;
 }
@@ -194,7 +195,8 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         const write = persist(
           profilesRef.current.map((p) => (p.id === id ? updated : p)),
         );
-        if (feedbackMode === "snackbar") performResultHaptic(result.ok);
+        if (feedbackMode === "snackbar" && Platform.OS !== "android")
+          performResultHaptic(result.ok);
         if (result.ok) {
           if (feedbackMode === "snackbar") {
             const minutes = Math.round(result.expiresInSeconds / 60);
@@ -207,6 +209,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
                 ? `${baseDetail} · TTL capped by server`
                 : baseDetail,
               tone: result.ttlCapped ? "info" : "success",
+              outcome: "success",
             });
           }
         } else {
@@ -215,6 +218,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
               text: `${current.name || "Profile"} failed`,
               detail: result.message,
               tone: "error",
+              outcome: "error",
               retry: () => {
                 void runKnock(id);
               },
@@ -260,7 +264,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       const write = persist(next);
       const successes = settled.filter((s) => s.r.ok).length;
       const failures = settled.length - successes;
-      performResultHaptic(failures === 0);
+      if (Platform.OS !== "android") performResultHaptic(failures === 0);
       const cappedCount = settled.filter((s) => s.r.ok && s.r.ttlCapped).length;
       const failedNames = settled
         .filter((s) => !s.r.ok)
@@ -279,6 +283,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         text: `Knocked ${successes} profile${successes === 1 ? "" : "s"}`,
         detail: detailParts.length > 0 ? detailParts.join(" · ") : undefined,
         tone: failures > 0 ? "error" : cappedCount > 0 ? "info" : "success",
+        outcome: failures > 0 ? "error" : "success",
         retry:
           failures > 0
             ? () => {
@@ -437,6 +442,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
             : "Launch knock succeeded",
           detail: detail.join(" · "),
           tone: failed.length ? "error" : capped ? "info" : "success",
+          outcome: failed.length ? "error" : "success",
           persistent: true,
           retry: failed.length
             ? () => {

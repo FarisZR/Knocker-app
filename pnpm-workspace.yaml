@@ -162,6 +162,3 @@ overrides:
 allowBuilds:
   "@sentry/cli": true
   esbuild: true
-
-patchedDependencies:
-  '@expo/ui@58.0.27': patches/@expo__ui@58.0.27.patch

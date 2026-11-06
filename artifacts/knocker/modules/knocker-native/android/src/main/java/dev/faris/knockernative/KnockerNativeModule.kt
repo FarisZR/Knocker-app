@@ -16,6 +16,11 @@ class KnockerNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KnockerNative")
 
+    View(KnockerAppView::class) {
+      Events("onAction")
+      Prop("stateJson") { view: KnockerAppView, value: String -> view.setState(value) }
+    }
+
     // Allocate only lightweight state on module creation; no storage or HTTP.
     Events("onKnockStateChanged")
     OnCreate {
