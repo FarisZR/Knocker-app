@@ -17,7 +17,11 @@ data class StoredProfile(
   val autoRenew: Boolean,
   val autoRenewSafetyWindowSec: Int,
   val tileSlot: Int?,
-  val expiresAt: Long?
+  val expiresAt: Long?,
+  val whitelistedAt: Long? = null,
+  val whitelistedEntry: String? = null,
+  val grantNetworkId: String? = null,
+  val grantNetworkType: String? = null
 ) {
   fun canKnock(): Boolean {
     return endpointUrl.isNotBlank() && apiKey.isNotBlank()
@@ -28,9 +32,13 @@ data class StoredProfile(
     return expiresAt - autoRenewSafetyWindowSec.toLong() * 1000L
   }
 
-  fun withExpiresAt(nextExpiresAt: Long?): StoredProfile {
-    return copy(expiresAt = nextExpiresAt)
-  }
+  fun withGrant(grant: KnockOutcome.Success): StoredProfile = copy(
+    expiresAt = grant.expiresAtMillis,
+    whitelistedAt = grant.whitelistedAtMillis,
+    whitelistedEntry = grant.whitelistedEntry,
+    grantNetworkId = grant.networkId,
+    grantNetworkType = grant.networkType
+  )
 }
 
 object KnockerStore {
@@ -67,17 +75,17 @@ object KnockerStore {
     return readProfiles(context).firstOrNull { it.tileSlot == slot }
   }
 
-  fun updateExpiry(
+  fun updateGrant(
     context: Context,
     profileId: String,
-    expiresAt: Long?
+    grant: KnockOutcome.Success
   ): StoredProfile? {
     synchronized(profileLock) {
       val profiles = readProfiles(context).toMutableList()
       val index = profiles.indexOfFirst { it.id == profileId }
       if (index < 0) return null
 
-      val updated = profiles[index].withExpiresAt(expiresAt)
+      val updated = profiles[index].withGrant(grant)
       profiles[index] = updated
       writeProfiles(context, profiles)
       return updated
@@ -118,7 +126,11 @@ object KnockerStore {
               autoRenew = objectJson.optBoolean("autoRenew", false),
               autoRenewSafetyWindowSec = objectJson.optStrictNullableInt("autoRenewSafetyWindowSec") ?: 300,
               tileSlot = objectJson.optStrictNullableInt("tileSlot"),
-              expiresAt = objectJson.optStrictNullableLong("expiresAt")
+              expiresAt = objectJson.optStrictNullableLong("expiresAt"),
+              whitelistedAt = objectJson.optStrictNullableLong("whitelistedAt"),
+              whitelistedEntry = objectJson.optNullableString("whitelistedEntry"),
+              grantNetworkId = objectJson.optNullableString("grantNetworkId"),
+              grantNetworkType = objectJson.optNullableString("grantNetworkType")
             )
           )
         }
@@ -141,6 +153,10 @@ object KnockerStore {
       put("autoRenewSafetyWindowSec", autoRenewSafetyWindowSec)
       putNullable("tileSlot", tileSlot)
       putNullable("expiresAt", expiresAt)
+      putNullable("whitelistedAt", whitelistedAt)
+      putNullable("whitelistedEntry", whitelistedEntry)
+      putNullable("grantNetworkId", grantNetworkId)
+      putNullable("grantNetworkType", grantNetworkType)
     }
   }
 

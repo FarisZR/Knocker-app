@@ -19,6 +19,9 @@ export interface Profile {
   lastError: string | null;
   whitelistedEntry: string | null;
   expiresAt: number | null;
+  whitelistedAt: number | null;
+  grantNetworkId: string | null;
+  grantNetworkType: string | null;
 }
 
 type StoredProfile = Omit<Profile, "apiKey">;
@@ -44,6 +47,9 @@ export function newProfile(): Profile {
     lastError: null,
     whitelistedEntry: null,
     expiresAt: null,
+    whitelistedAt: null,
+    grantNetworkId: null,
+    grantNetworkType: null,
   };
 }
 
@@ -101,7 +107,9 @@ export async function loadProfiles(): Promise<Profile[]> {
 export async function saveProfiles(profiles: Profile[]): Promise<void> {
   // Persist API keys separately in secure storage; never write them to AsyncStorage.
   await Promise.all(profiles.map((p) => setSecret(p.id, p.apiKey)));
-  const stripped: StoredProfile[] = profiles.map(({ apiKey: _k, ...rest }) => rest);
+  const stripped: StoredProfile[] = profiles.map(
+    ({ apiKey: _k, ...rest }) => rest,
+  );
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
 }
 

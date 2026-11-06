@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { requireOptionalNativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "expo";
 
 export interface NativeProfileSnapshot {
   id: string;
@@ -12,9 +12,20 @@ export interface NativeProfileSnapshot {
   autoRenewSafetyWindowSec: number;
   tileSlot: number | null;
   expiresAt: number | null;
+  whitelistedAt: number | null;
+  whitelistedEntry: string | null;
+  grantNetworkId: string | null;
+  grantNetworkType: string | null;
+}
+
+export interface NativeNetworkIdentity {
+  id: string | null;
+  type: string;
+  isConnected: boolean;
 }
 
 interface KnockerNativeAndroid {
+  getNetworkIdentity(): Promise<NativeNetworkIdentity>;
   syncProfiles(profilesJson: string): Promise<void>;
   getProfilesJson(): Promise<string>;
   scheduleRenewal(profileId: string, fireAtMs: number): Promise<void>;
@@ -24,7 +35,8 @@ interface KnockerNativeAndroid {
   openExactAlarmSettings(): Promise<void>;
 }
 
-const native = requireOptionalNativeModule<KnockerNativeAndroid>("KnockerNative");
+const native =
+  requireOptionalNativeModule<KnockerNativeAndroid>("KnockerNative");
 
 export const isNativeAvailable: boolean =
   Platform.OS === "android" && native != null;
@@ -36,7 +48,9 @@ export async function syncProfiles(
   await native.syncProfiles(JSON.stringify(profiles));
 }
 
-export async function loadProfilesFromNative(): Promise<NativeProfileSnapshot[]> {
+export async function loadProfilesFromNative(): Promise<
+  NativeProfileSnapshot[]
+> {
   if (!native) return [];
 
   try {
@@ -78,3 +92,13 @@ export async function openExactAlarmSettings(): Promise<void> {
 }
 
 export const TILE_SLOT_COUNT = 5;
+
+/** Local connection identity only: no SSID, location, public IP or network request. */
+export async function getNetworkIdentity(): Promise<NativeNetworkIdentity | null> {
+  if (!native?.getNetworkIdentity) return null;
+  try {
+    return await native.getNetworkIdentity();
+  } catch {
+    return null;
+  }
+}

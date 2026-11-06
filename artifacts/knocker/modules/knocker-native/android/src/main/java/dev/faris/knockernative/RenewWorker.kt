@@ -17,9 +17,9 @@ class RenewWorker(
       ?: return Result.failure()
     val profile = KnockerStore.findProfileById(applicationContext, profileId) ?: return Result.failure()
 
-    return when (val knockResult = KnockerHttp.knock(profile)) {
+    return when (val knockResult = KnockerHttp.knock(profile, applicationContext)) {
       is KnockOutcome.Success -> {
-        val updated = KnockerStore.updateExpiry(applicationContext, profileId, knockResult.expiresAtMillis)
+        val updated = KnockerStore.updateGrant(applicationContext, profileId, knockResult)
         val current = updated ?: profile
         val nextFireAt = updated?.renewalAtMillis()
         if (nextFireAt != null) {

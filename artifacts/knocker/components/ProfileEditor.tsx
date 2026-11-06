@@ -1,3 +1,9 @@
+import { MaterialInput as TextInput } from "@/components/MaterialControls";
+import {
+  EditorActions,
+  MaterialToggle,
+  TileChips,
+} from "@/components/NativeActions";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -8,17 +14,12 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import Animated, {
-  FadeInUp,
-  FadeOutDown,
-} from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { motion } from "@/constants/motion";
 import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
 import { isValidUrl } from "@/lib/format";
@@ -122,6 +123,11 @@ export function ProfileEditor({
         ? existing.whitelistedEntry
         : draft.whitelistedEntry,
       expiresAt: existing ? existing.expiresAt : draft.expiresAt,
+      whitelistedAt: existing ? existing.whitelistedAt : draft.whitelistedAt,
+      grantNetworkId: existing ? existing.grantNetworkId : draft.grantNetworkId,
+      grantNetworkType: existing
+        ? existing.grantNetworkType
+        : draft.grantNetworkType,
     };
     await upsert(sanitized);
     setDraft(sanitized);
@@ -182,6 +188,7 @@ export function ProfileEditor({
         <Section title="Server" colors={colors}>
           <Field label="Name" colors={colors}>
             <TextInput
+              accessibilityLabel="Name"
               value={draft.name}
               onChangeText={(t) => patch({ name: t })}
               placeholder="Home Server"
@@ -195,6 +202,7 @@ export function ProfileEditor({
           </Field>
           <Field label="Endpoint URL" colors={colors}>
             <TextInput
+              accessibilityLabel="Endpoint URL"
               value={draft.endpointUrl}
               onChangeText={(t) => patch({ endpointUrl: t })}
               placeholder="https://knock.example.com (HTTPS required)"
@@ -211,6 +219,7 @@ export function ProfileEditor({
           <Field label="API key" colors={colors}>
             <View style={styles.keyRow}>
               <TextInput
+                accessibilityLabel="API key"
                 value={draft.apiKey}
                 onChangeText={(t) => patch({ apiKey: t })}
                 placeholder="X-Api-Key value"
@@ -230,6 +239,8 @@ export function ProfileEditor({
               <Pressable
                 onPress={() => setShowKey((s) => !s)}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={showKey ? "Hide API key" : "Show API key"}
                 style={styles.eye}
               >
                 <Feather
@@ -246,6 +257,7 @@ export function ProfileEditor({
             colors={colors}
           >
             <TextInput
+              accessibilityLabel="TTL (seconds)"
               value={draft.ttlSeconds === null ? "" : String(draft.ttlSeconds)}
               onChangeText={(t) => {
                 const n = parseInt(t.replace(/[^0-9]/g, ""), 10);
@@ -277,6 +289,7 @@ export function ProfileEditor({
           {allowIpOverride ? (
             <Field label="IP or CIDR" colors={colors}>
               <TextInput
+                accessibilityLabel="IP or CIDR"
                 value={draft.ipOverride ?? ""}
                 onChangeText={(t) => patch({ ipOverride: t })}
                 placeholder="203.0.113.42 or 203.0.113.0/24"
@@ -321,7 +334,11 @@ export function ProfileEditor({
         <Section title="Quick access" colors={colors}>
           <ToggleRow
             label="Pin to home"
-            sub="Adds a dedicated knock button above Knock all"
+            sub={
+              Platform.OS === "android"
+                ? "Adds a floating knock shortcut"
+                : "Adds a dedicated knock button above Knock all"
+            }
             value={draft.pinnedToHome}
             onChange={(v) => patch({ pinnedToHome: v })}
             colors={colors}
@@ -377,12 +394,6 @@ export function ProfileEditor({
 
       {showSaveAction ? (
         <Animated.View
-          entering={FadeInUp.duration(motion.duration.medium).easing(
-            motion.easing.standard,
-          )}
-          exiting={FadeOutDown.duration(motion.duration.short).easing(
-            motion.easing.standard,
-          )}
           style={[
             styles.footer,
             {
@@ -392,44 +403,57 @@ export function ProfileEditor({
             },
           ]}
         >
-          <Pressable
-            onPress={cancel}
-            style={({ pressed }) => [
-              styles.btnGhost,
-              { opacity: pressed ? 0.6 : 1 },
-            ]}
-          >
-            <Text
-              style={[styles.btnGhostText, { color: colors.onSurfaceVariant }]}
-            >
-              Cancel
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={onSave}
-            disabled={!canSave}
-            style={({ pressed }) => [
-              styles.btnPrimary,
-              {
-                backgroundColor: colors.primary,
-                opacity: !canSave ? 0.4 : pressed ? 0.85 : 1,
-              },
-            ]}
-          >
-            <Feather
-              name="check"
-              size={18}
-              color={colors.primaryForeground}
+          {Platform.OS === "android" ? (
+            <EditorActions
+              canSave={canSave}
+              onSave={() => void onSave()}
+              onCancel={cancel}
             />
-            <Text
-              style={[
-                styles.btnPrimaryText,
-                { color: colors.primaryForeground },
-              ]}
-            >
-              Save
-            </Text>
-          </Pressable>
+          ) : (
+            <>
+              <Pressable
+                onPress={cancel}
+                style={({ pressed }) => [
+                  styles.btnGhost,
+                  { opacity: pressed ? 0.6 : 1 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.btnGhostText,
+                    { color: colors.onSurfaceVariant },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={onSave}
+                disabled={!canSave}
+                style={({ pressed }) => [
+                  styles.btnPrimary,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: !canSave ? 0.4 : pressed ? 0.85 : 1,
+                  },
+                ]}
+              >
+                <Feather
+                  name="check"
+                  size={18}
+                  color={colors.primaryForeground}
+                />
+                <Text
+                  style={[
+                    styles.btnPrimaryText,
+                    { color: colors.primaryForeground },
+                  ]}
+                >
+                  Save
+                </Text>
+              </Pressable>
+            </>
+          )}
         </Animated.View>
       ) : null}
     </View>
@@ -447,8 +471,18 @@ function Section({
 }) {
   return (
     <View>
-      <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
-        {title.toUpperCase()}
+      <Text
+        style={[
+          styles.sectionTitle,
+          {
+            color:
+              Platform.OS === "android"
+                ? colors.primary
+                : colors.mutedForeground,
+          },
+        ]}
+      >
+        {Platform.OS === "android" ? title : title.toUpperCase()}
       </Text>
       <View style={[styles.sectionBody, { backgroundColor: colors.surface }]}>
         {children}
@@ -470,9 +504,11 @@ function Field({
 }) {
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-        {label}
-      </Text>
+      {Platform.OS !== "android" ? (
+        <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
+          {label}
+        </Text>
+      ) : null}
       {sub ? (
         <Text style={[styles.fieldSub, { color: colors.mutedForeground }]}>
           {sub}
@@ -499,6 +535,15 @@ function TileSlotPicker({
   const slots = Array.from({ length: TILE_SLOT_COUNT }, (_, i) => i + 1);
   const ownerOf = (slot: number) =>
     profiles.find((p) => p.tileSlot === slot && p.id !== currentId);
+  if (Platform.OS === "android")
+    return (
+      <TileChips
+        value={value}
+        onChange={onChange}
+        profiles={profiles}
+        currentId={currentId}
+      />
+    );
   return (
     <View style={styles.tileSlotRow}>
       <Pressable
@@ -619,13 +664,19 @@ function ToggleRow({
           </Text>
         ) : null}
       </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        thumbColor={value ? colors.primaryForeground : colors.onSurfaceVariant}
-        trackColor={{ false: colors.border, true: colors.primary }}
-        ios_backgroundColor={colors.border}
-      />
+      {Platform.OS === "android" ? (
+        <MaterialToggle label={label} value={value} onChange={onChange} />
+      ) : (
+        <Switch
+          value={value}
+          onValueChange={onChange}
+          thumbColor={
+            value ? colors.primaryForeground : colors.onSurfaceVariant
+          }
+          trackColor={{ false: colors.border, true: colors.primary }}
+          ios_backgroundColor={colors.border}
+        />
+      )}
     </View>
   );
 }
@@ -634,20 +685,27 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scrollContent: { padding: 20, gap: 18 },
   embeddedContent: { width: "100%", maxWidth: 900, alignSelf: "center" },
-  h1: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.4 },
+  h1: {
+    fontSize: 28,
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_700Bold",
+    letterSpacing: -0.4,
+  },
   sectionTitle: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: Platform.OS === "android" ? 14 : 11,
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
     letterSpacing: 0.6,
     marginBottom: 8,
     paddingHorizontal: 4,
   },
   sectionBody: { borderRadius: 18, paddingHorizontal: 16, paddingVertical: 4 },
   field: { paddingVertical: 12 },
-  fieldLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  fieldLabel: {
+    fontSize: 14,
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+  },
   fieldSub: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
     marginTop: 2,
     marginBottom: 4,
   },
@@ -657,25 +715,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
     marginTop: 8,
   },
   keyRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  eye: { padding: 8, marginTop: 8 },
+  eye: {
+    minWidth: 48,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
   },
-  toggleLabel: { fontSize: 14, fontFamily: "Inter_500Medium" },
-  toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  toggleLabel: {
+    fontSize: 14,
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_500Medium",
+  },
+  toggleSub: {
+    fontSize: 12,
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
+    marginTop: 2,
+  },
   warning: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingVertical: 10,
   },
-  warningText: { fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 },
+  warningText: {
+    fontSize: 12,
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_500Medium",
+    flex: 1,
+  },
   deleteBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -686,7 +761,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginTop: 8,
   },
-  deleteText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  deleteText: {
+    fontSize: 14,
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+  },
   footer: {
     flexDirection: "row",
     gap: 12,
@@ -704,7 +782,7 @@ const styles = StyleSheet.create({
   },
   btnGhostText: {
     fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
     paddingHorizontal: 2,
   },
   btnPrimary: {
@@ -719,7 +797,7 @@ const styles = StyleSheet.create({
   },
   btnPrimaryText: {
     fontSize: 15,
-    fontFamily: "Inter_700Bold",
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_700Bold",
     paddingHorizontal: 2,
   },
   tileSlotRow: {
@@ -738,18 +816,18 @@ const styles = StyleSheet.create({
   },
   tileSlotChipText: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
     paddingHorizontal: 2,
   },
   tileSlotChipSub: {
     fontSize: 10,
-    fontFamily: "Inter_400Regular",
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
     marginTop: 2,
     maxWidth: 90,
   },
   tileSlotHint: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
     marginTop: 10,
     lineHeight: 17,
   },

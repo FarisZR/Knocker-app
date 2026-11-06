@@ -13,6 +13,8 @@ class KnockerNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KnockerNative")
 
+    AsyncFunction("getNetworkIdentity") { KnockerNetwork.snapshot(context).toMap() }
+
     AsyncFunction("syncProfiles") { profilesJson: String ->
       KnockerStore.replaceProfiles(context, profilesJson)
       KnockerTileService.refreshAll(context)

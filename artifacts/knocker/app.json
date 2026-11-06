@@ -6,19 +6,12 @@
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "knocker",
-    "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0e0e10"
-    },
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false
     },
     "android": {
       "package": "dev.faris.knocker",
-      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "monochromeImage": "./assets/images/adaptive-icon.png",
@@ -40,7 +33,6 @@
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.RECORD_AUDIO",
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.VIBRATE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
@@ -48,6 +40,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./scripts/withMonorepoSentry",
       [
         "expo-router",
         {
@@ -63,6 +56,14 @@
           "url": "https://de.sentry.io/",
           "project": "knocker-app",
           "organization": "fariszr"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0e0e10"
         }
       ]
     ],

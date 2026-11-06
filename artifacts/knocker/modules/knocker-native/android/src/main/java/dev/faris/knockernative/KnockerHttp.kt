@@ -1,5 +1,6 @@
 package dev.faris.knockernative
 
+import android.content.Context
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -8,7 +9,10 @@ import org.json.JSONObject
 sealed interface KnockOutcome {
   data class Success(
     val expiresAtMillis: Long?,
-    val whitelistedEntry: String?
+    val whitelistedEntry: String?,
+    val whitelistedAtMillis: Long,
+    val networkId: String?,
+    val networkType: String
   ) : KnockOutcome
 
   data class Failure(
@@ -18,7 +22,8 @@ sealed interface KnockOutcome {
 }
 
 object KnockerHttp {
-  fun knock(profile: StoredProfile): KnockOutcome {
+  fun knock(profile: StoredProfile, context: Context): KnockOutcome {
+    val network = KnockerNetwork.snapshot(context)
     if (!profile.canKnock()) {
       return KnockOutcome.Failure(null, "Profile is not fully configured")
     }
@@ -66,7 +71,13 @@ object KnockerHttp {
       val json = payload?.let { JSONObject(it) } ?: JSONObject()
       KnockOutcome.Success(
         expiresAtMillis = json.optNullableLong("expires_at")?.times(1000L),
-        whitelistedEntry = json.optNullableString("whitelisted_entry")
+        whitelistedEntry = json.optNullableString("whitelisted_entry"),
+        whitelistedAtMillis = json.optNullableLong("expires_at")?.times(1000L)?.let { expiry ->
+          val seconds = json.optNullableLong("expires_in_seconds")
+          if (seconds != null && seconds > 0) expiry - seconds * 1000L else System.currentTimeMillis()
+        } ?: System.currentTimeMillis(),
+        networkId = network.id,
+        networkType = network.type
       )
     } catch (error: Exception) {
       val message = when (error) {

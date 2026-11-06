@@ -68,10 +68,10 @@ abstract class KnockerTileService : TileService() {
           return@execute
         }
 
-        val result = KnockerHttp.knock(profile)
+        val result = KnockerHttp.knock(profile, this)
         when (result) {
           is KnockOutcome.Success -> {
-            val updated = KnockerStore.updateExpiry(this, profile.id, result.expiresAtMillis)
+            val updated = KnockerStore.updateGrant(this, profile.id, result)
             val current = updated ?: profile
             latestProfile = current
             val nextFireAt = updated?.renewalAtMillis()

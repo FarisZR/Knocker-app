@@ -1,11 +1,9 @@
+import { isWhitelisted } from "@/lib/profileStatus";
 import { Feather } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, {
-  FadeInDown,
-  LinearTransition,
-} from "react-native-reanimated";
+import Animated, { LinearTransition } from "react-native-reanimated";
 
 import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { useColors } from "@/hooks/useColors";
@@ -23,9 +21,11 @@ export function ProfileCard({
 }: {
   profile: Profile;
   index?: number;
+  count?: number;
   selected?: boolean;
   onOpen?: (profileId: string) => void;
 }) {
+  const router = useRouter();
   const colors = useColors();
   const { knockOne } = useProfiles();
   const [now, setNow] = useState(Date.now());
@@ -37,10 +37,7 @@ export function ProfileCard({
     return () => clearInterval(t);
   }, [profile.expiresAt]);
 
-  const isActive =
-    profile.lastKnockStatus === "success" &&
-    profile.expiresAt !== null &&
-    profile.expiresAt > now;
+  const isActive = isWhitelisted(profile, now);
   const isError = profile.lastKnockStatus === "error";
 
   const onKnock = async () => {
@@ -64,9 +61,6 @@ export function ProfileCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(Math.min(index * 20, 120))
-        .duration(motion.duration.medium)
-        .easing(motion.easing.standard)}
       layout={LinearTransition.duration(motion.duration.short).easing(
         motion.easing.standard,
       )}
