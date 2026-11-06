@@ -45,6 +45,7 @@ dependencies {
   implementation 'androidx.navigation3:navigation3-runtime:1.2.1'
   implementation 'androidx.navigation3:navigation3-ui:1.2.1'
   testImplementation "junit:junit:4.13.2"
+  testImplementation 'org.json:json:20260814'
   implementation "androidx.security:security-crypto:1.1.0"
   implementation "androidx.work:work-runtime-ktx:2.12.0"
 }

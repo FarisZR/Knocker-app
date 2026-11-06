@@ -2,6 +2,7 @@ package dev.faris.knockernative
 
 import org.junit.Assert.*
 import org.junit.Test
+import org.json.JSONObject
 
 class ProfileFormTest {
   private val valid = ProfileForm(name = "Home", endpoint = "https://knock.example.com:8562", key = "fake-key")
@@ -30,6 +31,11 @@ class ProfileFormTest {
   }
 
   @Test fun draftIdentityIgnoresExternalGrantMetadataAndKeepsUnsavedText() {
+    val saved = JSONObject(valid.toJson())
+    val renewed = JSONObject(saved.toString()).put("expiresAt", 1800000000000L)
+      .put("whitelistedAt", 1799999900000L).put("whitelistedEntry", "203.0.113.42")
+      .put("lastKnockStatus", "success").put("grantNetworkId", "another-network")
+    assertEquals(ProfileForm.from(saved), ProfileForm.from(renewed))
     assertEquals(valid, valid.copy())
     assertNotEquals(valid, valid.copy(name = "Unsaved"))
     assertNotEquals(valid, valid.copy(key = "new-secret"))

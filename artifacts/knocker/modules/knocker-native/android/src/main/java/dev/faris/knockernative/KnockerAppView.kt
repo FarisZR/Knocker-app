@@ -138,11 +138,16 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
     val feedback = state.feedback ?: return@LaunchedEffect
     feedback.textOrNull("outcome")?.let(haptic)
     snackbar.currentSnackbarData?.dismiss()
-    val message = listOfNotNull(feedback.textOrNull("text"), feedback.textOrNull("detail")).joinToString("\n").take(240)
+    val success = feedback.optString("outcome") == "success"
+    // Loading is already visible on the cards and action buttons.
+    if (feedback.textOrNull("outcome") == null && feedback.optString("tone") == "info" && feedback.optBoolean("persistent") && !feedback.optBoolean("retry")) return@LaunchedEffect
+    val message = if (success) {
+      if (feedback.optString("tone") == "info") "Connected · TTL capped" else "Connected"
+    } else listOfNotNull(feedback.textOrNull("text"), feedback.textOrNull("detail")).joinToString("\n").take(240)
     val result = snackbar.showSnackbar(message,
-      actionLabel = if (feedback.optBoolean("retry")) "Retry" else null,
-      withDismissAction = true,
-      duration = if (feedback.optBoolean("persistent") || feedback.optBoolean("retry")) SnackbarDuration.Indefinite else SnackbarDuration.Short)
+      actionLabel = if (!success && feedback.optBoolean("retry")) "Retry" else null,
+      withDismissAction = !success,
+      duration = if (!success && (feedback.optBoolean("persistent") || feedback.optBoolean("retry"))) SnackbarDuration.Indefinite else SnackbarDuration.Short)
     if (result == SnackbarResult.ActionPerformed) dispatch("retry") else emit("dismiss", emptyMap())
   }
   BackHandler(enabled = backStack.size > 1 && (dirty || pendingOperation != null)) { navigate("home") }
@@ -188,12 +193,12 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
   )
   if (preferences) AlertDialog(
     onDismissRequest = { preferences = false },
-    icon = { Icon(Icons.Default.PrivacyTip, contentDescription = null) },
-    title = { Text("Public-IP checks") },
+    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+    title = { Text("Settings") },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Connection changes are detected on your phone without an IP service.")
-        Text("Optional checks share your public IP with ipify to compare IPv4 and IPv6. They run on resume, connection changes and once a minute while foregrounded. They never delay a knock.")
+        Text("Public-IP checks · ${if (state.network.optBoolean("checksEnabled")) "On" else "Off"}", style = MaterialTheme.typography.titleMedium)
+        Text("Compare your IP using ipify while the app is open. This shares your public IP with ipify.")
         if (state.network.optBoolean("checksEnabled")) TextButton(onClick = { preferences = false; dispatch("refreshIp") }) { Text("Check now") }
       }
     },

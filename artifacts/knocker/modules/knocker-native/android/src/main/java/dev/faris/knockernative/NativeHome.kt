@@ -7,8 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -16,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -50,13 +48,14 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
   onNew: () -> Unit, onKnock: (String) -> Unit, onKnockAll: () -> Unit, onPreferences: () -> Unit) {
   val now = grantClock()
   val colors = MaterialTheme.colorScheme
-  val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
   var actionsHeight by remember { mutableIntStateOf(0) }
   val density = LocalDensity.current
   val clearance = with(density) { actionsHeight.toDp() } + 24.dp
   Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
-    topBar = { MediumTopAppBar(title = { Text("Knocker") }, scrollBehavior = scroll) },
+    modifier = Modifier.fillMaxSize(),
+    topBar = { TopAppBar(title = { KnockerWordmark() }, expandedHeight = 88.dp, actions = {
+      IconButton(onClick = onPreferences) { Icon(Icons.Default.Settings, "Settings") }
+    }) },
     snackbarHost = { SnackbarHost(snackbar) },
     floatingActionButton = {
       if (state.loaded) Column(
@@ -98,32 +97,14 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
   ) { padding ->
     Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
       LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = clearance),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = clearance),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
       ) {
-        item {
-          Column(Modifier.padding(bottom = 16.dp)) {
-            Text(if (!state.loaded) "Loading profiles…" else "${state.profiles.size} profile${if (state.profiles.size == 1) "" else "s"} · ${state.profiles.count { it.optLong("expiresAt") > now }} active",
-              color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-              val connection = state.network.optJSONObject("connection")
-              Text(connection?.optString("type") ?: "Connection", Modifier.weight(1f), color = colors.onSurfaceVariant)
-              TextButton(onClick = onPreferences) {
-                Text(if (state.network.optBoolean("checking")) "Checking IP…" else "IP checks: ${if (state.network.optBoolean("checksEnabled")) "on" else "off"}")
-              }
-            }
-          }
+        if (!state.loaded) item {
+          LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading profiles" })
         }
-        if (state.loaded && state.profiles.isEmpty()) item {
-          Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Default.Dns, null, Modifier.size(56.dp), tint = colors.primary)
-            Text("Add your first profile", style = MaterialTheme.typography.titleLarge)
-            Text("Set the HTTPS endpoint and API key for your Knocker server.", color = colors.onSurfaceVariant)
-          }
-        }
-        itemsIndexed(state.profiles, key = { _, profile -> profile.optString("id") }) { index, profile ->
-          NativeProfileCard(profile, state, now, index, onOpen, onKnock)
+        items(state.profiles, key = { profile -> profile.optString("id") }) { profile ->
+          NativeProfileCard(profile, state, now, onOpen, onKnock)
         }
       }
     }
@@ -132,7 +113,7 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
 
 /** Permission color is retained during renewal; every pending foreground matches its container. */
 @Composable
-private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Long, index: Int,
+private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Long,
   onOpen: (String) -> Unit, onKnock: (String) -> Unit) {
   val colors = MaterialTheme.colorScheme
   val dark = isSystemInDarkTheme()
@@ -155,66 +136,73 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val ipChanged = match == "changed"
   val custom = !profile.textOrNull("ipOverride").isNullOrBlank()
   val warning = !custom && (ipChanged || (connectionChanged && match != "same"))
-  Surface(onClick = { onOpen(id) }, color = fill, contentColor = content,
-    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Edit $name" },
-    shape = RoundedCornerShape(topStart = if (index == 0) 28.dp else 8.dp, topEnd = if (index == 0) 28.dp else 8.dp,
-      bottomStart = if (index == state.profiles.lastIndex) 28.dp else 8.dp, bottomEnd = if (index == state.profiles.lastIndex) 28.dp else 8.dp)
-  ) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-          when {
-            active -> {
-              val fraction = if (expiry > start && start > 0L) ((expiry - now).toFloat() / (expiry - start)).coerceIn(0f, 1f) else 1f
-              CircularProgressIndicator(progress = { fraction }, Modifier.size(52.dp).semantics { contentDescription = "$count of whitelist time remaining" },
-                color = success, trackColor = success.copy(alpha = .22f), strokeWidth = 4.dp)
-              if (pending) LoadingIndicator(Modifier.size(28.dp), color = content)
+  val showNotice = active && !custom && (warning || connection?.optBoolean("isConnected") == false)
+  val noticeColor = if (dark) Color(0xFF493600) else Color(0xFFFFF1C2)
+  val noticeContent = if (dark) Color(0xFFFFE2A4) else Color(0xFF5B4300)
+  // One elevated card owns the server and its warning. The amber footer stays
+  // outside the clickable green status area, but shares the panel's outline.
+  ElevatedCard(modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Profile $name" },
+    shape = MaterialTheme.shapes.extraLarge,
+    colors = CardDefaults.elevatedCardColors(containerColor = if (showNotice) noticeColor else fill, contentColor = content),
+    elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (showNotice) 3.dp else 1.dp)) {
+    Surface(onClick = { onOpen(id) }, color = fill, contentColor = content,
+      modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Edit $name" },
+      shape = MaterialTheme.shapes.extraLarge, shadowElevation = if (showNotice) 2.dp else 0.dp
+    ) {
+      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+            when {
+              active -> {
+                val fraction = if (expiry > start && start > 0L) ((expiry - now).toFloat() / (expiry - start)).coerceIn(0f, 1f) else 1f
+                CircularProgressIndicator(progress = { fraction }, Modifier.size(52.dp).semantics { contentDescription = "$count of whitelist time remaining" },
+                  color = success, trackColor = success.copy(alpha = .22f), strokeWidth = 4.dp)
+                if (pending) LoadingIndicator(Modifier.size(28.dp), color = content)
+              }
+              pending -> LoadingIndicator(Modifier.size(48.dp), color = content)
+              failed -> Icon(Icons.Default.ErrorOutline, null, Modifier.size(36.dp), tint = colors.error)
+              else -> Icon(Icons.Default.Dns, null, Modifier.size(32.dp), tint = colors.primary)
             }
-            pending -> LoadingIndicator(Modifier.size(48.dp), color = content)
-            failed -> Icon(Icons.Default.ErrorOutline, null, Modifier.size(36.dp), tint = colors.error)
-            else -> Icon(Icons.Default.Dns, null, Modifier.size(32.dp), tint = colors.primary)
+          }
+          Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(profile.optString("endpointUrl").removePrefix("https://").trimEnd('/'), color = supporting,
+              style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
+          Button(onClick = { onKnock(id) }, enabled = !pending && profile.optString("apiKey").isNotBlank(), shapes = ButtonDefaults.shapes(),
+            colors = ButtonDefaults.buttonColors(containerColor = if (active) success else colors.primary,
+              contentColor = if (active) onSuccess else colors.onPrimary,
+              disabledContainerColor = if (active) success else colors.primary,
+              disabledContentColor = if (active) onSuccess else colors.onPrimary),
+            modifier = Modifier.semantics { contentDescription = "Knock $name" }
+          ) { Text(if (pending) "Knocking" else if (warning && active) "Update IP" else if (active) "Renew" else "Knock") }
+        }
+        val status = if (pending) "${if (active) "Renewing" else "Connecting"}…" else if (active) "Whitelisted · $count" else if (!failed && expiry > 0L) "Expired" else null
+        if (status != null) {
+          Surface(shape = MaterialTheme.shapes.small, color = if (pending) colors.primary else if (active) success else colors.secondaryContainer,
+            contentColor = if (pending) colors.onPrimary else if (active) onSuccess else colors.onSecondaryContainer) {
+            Text(status, Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium)
           }
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-          Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-          Text(profile.optString("endpointUrl").removePrefix("https://").trimEnd('/'), color = supporting,
-            style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (failed && !pending) Text(profile.textOrNull("lastError") ?: "Failed", color = if (active) content else colors.error, maxLines = 3, overflow = TextOverflow.Ellipsis,
+          style = MaterialTheme.typography.bodySmall)
+        profile.textOrNull("whitelistedEntry")?.let { entry ->
+          Text("IP · $entry",
+            color = content, style = MaterialTheme.typography.bodyMedium)
         }
-        Button(onClick = { onKnock(id) }, enabled = !pending && profile.optString("apiKey").isNotBlank(), shapes = ButtonDefaults.shapes(),
-          colors = ButtonDefaults.buttonColors(containerColor = if (active) success else colors.primary,
-            contentColor = if (active) onSuccess else colors.onPrimary,
-            disabledContainerColor = if (active) success else colors.primary,
-            disabledContentColor = if (active) onSuccess else colors.onPrimary),
-          modifier = Modifier.semantics { contentDescription = "Knock $name" }
-        ) { Text(if (pending) "Knocking" else if (warning && active) "Update IP" else if (active) "Renew" else "Knock") }
+        if (pending) LinearWavyProgressIndicator(Modifier.fillMaxWidth(), color = content)
       }
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        val status = if (pending) "${if (active) "Renewing" else "Connecting"}…" else if (active) "Whitelisted · $count" else if (failed) "Not connected" else "Ready to connect"
-        Surface(shape = MaterialTheme.shapes.small, color = if (pending) colors.primary else if (active) success else if (failed) colors.errorContainer else colors.secondaryContainer,
-          contentColor = if (pending) colors.onPrimary else if (active) onSuccess else if (failed) colors.onErrorContainer else colors.onSecondaryContainer) {
-          Text(status, Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium)
+    }
+    if (showNotice) {
+      Surface(color = noticeColor, contentColor = noticeContent,
+        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Connection notice for $name" }) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+          horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+          Icon(Icons.Default.WarningAmber, null, Modifier.size(20.dp))
+          Text(if (connection?.optBoolean("isConnected") == false) "Offline" else if (ipChanged) "Your IP changed" else "Network changed. IP may differ.",
+            style = MaterialTheme.typography.bodyMedium)
         }
-        Text(listOfNotNull(if (active && failed && !pending) "Renewal failed" else null,
-          if (profile.optBoolean("pinnedToHome")) "Pinned" else null, if (profile.optBoolean("autoRenew")) "Auto-renew" else null).joinToString(" · "),
-          color = supporting, style = MaterialTheme.typography.labelSmall)
       }
-      if (failed && !pending) Text(profile.optString("lastError"), color = if (active) content else colors.error, maxLines = 3, overflow = TextOverflow.Ellipsis,
-        style = MaterialTheme.typography.bodySmall)
-      profile.textOrNull("whitelistedEntry")?.let { entry ->
-        Text("${if (active) "Whitelisted IP" else "Last whitelisted IP"} · $entry", fontWeight = FontWeight.SemiBold,
-          color = content, style = MaterialTheme.typography.bodyMedium)
-        if (active) Text(when {
-          custom -> "Custom IP target"
-          connection?.optBoolean("isConnected") == false -> "Offline · reconnect to knock"
-          ipChanged -> "IP changed · knock to whitelist this connection"
-          match == "same" -> "Current IP matches"
-          connectionChanged -> "Network changed · IP may have changed"
-          state.network.optBoolean("checking") -> "Checking current IP…"
-          state.network.optBoolean("checksEnabled") -> "Current IP unavailable"
-          else -> "Knocked on ${profile.textOrNull("grantNetworkType") ?: "this connection"} · IP checks off"
-        }, color = supporting, style = MaterialTheme.typography.bodySmall)
-      }
-      if (pending) LinearWavyProgressIndicator(Modifier.fillMaxWidth(), color = content)
     }
   }
 }

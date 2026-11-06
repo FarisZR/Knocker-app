@@ -92,6 +92,9 @@ export function NativeApp() {
           break;
       }
     } catch (error) {
+      // Only editor commands own this acknowledgement channel. An unrelated
+      // knock failure must not replace a save/delete result awaiting Compose.
+      if (!action.token) return;
       setOperation({
         token: action.token,
         ok: false,

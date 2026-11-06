@@ -76,6 +76,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
+  const snackbarId = useRef(0);
   const [pendingKnocks, setPendingKnocks] = useState<ReadonlySet<string>>(
     new Set(),
   );
@@ -172,7 +173,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const showSnackbar = useCallback((s: Omit<SnackbarState, "id">) => {
-    setSnackbar({ ...s, id: Date.now() });
+    setSnackbar({ ...s, id: ++snackbarId.current });
   }, []);
 
   const dismissSnackbar = useCallback(() => setSnackbar(null), []);
@@ -443,7 +444,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
           detail: detail.join(" · "),
           tone: failed.length ? "error" : capped ? "info" : "success",
           outcome: failed.length ? "error" : "success",
-          persistent: true,
+          persistent: failed.length > 0,
           retry: failed.length
             ? () => {
                 for (const result of failed) void runKnock(result.profileId);

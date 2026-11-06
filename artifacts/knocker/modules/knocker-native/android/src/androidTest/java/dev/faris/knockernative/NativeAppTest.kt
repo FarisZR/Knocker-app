@@ -23,10 +23,12 @@ class NativeAppTest {
   @Test fun hydrationUpdatesAnExistingNavigationEntryAndEditorHasOneTitle() {
     val state = mutableStateOf(NativeUiState())
     compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { _, _ -> }, {}) } }
-    compose.onNodeWithText("Loading profiles…").assertExists()
+    compose.onNodeWithContentDescription("Loading profiles").assertExists()
     compose.runOnIdle { state.value = loaded() }
     compose.onNodeWithText("Home server").assertExists()
-    compose.onNodeWithText("Loading profiles…").assertDoesNotExist()
+    compose.onNodeWithText("Ready to connect").assertDoesNotExist()
+    compose.onNodeWithText("Not connected").assertDoesNotExist()
+    compose.onNodeWithContentDescription("Loading profiles").assertDoesNotExist()
     compose.onNodeWithContentDescription("Edit Home server").performClick()
     compose.onAllNodesWithText("Edit profile").assertCountEquals(1)
     compose.onNodeWithText("New profile").assertDoesNotExist()
@@ -56,5 +58,76 @@ class NativeAppTest {
       compose.waitForIdle()
       compose.runOnIdle { assertTrue(outcome, outcome in haptics) }
     }
+  }
+
+  @Test fun homeKeepsUsefulTextAndAttachesWarningsToTheProfilePanel() {
+    val json = loaded().json
+    val profile = json.getJSONArray("profiles").getJSONObject(0)
+    val now = System.currentTimeMillis()
+    profile.put("expiresAt", now + 60000).put("whitelistedAt", now).put("whitelistedEntry", "203.0.113.42")
+      .put("grantNetworkId", "previous").put("autoRenew", true)
+      .put("lastKnockStatus", "error").put("lastError", JSONObject.NULL)
+    json.getJSONObject("network").put("connection", JSONObject().put("id", "current").put("type", "Wi-Fi").put("isConnected", true))
+    compose.setContent { MaterialExpressiveTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.onNodeWithContentDescription("Knocker").assertExists()
+    compose.onNodeWithText("IP · 203.0.113.42").assertExists()
+    compose.onNodeWithText("Failed").assertExists()
+    compose.onNodeWithText("null").assertDoesNotExist()
+    compose.onNodeWithText("Whitelisted IP", substring = true).assertDoesNotExist()
+    compose.onNodeWithText("Pinned").assertDoesNotExist()
+    compose.onNodeWithText("Auto-renew").assertDoesNotExist()
+    compose.onNodeWithText("Wi-Fi").assertDoesNotExist()
+    compose.onNodeWithText("IP checks: off").assertDoesNotExist()
+    compose.onNodeWithText("1 profile", substring = true).assertDoesNotExist()
+    compose.onNodeWithText("Network changed. IP may differ.")
+      .assert(hasAnyAncestor(hasContentDescription("Edit Home server")).not())
+      .assert(hasAnyAncestor(hasContentDescription("Profile Home server")))
+    compose.onNodeWithContentDescription("Settings").performClick()
+    compose.onNodeWithText("Public-IP checks · Off").assertExists()
+  }
+
+  @Test fun successfulFeedbackAutoDismissesEvenIfAnOldSnapshotMarksItPersistent() {
+    val json = loaded().json.put("feedback", JSONObject().put("id", 10).put("text", "Launch knock succeeded")
+      .put("outcome", "success").put("persistent", true))
+    val actions = mutableListOf<String>()
+    compose.setContent { MaterialExpressiveTheme { NativeApp(NativeUiState(json), { type, _ -> actions.add(type) }, {}) } }
+    compose.onNodeWithText("Connected").assertExists()
+    compose.onNodeWithContentDescription("Dismiss").assertDoesNotExist()
+    compose.waitUntil(timeoutMillis = 10000) { "dismiss" in actions }
+    compose.onNodeWithText("Connected").assertDoesNotExist()
+  }
+
+  @Test fun aDeletedProfileRouteReturnsHomeWithoutCreatingANewDraft() {
+    val state = mutableStateOf(loaded())
+    compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { _, _ -> }, {}) } }
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithText("Name").performTextReplacement("Unsaved name")
+    compose.runOnIdle { state.value = NativeUiState(loaded().json.put("profiles", org.json.JSONArray())) }
+    compose.onNodeWithContentDescription("Knocker").assertExists()
+    compose.onNodeWithText("Name").assertDoesNotExist()
+    compose.onNodeWithText("Discard unsaved changes?").assertDoesNotExist()
+    compose.onNodeWithText("New profile", useUnmergedTree = true).performClick()
+    compose.onNodeWithText("Name").assertExists()
+  }
+
+  @Test fun deletionWaitsForItsAcknowledgementAfterTheProfileDisappears() {
+    val state = mutableStateOf(loaded())
+    val actions = mutableListOf<Pair<String, Map<String, Any?>>>()
+    compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { type, payload -> actions.add(type to payload) }, {}) } }
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithContentDescription("Delete profile").performClick()
+    compose.onNodeWithText("Delete", useUnmergedTree = true).performClick()
+    lateinit var token: String
+    compose.runOnIdle {
+      token = actions.first { it.first == "delete" }.second["token"] as String
+      state.value = NativeUiState(loaded().json.put("profiles", org.json.JSONArray()))
+    }
+    compose.onNodeWithText("Edit profile").assertExists()
+    compose.onNodeWithContentDescription("Knocker").assertDoesNotExist()
+    compose.runOnIdle {
+      state.value = NativeUiState(JSONObject(state.value.json.toString()).put("operation",
+        JSONObject().put("token", token).put("ok", true).put("message", "Profile deleted")))
+    }
+    compose.onNodeWithContentDescription("Knocker").assertExists()
   }
 }
