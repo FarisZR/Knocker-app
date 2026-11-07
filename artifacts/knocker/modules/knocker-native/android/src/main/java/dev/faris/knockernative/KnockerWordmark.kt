@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.semantics.contentDescription
@@ -27,7 +26,7 @@ internal fun KnockerWordmark() {
       translate(-3.5522995f, -148.19943f)
     }) {
       drawPath(path, foreground)
-      drawCircle(Color(0xFFFDE562), 4.9190621f, Offset(203.30513f, 157.00136f))
+      drawCircle(KnockerYellow, 4.9190621f, Offset(203.30513f, 157.00136f))
     }
   }
 }

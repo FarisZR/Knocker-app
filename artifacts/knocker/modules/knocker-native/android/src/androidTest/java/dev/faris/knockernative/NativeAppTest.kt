@@ -2,7 +2,12 @@
 
 package dev.faris.knockernative
 
-import androidx.compose.runtime.mutableStateOf
+import android.content.SharedPreferences
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import org.json.JSONObject
@@ -18,6 +23,49 @@ class NativeAppTest {
     "endpointUrl":"https://example.test","apiKey":"fake-key","autoRenew":false,
     "knockOnOpen":true,"pinnedToHome":true}],"network":{"checksEnabled":false}
   }"""))
+
+  @Test fun wallpaperColorsAreOptInPersistAndCanReturnToBrandColors() {
+    if (Build.VERSION.SDK_INT < 31) return
+    val generation = mutableStateOf(0)
+    lateinit var preferences: SharedPreferences
+    lateinit var actual: ColorScheme
+    lateinit var brand: ColorScheme
+    lateinit var dynamic: ColorScheme
+    compose.setContent {
+      val context = LocalContext.current
+      remember { themePreferences(context).also {
+        preferences = it
+        it.edit().remove(WALLPAPER_COLORS_KEY).commit()
+      } }
+      val dark = isSystemInDarkTheme()
+      brand = if (dark) KnockerDarkColors else KnockerLightColors
+      dynamic = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+      key(generation.value) {
+        KnockerTheme {
+          actual = MaterialTheme.colorScheme
+          NativeApp(loaded(), { _, _ -> }, {})
+        }
+      }
+    }
+    try {
+      compose.runOnIdle { assertEquals(brand.primary, actual.primary); assertEquals(brand.surface, actual.surface) }
+      compose.onNodeWithContentDescription("Settings").performClick()
+      compose.onNodeWithText("Use wallpaper colors").assertIsOff().performClick()
+      compose.runOnIdle {
+        assertEquals(dynamic.primary, actual.primary); assertEquals(dynamic.surface, actual.surface)
+        assertTrue(preferences.getBoolean(WALLPAPER_COLORS_KEY, false))
+        generation.value++ // Recreate the theme to read the persisted preference.
+      }
+      compose.onNodeWithContentDescription("Settings").performClick()
+      compose.onNodeWithText("Use wallpaper colors").assertIsOn().performClick()
+      compose.runOnIdle {
+        assertEquals(brand.primary, actual.primary); assertEquals(brand.surface, actual.surface)
+        assertFalse(preferences.getBoolean(WALLPAPER_COLORS_KEY, true))
+      }
+    } finally {
+      compose.runOnIdle { preferences.edit().remove(WALLPAPER_COLORS_KEY).commit() }
+    }
+  }
 
   @Test fun hydrationUpdatesAnExistingNavigationEntryAndEditorHasOneTitle() {
     val state = mutableStateOf(NativeUiState())
@@ -123,7 +171,35 @@ class NativeAppTest {
       .assert(hasAnyAncestor(hasContentDescription("Edit Home server")).not())
       .assert(hasAnyAncestor(hasContentDescription("Profile Home server")))
     compose.onNodeWithContentDescription("Settings").performClick()
-    compose.onNodeWithText("Public-IP checks · Off").assertExists()
+    compose.onNodeWithText("Public-IP checks").assertIsOff()
+  }
+
+  @Test fun publicIpSwitchUsesBridgeStateAndKeepsSettingsOpen() {
+    val state = mutableStateOf(loaded())
+    val actions = mutableListOf<Pair<String, Map<String, Any?>>>()
+    compose.setContent { KnockerTheme { NativeApp(state.value, { type, payload -> actions.add(type to payload) }, {}) } }
+    compose.onNodeWithContentDescription("Settings").performClick()
+    compose.onNodeWithText("Public-IP checks").assertIsOff().performClick()
+    compose.runOnIdle {
+      assertEquals("toggleIp", actions.last().first)
+      assertEquals(true, actions.last().second["enabled"])
+      val json = loaded().json
+      json.getJSONObject("network").put("checksEnabled", true)
+      state.value = NativeUiState(json)
+    }
+    compose.onNodeWithText("Public-IP checks").assertIsOn()
+    compose.onNodeWithText("Check now").assertExists()
+    compose.onNodeWithText("Close").assertExists()
+    compose.onNodeWithText("Public-IP checks").performClick()
+    compose.runOnIdle {
+      assertEquals("toggleIp", actions.last().first)
+      assertEquals(false, actions.last().second["enabled"])
+      state.value = loaded()
+    }
+    compose.onNodeWithText("Public-IP checks").assertIsOff()
+    compose.onNodeWithText("Check now").assertDoesNotExist()
+    compose.onNodeWithText("Close").performClick()
+    compose.onNodeWithContentDescription("Knocker").assertExists()
   }
 
   @Test fun successfulFeedbackAutoDismissesEvenIfAnOldSnapshotMarksItPersistent() {

@@ -4,7 +4,7 @@ Android renders one `KnockerAppView`, an Expo native module containing a complet
 
 `NativeHome.kt` and `NativeEditor.kt` use Material 3 `Scaffold`, app bars, native lazy scrolling, outlined fields, switches, chips, expressive buttons, loading indicators and `SnackbarHost`. `KnockerAppView.kt` uses Jetpack Navigation 3 `NavDisplay` for destination transitions and system/predictive back. Each destination has one app-bar title. Home uses the original vector wordmark in a roomier native top bar; profile counts and connection metadata no longer occupy a second header. There is no Expo Router modal header or second page heading above the editor.
 
-The old per-control Expo UI wrappers and their button patch have been removed. The complete native surface uses Material 3's expressive theme and button-shape APIs directly. Current pins: Compose 1.12.1, Material 3 1.5.0-rc01, Navigation 3 1.2.1. Dynamic Material You colors follow Android appearance, with paired content/container colors and a contrasting green permission state.
+The old per-control Expo UI wrappers and their button patch have been removed. The complete native surface uses Material 3's expressive theme and button-shape APIs directly. Current pins: Compose 1.12.1, Material 3 1.5.0-rc01, Navigation 3 1.2.1. Knocker yellow (`#FDE562`, shared with the wordmark) anchors the default light and dark palettes. Dark mode uses it as the primary accent. Light mode uses the exact yellow on filled actions with dark text, pale lemon secondary actions and neutral white/gray surfaces. Text actions and field labels stay dark for readability. Android 12+ users can opt into wallpaper-based Material You colors with **Settings → Use wallpaper colors**. This native preference defaults to off, persists across restarts, and updates every destination immediately. Older Android versions always use the branded palette. Both options follow Android light/dark appearance, with paired content/container colors and a contrasting green permission state.
 
 ## Interaction and feedback
 
@@ -28,7 +28,7 @@ After the first visible frame, one cached Android startup batch begins independe
 
 Successful in-flight grants survive rename, pin, slot, TTL and renewal edits. Endpoint, key or normalized IP-target changes invalidate them. Native storage uses the latest renewal settings and preserves newer grants. Both JS merge paths preserve later attempt failures while recovering earlier valid permissions. Snapshot writes remain serialized. The optimized build retains the WorkManager/Room reflection keep rules.
 
-Local connection identity detects Wi-Fi/cellular/default-network changes without SSID, location or a public-IP service. Public-IP comparison is opt-in and off by default. The native dialog names ipify and explains disclosure before enabling it. Existing checks remain same-family/CIDR aware, foreground-only, cancellable, bounded to four seconds and independent of knocking. Turning them off cancels requests and clears comparison data.
+Local connection identity detects Wi-Fi/cellular/default-network changes without SSID, location or a public-IP service. Public-IP comparison is opt-in and off by default. The Settings dialog exposes a Public-IP checks switch, names ipify and explains disclosure alongside it. Toggling uses the existing saved network preference and keeps Settings open; Check now appears while enabled. Existing checks remain same-family/CIDR aware, foreground-only, cancellable, bounded to four seconds and independent of knocking. Turning them off cancels requests and clears comparison data.
 
 ## State ownership and failure guarantees
 
@@ -40,7 +40,7 @@ Storage read errors and malformed metadata reject hydration instead of becoming 
 
 If secret cleanup fails after a committed deletion, its API key can remain in platform key storage under the deleted ID. The removed profile is no longer available to launch, foreground, tile or renewal callers. There is currently no automatic retry of orphan-key cleanup; the operation reports failure rather than claiming that cleanup succeeded. Startup progress feedback is cleared on settlement only while its ID still matches, so failures cannot leave stale progress or dismiss newer feedback. Resume refresh uses one rejection handler for reads, reconciliation and persistence. Web/iOS floating actions have a scrollable height limit and measured clearance for the list and snackbar.
 
-`KnockerTheme` supplies the same Android dynamic-color and appearance settings to the app and all instrumentation tests. Tests render the production `NativeApp` tree with fixture data and captured command/haptic callbacks; they no longer use Material's default pink palette. Their Android test activity is a separate host, not another frontend shipped in the APK. Release verification uses the installed, optimized app itself.
+`KnockerTheme` supplies the same branded palette, opt-in dynamic-color preference and Android appearance settings to the app and all instrumentation tests. Tests render the production `NativeApp` tree with fixture data and captured command/haptic callbacks; they no longer use Material's default pink palette. Their Android test activity is a separate host, not another frontend shipped in the APK. Release verification uses the installed, optimized app itself.
 
 ## Build and checks
 
@@ -52,7 +52,7 @@ pnpm typecheck
 pnpm --filter @workspace/knocker test
 pnpm --filter @workspace/knocker exec expo prebuild --platform android --no-install
 cd artifacts/knocker/android
-./gradlew :knocker-native:testDebugUnitTest
+./gradlew :knocker-native:lintDebug :knocker-native:testDebugUnitTest
 ./gradlew :knocker-native:connectedDebugAndroidTest
 SENTRY_DISABLE_AUTO_UPLOAD=true ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64 \
   -Dorg.gradle.jvmargs='-Xmx6g -XX:MaxMetaspaceSize=1g' --max-workers=8
@@ -63,6 +63,16 @@ The release APK embeds JavaScript and requires no Metro server. The local delive
 The portable suite has 54 JS behavior tests, including key/metadata write failures and hydration failures that must not erase saved data. The native JVM suite has 15 tests covering request sharing, independent batch failures, grant reconciliation and form validation. `NativeAppTest.kt` runs the real Compose/navigation tree on Android to cover late hydration, one editor title, unsaved-back protection, immediate action dispatch and distinct outcome haptic callbacks. It also checks matching acknowledgement tokens, failed-save draft retention and retry, deletion cleanup failures, saved IDs named `new`, the concise home, warning placement inside its profile panel and outside the green status section, settings access and automatic success dismissal even with a stale persistent flag. Deleted-profile routes return home instead of creating a blank draft; a deletion waits for its matching acknowledgement. All twelve device-level Compose tests passed on the Android 16 emulator. Physical haptic strength and feel require a real device.
 
 Instrumentation tests explicitly use Espresso 3.8.0-alpha03: Compose's older transitive Espresso dependency calls a reflective InputManager API removed from Android 16. This override is confined to test dependencies.
+
+## Branded appearance validation
+
+The default-yellow change passed workspace type checking, all 54 JavaScript tests, all 15 native JVM tests and all 13 Compose/navigation tests on the Android 16 emulator. The new UI test verifies default-off behavior, immediate wallpaper-color selection, preference restoration after theme recreation and returning to the branded palette.
+
+After revising light mode to use exact-yellow filled actions and neutral surfaces, all 13 Compose/navigation tests and the release build passed again. The subsequent Public-IP switch change passed all 14 Compose/navigation tests and the release build, including on/off command payloads, bridge state updates and keeping Settings open. Installed-app checks confirmed both switch states and the conditional Check now action.
+
+The optimized release APK also passed installed-app checks for light/dark appearance, immediate palette switching and both on/off choices surviving relaunch. Captures: `yellow-home-dark.png`, `yellow-home-light.png`, `yellow-settings-dark.png`, `yellow-settings-light.png` `wallpaper-settings-dark.png` and `public-ip-settings-light.png` in `screenshots/`. The profile uses demonstration data.
+
+Android lint was also run. It reported nine errors in unchanged network, notification and tile code (`KnockerNetwork.kt`, `KnockerTileNotifier.kt`, `KnockerTileService.kt`), concerning permission declarations/checks and the deprecated tile-launch overload, plus 16 warnings. The appearance changes have no lint errors. These existing findings remain outside the appearance change.
 
 ## Controlled device validation
 
