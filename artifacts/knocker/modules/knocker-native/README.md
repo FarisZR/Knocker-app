@@ -90,11 +90,12 @@ Then on the device:
 
 Auto-renew is off for new profiles. Quick Settings tiles and foreground knocks
 do not require exact-alarm access. Enabling Auto-renew reveals the permission
-action if needed; it never opens system settings automatically. Saved renewal
-choices are preserved.
+dialog if access is missing, explaining why timely renewal needs alarms and
+reminders. **Open settings** opens the system permission screen; **Not now**
+keeps the inexact fallback. Saved renewal choices are preserved.
 
-When Auto-renew is enabled in the profile editor, **Allow precise renewal**
-opens Android's alarms-and-reminders settings if access is missing. Denying
+When Auto-renew is enabled in the profile editor, the prominent **Allow precise
+renewal** button reopens this explanation if access is missing. Denying
 access keeps the inexact fallback; granting access does not guarantee timely
 network work during Doze.
 
@@ -144,8 +145,12 @@ foreground-app mismatch, but the server response and tile screenshot confirm
 the action succeeded. A cold tile process was not established by the attempted
 background process kill, so that case is not marked passed.
 
-The emulator Compose test `backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch`
-also passed: a new profile starts with Auto-renew off, enabling it reveals
-the alarm-permission action when access is missing, and disabling it removes
-the action. Screen-off/Doze, network changes, reboot, remaining tile cases,
+The previous opt-in Compose test and manual release checks passed: a new
+profile starts with Auto-renew off, enabling it reveals the alarm-permission
+action when access is missing, and disabling it removes the action. The test
+`backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch` now also checks
+the explanation dialog, dismissal and reopening. This extended test compiles,
+but execution is pending because the emulator remained owned by another
+thread after the device tool's supported wait. Screen-off/Doze, network changes,
+reboot, remaining tile cases,
 live Caddy and physical haptic feel remain pending.

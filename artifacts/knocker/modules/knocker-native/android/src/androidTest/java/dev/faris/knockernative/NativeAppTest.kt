@@ -27,11 +27,18 @@ class NativeAppTest {
     compose.onNodeWithText("New profile").performClick()
     compose.onNodeWithText("Auto-renew").performScrollTo().assertIsOff()
     compose.onNodeWithText("Allow precise renewal").assertDoesNotExist()
+    compose.onNodeWithText("Allow timely background renewal?").assertDoesNotExist()
     compose.onNodeWithText("Auto-renew").performClick()
     val context = InstrumentationRegistry.getInstrumentation().targetContext
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
       !context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) {
+      compose.onNodeWithText("Allow timely background renewal?").assertExists()
+      compose.onNodeWithText("Not now").performClick()
+      compose.onNodeWithText("Allow timely background renewal?").assertDoesNotExist()
       compose.onNodeWithText("Allow precise renewal").performScrollTo().assertExists()
+      compose.onNodeWithText("Allow precise renewal").performClick()
+      compose.onNodeWithText("Allow timely background renewal?").assertExists()
+      compose.onNodeWithText("Not now").performClick()
     }
     compose.onNodeWithText("Auto-renew").performScrollTo().performClick()
     compose.onNodeWithText("Allow precise renewal").assertDoesNotExist()
