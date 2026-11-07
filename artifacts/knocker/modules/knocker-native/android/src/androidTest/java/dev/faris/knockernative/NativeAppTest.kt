@@ -2,7 +2,6 @@
 
 package dev.faris.knockernative
 
-import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -22,7 +21,7 @@ class NativeAppTest {
 
   @Test fun hydrationUpdatesAnExistingNavigationEntryAndEditorHasOneTitle() {
     val state = mutableStateOf(NativeUiState())
-    compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { _, _ -> }, {}) } }
+    compose.setContent { KnockerTheme { NativeApp(state.value, { _, _ -> }, {}) } }
     compose.onNodeWithContentDescription("Loading profiles").assertExists()
     compose.runOnIdle { state.value = loaded() }
     compose.onNodeWithText("Home server").assertExists()
@@ -42,11 +41,52 @@ class NativeAppTest {
     compose.onNodeWithText("Home server").assertExists()
   }
 
+  @Test fun aProfileNamedNewStillOpensTheExistingEditor() {
+    val json = loaded().json
+    json.getJSONArray("profiles").getJSONObject(0).put("id", "new")
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithText("Edit profile").assertExists()
+    compose.onNodeWithContentDescription("Delete profile").assertExists()
+    compose.onNodeWithText("Name").assertTextContains("Home server")
+  }
+
+  @Test fun aFailedSaveKeepsItsDraftAndRequiresAMatchingAcknowledgement() {
+    val state = mutableStateOf(loaded())
+    val actions = mutableListOf<Pair<String, Map<String, Any?>>>()
+    compose.setContent { KnockerTheme { NativeApp(state.value, { type, payload -> actions.add(type to payload) }, {}) } }
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithText("Name").performTextReplacement("Unsaved name")
+    compose.onNodeWithText("Save").performClick()
+    lateinit var token: String
+    compose.runOnIdle {
+      token = actions.first { it.first == "save" }.second["token"] as String
+      state.value = NativeUiState(loaded().json.put("operation",
+        JSONObject().put("token", "unrelated").put("ok", true)))
+    }
+    compose.onNodeWithContentDescription("Back").assertIsNotEnabled()
+    compose.onNodeWithText("Unsaved name").assertExists()
+    compose.runOnIdle {
+      state.value = NativeUiState(loaded().json.put("operation",
+        JSONObject().put("token", token).put("ok", false).put("message", "Storage unavailable")))
+    }
+    compose.onNodeWithText("Storage unavailable").assertExists()
+    compose.onNodeWithText("Unsaved name").assertExists()
+    compose.onNodeWithText("Save").assertIsEnabled().performClick()
+    compose.runOnIdle {
+      val retryToken = actions.last { it.first == "save" }.second["token"] as String
+      assertNotEquals(token, retryToken)
+      state.value = NativeUiState(loaded().json.put("operation",
+        JSONObject().put("token", retryToken).put("ok", true).put("message", "Profile saved")))
+    }
+    compose.onNodeWithContentDescription("Knocker").assertExists()
+  }
+
   @Test fun knockActionsAndDistinctResultHapticsDoNotWaitForAnimationCompletion() {
     val state = mutableStateOf(loaded())
     val actions = mutableListOf<String>()
     val haptics = mutableListOf<String>()
-    compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { type, _ -> actions.add(type) }, { haptics.add(it) }) } }
+    compose.setContent { KnockerTheme { NativeApp(state.value, { type, _ -> actions.add(type) }, { haptics.add(it) }) } }
     compose.onNodeWithContentDescription("Knock all servers").performClick()
     compose.runOnIdle { assertTrue("knockAll" in actions); assertTrue("tap" in haptics) }
     for ((id, outcome) in listOf(1 to "success", 2 to "error")) {
@@ -68,7 +108,7 @@ class NativeAppTest {
       .put("grantNetworkId", "previous").put("autoRenew", true)
       .put("lastKnockStatus", "error").put("lastError", JSONObject.NULL)
     json.getJSONObject("network").put("connection", JSONObject().put("id", "current").put("type", "Wi-Fi").put("isConnected", true))
-    compose.setContent { MaterialExpressiveTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
     compose.onNodeWithContentDescription("Knocker").assertExists()
     compose.onNodeWithText("IP · 203.0.113.42").assertExists()
     compose.onNodeWithText("Failed").assertExists()
@@ -90,7 +130,7 @@ class NativeAppTest {
     val json = loaded().json.put("feedback", JSONObject().put("id", 10).put("text", "Launch knock succeeded")
       .put("outcome", "success").put("persistent", true))
     val actions = mutableListOf<String>()
-    compose.setContent { MaterialExpressiveTheme { NativeApp(NativeUiState(json), { type, _ -> actions.add(type) }, {}) } }
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { type, _ -> actions.add(type) }, {}) } }
     compose.onNodeWithText("Connected").assertExists()
     compose.onNodeWithContentDescription("Dismiss").assertDoesNotExist()
     compose.waitUntil(timeoutMillis = 10000) { "dismiss" in actions }
@@ -99,7 +139,7 @@ class NativeAppTest {
 
   @Test fun aDeletedProfileRouteReturnsHomeWithoutCreatingANewDraft() {
     val state = mutableStateOf(loaded())
-    compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { _, _ -> }, {}) } }
+    compose.setContent { KnockerTheme { NativeApp(state.value, { _, _ -> }, {}) } }
     compose.onNodeWithContentDescription("Edit Home server").performClick()
     compose.onNodeWithText("Name").performTextReplacement("Unsaved name")
     compose.runOnIdle { state.value = NativeUiState(loaded().json.put("profiles", org.json.JSONArray())) }
@@ -113,7 +153,7 @@ class NativeAppTest {
   @Test fun deletionWaitsForItsAcknowledgementAfterTheProfileDisappears() {
     val state = mutableStateOf(loaded())
     val actions = mutableListOf<Pair<String, Map<String, Any?>>>()
-    compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { type, payload -> actions.add(type to payload) }, {}) } }
+    compose.setContent { KnockerTheme { NativeApp(state.value, { type, payload -> actions.add(type to payload) }, {}) } }
     compose.onNodeWithContentDescription("Edit Home server").performClick()
     compose.onNodeWithContentDescription("Delete profile").performClick()
     compose.onNodeWithText("Delete", useUnmergedTree = true).performClick()
@@ -131,12 +171,28 @@ class NativeAppTest {
     compose.onNodeWithContentDescription("Knocker").assertExists()
   }
 
+  @Test fun failedSecretCleanupRemainsVisibleAfterTheProfileWasDeleted() {
+    val state = mutableStateOf(loaded())
+    val actions = mutableListOf<Pair<String, Map<String, Any?>>>()
+    compose.setContent { KnockerTheme { NativeApp(state.value, { type, payload -> actions.add(type to payload) }, {}) } }
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithContentDescription("Delete profile").performClick()
+    compose.onNodeWithText("Delete", useUnmergedTree = true).performClick()
+    compose.runOnIdle {
+      val token = actions.first { it.first == "delete" }.second["token"] as String
+      state.value = NativeUiState(loaded().json.put("profiles", org.json.JSONArray()).put("operation",
+        JSONObject().put("token", token).put("ok", false).put("message", "Key cleanup failed")))
+    }
+    compose.onNodeWithContentDescription("Knocker").assertExists()
+    compose.onNodeWithText("Key cleanup failed").assertExists()
+  }
+
   @Test fun malformedProfileIdsRenderEveryRowWithoutDuplicateKeyCrashes() {
     val json = loaded().json.put("profiles", org.json.JSONArray("""[
       {"id":"same","name":"First server"}, {"id":"same","name":"Second server"},
       {"name":"Third server"}, {"name":"Fourth server"}
     ]"""))
-    compose.setContent { MaterialExpressiveTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
     for (name in listOf("First server", "Second server", "Third server", "Fourth server"))
       compose.onNodeWithText(name).assertExists()
     compose.onNodeWithContentDescription("Edit Third server").assertIsNotEnabled()
@@ -151,7 +207,7 @@ class NativeAppTest {
     json.getJSONObject("network").put("connection", JSONObject().put("id", "wifi").put("isConnected", true))
     val state = mutableStateOf(NativeUiState(json))
     val knocks = mutableListOf<String>()
-    compose.setContent { MaterialExpressiveTheme {
+    compose.setContent { KnockerTheme {
       NativeApp(state.value, { type, payload -> if (type == "knock") knocks.add(payload["id"] as String) }, {})
     } }
     compose.mainClock.autoAdvance = false
@@ -186,7 +242,7 @@ class NativeAppTest {
   }
   @Test fun aHydratedWarningAnimatesOnItsFirstAppearance() {
     val state = mutableStateOf(loaded().let { NativeUiState(JSONObject(it.json.toString()).put("profiles", org.json.JSONArray())) })
-    compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { _, _ -> }, {}) } }
+    compose.setContent { KnockerTheme { NativeApp(state.value, { _, _ -> }, {}) } }
     compose.mainClock.autoAdvance = false
     compose.runOnIdle {
       val json = loaded().json

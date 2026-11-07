@@ -55,11 +55,7 @@ object KnockerStore {
 
   /** Replaces settings under the profile lock while retaining newer grants for the same target. */
   fun replaceProfiles(context: Context, profilesJson: String) {
-    val profiles = parseProfiles(profilesJson)
-    if (profiles == null) {
-      Log.w(TAG, "Skipping profile sync because the snapshot payload could not be parsed.")
-      return
-    }
+    val profiles = requireNotNull(parseProfiles(profilesJson)) { "Invalid profile snapshot" }
 
     synchronized(profileLock) {
       val previous = readProfiles(context).associateBy { it.id }

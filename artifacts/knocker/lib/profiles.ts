@@ -55,58 +55,42 @@ export function newProfile(): Profile {
   };
 }
 
-/** Reads the separate platform secret, tolerating unavailable storage as an empty key. */
+/** Missing keys are empty; storage failures must not become empty keys in a later save. */
 async function getSecret(id: string): Promise<string> {
-  try {
-    if (Platform.OS === "web") {
-      if (typeof localStorage === "undefined") return "";
-      return localStorage.getItem(SECRET_PREFIX + id) ?? "";
-    }
-    const v = await SecureStore.getItemAsync(SECRET_PREFIX + id);
-    return v ?? "";
-  } catch {
-    return "";
+  if (Platform.OS === "web") {
+    if (typeof localStorage === "undefined")
+      throw new Error("Key storage is unavailable");
+    return localStorage.getItem(SECRET_PREFIX + id) ?? "";
   }
+  return (await SecureStore.getItemAsync(SECRET_PREFIX + id)) ?? "";
 }
 
-/** Writes keys outside the profile snapshot using the platform secret store. */
+/** A failed key write must reject the save, never acknowledge metadata without its key. */
 async function setSecret(id: string, value: string): Promise<void> {
-  try {
-    if (Platform.OS === "web") {
-      if (typeof localStorage === "undefined") return;
-      if (value) localStorage.setItem(SECRET_PREFIX + id, value);
-      else localStorage.removeItem(SECRET_PREFIX + id);
-      return;
-    }
-    if (value) {
-      await SecureStore.setItemAsync(SECRET_PREFIX + id, value);
-    } else {
-      await SecureStore.deleteItemAsync(SECRET_PREFIX + id);
-    }
-  } catch {
-    // ignore
+  if (Platform.OS === "web") {
+    if (typeof localStorage === "undefined")
+      throw new Error("Key storage is unavailable");
+    if (value) localStorage.setItem(SECRET_PREFIX + id, value);
+    else localStorage.removeItem(SECRET_PREFIX + id);
+    return;
   }
-}
-
-async function deleteSecret(id: string): Promise<void> {
-  await setSecret(id, "");
+  if (value) {
+    await SecureStore.setItemAsync(SECRET_PREFIX + id, value);
+  } else {
+    await SecureStore.deleteItemAsync(SECRET_PREFIX + id);
+  }
 }
 
 /** Hydrates saved profile metadata and keys with defaults for optional fields. */
 export async function loadProfiles(): Promise<Profile[]> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const stored = parsed as StoredProfile[];
-    const withKeys = await Promise.all(
-      stored.map(async (p) => ({ ...p, apiKey: await getSecret(p.id) })),
-    );
-    return withKeys;
-  } catch {
-    return [];
-  }
+  const raw = await AsyncStorage.getItem(STORAGE_KEY);
+  if (raw === null) return [];
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error("Stored profiles are invalid");
+  const stored = parsed as StoredProfile[];
+  return Promise.all(
+    stored.map(async (p) => ({ ...p, apiKey: await getSecret(p.id) })),
+  );
 }
 
 export async function saveProfiles(profiles: Profile[]): Promise<void> {
@@ -119,7 +103,7 @@ export async function saveProfiles(profiles: Profile[]): Promise<void> {
 }
 
 export async function deleteProfileSecret(id: string): Promise<void> {
-  await deleteSecret(id);
+  await setSecret(id, "");
 }
 
 export { nativeConfigurationFingerprint } from "./profileConfiguration";

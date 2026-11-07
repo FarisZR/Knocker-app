@@ -1,11 +1,5 @@
 import { nativeConfigurationFingerprint } from "@/lib/profileConfiguration";
 import { prepareProfileSave } from "@/lib/grants";
-import { MaterialInput as TextInput } from "@/components/MaterialControls";
-import {
-  EditorActions,
-  MaterialToggle,
-  TileChips,
-} from "@/components/NativeActions";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -15,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
+  TextInput,
   Text,
   View,
 } from "react-native";
@@ -26,10 +21,6 @@ import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
 import { isValidUrl } from "@/lib/format";
 import { newProfile, type Profile } from "@/lib/profiles";
-import {
-  isNativeAvailable as isKnockerNativeAvailable,
-  TILE_SLOT_COUNT,
-} from "knocker-native";
 
 interface ProfileEditorProps {
   profileId: string;
@@ -64,6 +55,7 @@ export function ProfileEditor({
 
   const [draft, setDraft] = useState<Profile>(() => existing ?? newProfile());
   const [showKey, setShowKey] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [allowIpOverride, setAllowIpOverride] = useState(
     !!(existing?.ipOverride && existing.ipOverride.length > 0),
   );
@@ -118,6 +110,7 @@ export function ProfileEditor({
 
   /** Normalizes user input and preserves grants only when the permission target is unchanged. */
   const onSave = async () => {
+    setStorageError(null);
     const sanitized: Profile = prepareProfileSave(
       {
         ...draft,
@@ -129,7 +122,14 @@ export function ProfileEditor({
       },
       existing,
     );
-    await upsert(sanitized);
+    try {
+      await upsert(sanitized);
+    } catch (error) {
+      setStorageError(
+        error instanceof Error ? error.message : "Could not save profile",
+      );
+      return;
+    }
     setDraft(sanitized);
     baselineRef.current = sanitized;
     baselineAllowIpOverrideRef.current = allowIpOverride;
@@ -141,7 +141,14 @@ export function ProfileEditor({
   const onDelete = () => {
     if (isNew) return;
     const doIt = async () => {
-      await remove(draft.id);
+      try {
+        await remove(draft.id);
+      } catch (error) {
+        setStorageError(
+          error instanceof Error ? error.message : "Could not delete profile",
+        );
+        return;
+      }
       onDirtyChange?.(false);
       onDeleted(draft.id);
     };
@@ -185,6 +192,9 @@ export function ProfileEditor({
         <Text style={[styles.h1, { color: colors.foreground }]}>
           {isNew ? "New profile" : "Edit profile"}
         </Text>
+        {storageError ? (
+          <Text style={{ color: colors.destructive }}>{storageError}</Text>
+        ) : null}
 
         <Section title="Server" colors={colors}>
           <Field label="Name" colors={colors}>
@@ -335,43 +345,12 @@ export function ProfileEditor({
         <Section title="Quick access" colors={colors}>
           <ToggleRow
             label="Pin to home"
-            sub={
-              Platform.OS === "android"
-                ? "Adds a floating knock shortcut"
-                : "Adds a dedicated knock button above Knock all"
-            }
+            sub={"Adds a dedicated knock button above Knock all"}
             value={draft.pinnedToHome}
             onChange={(v) => patch({ pinnedToHome: v })}
             colors={colors}
-            last={!isKnockerNativeAvailable}
+            last
           />
-          {isKnockerNativeAvailable ? (
-            <View style={[styles.field, { paddingTop: 14 }]}>
-              <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-                Quick Settings tile slot
-              </Text>
-              <Text
-                style={[styles.fieldSub, { color: colors.mutedForeground }]}
-              >
-                Android names these system tiles Knock 1-{TILE_SLOT_COUNT}. Pick
-                the same number here and in the Quick Settings editor.
-              </Text>
-              <TileSlotPicker
-                value={draft.tileSlot}
-                profiles={profiles}
-                currentId={draft.id}
-                onChange={(slot) => patch({ tileSlot: slot })}
-                colors={colors}
-              />
-              <Text
-                style={[styles.tileSlotHint, { color: colors.mutedForeground }]}
-              >
-                {draft.tileSlot === null
-                  ? "Add a Knock tile in Android, then match its number here."
-                  : `This profile will respond to the Android tile labeled \"Knock ${draft.tileSlot}\".`}
-              </Text>
-            </View>
-          ) : null}
         </Section>
 
         {!isNew ? (
@@ -404,64 +383,47 @@ export function ProfileEditor({
             },
           ]}
         >
-          {Platform.OS === "android" ? (
-            <EditorActions
-              canSave={canSave}
-              onSave={() => void onSave()}
-              onCancel={cancel}
-            />
-          ) : (
-            <>
-              <Pressable
-                onPress={cancel}
-                style={({ pressed }) => [
-                  styles.btnGhost,
-                  { opacity: pressed ? 0.6 : 1 },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.btnGhostText,
-                    { color: colors.onSurfaceVariant },
-                  ]}
-                >
-                  Cancel
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={onSave}
-                disabled={!canSave}
-                style={({ pressed }) => [
-                  styles.btnPrimary,
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: !canSave ? 0.4 : pressed ? 0.85 : 1,
-                  },
-                ]}
-              >
-                <Feather
-                  name="check"
-                  size={18}
-                  color={colors.primaryForeground}
-                />
-                <Text
-                  style={[
-                    styles.btnPrimaryText,
-                    { color: colors.primaryForeground },
-                  ]}
-                >
-                  Save
-                </Text>
-              </Pressable>
-            </>
-          )}
+          <Pressable
+            onPress={cancel}
+            style={({ pressed }) => [
+              styles.btnGhost,
+              { opacity: pressed ? 0.6 : 1 },
+            ]}
+          >
+            <Text
+              style={[styles.btnGhostText, { color: colors.onSurfaceVariant }]}
+            >
+              Cancel
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={onSave}
+            disabled={!canSave}
+            style={({ pressed }) => [
+              styles.btnPrimary,
+              {
+                backgroundColor: colors.primary,
+                opacity: !canSave ? 0.4 : pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Feather name="check" size={18} color={colors.primaryForeground} />
+            <Text
+              style={[
+                styles.btnPrimaryText,
+                { color: colors.primaryForeground },
+              ]}
+            >
+              Save
+            </Text>
+          </Pressable>
         </Animated.View>
       ) : null}
     </View>
   );
 }
 
-/** Groups fields with platform-appropriate Material or fallback typography. */
+/** Groups the web/iOS editor fields. */
 function Section({
   title,
   children,
@@ -477,14 +439,11 @@ function Section({
         style={[
           styles.sectionTitle,
           {
-            color:
-              Platform.OS === "android"
-                ? colors.primary
-                : colors.mutedForeground,
+            color: colors.mutedForeground,
           },
         ]}
       >
-        {Platform.OS === "android" ? title : title.toUpperCase()}
+        {title.toUpperCase()}
       </Text>
       <View style={[styles.sectionBody, { backgroundColor: colors.surface }]}>
         {children}
@@ -507,11 +466,9 @@ function Field({
 }) {
   return (
     <View style={styles.field}>
-      {Platform.OS !== "android" ? (
-        <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-          {label}
-        </Text>
-      ) : null}
+      <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
+        {label}
+      </Text>
       {sub ? (
         <Text style={[styles.fieldSub, { color: colors.mutedForeground }]}>
           {sub}
@@ -522,119 +479,7 @@ function Field({
   );
 }
 
-/** Selects an unoccupied Quick Settings slot with native chips or the platform fallback. */
-function TileSlotPicker({
-  value,
-  profiles,
-  currentId,
-  onChange,
-  colors,
-}: {
-  value: number | null;
-  profiles: Profile[];
-  currentId: string;
-  onChange: (slot: number | null) => void;
-  colors: ReturnType<typeof useColors>;
-}) {
-  const slots = Array.from({ length: TILE_SLOT_COUNT }, (_, i) => i + 1);
-  const ownerOf = (slot: number) =>
-    profiles.find((p) => p.tileSlot === slot && p.id !== currentId);
-  if (Platform.OS === "android")
-    return (
-      <TileChips
-        value={value}
-        onChange={onChange}
-        profiles={profiles}
-        currentId={currentId}
-      />
-    );
-  return (
-    <View style={styles.tileSlotRow}>
-      <Pressable
-        onPress={() => onChange(null)}
-        style={({ pressed }) => [
-          styles.tileSlotChip,
-          {
-            borderColor: colors.border,
-            backgroundColor: value === null ? colors.primary : "transparent",
-            opacity: pressed ? 0.7 : 1,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.tileSlotChipText,
-            {
-              color:
-                value === null ? colors.primaryForeground : colors.foreground,
-            },
-          ]}
-        >
-          Off
-        </Text>
-      </Pressable>
-      {slots.map((slot) => {
-        const conflict = ownerOf(slot);
-        const isActive = value === slot;
-        const isDisabled = Boolean(conflict) && !isActive;
-        return (
-          <Pressable
-            key={slot}
-            disabled={isDisabled}
-            accessibilityState={{ disabled: isDisabled, selected: isActive }}
-            accessibilityLabel={
-              isDisabled
-                ? `Slot ${slot}, unavailable${
-                    conflict?.name ? `, used by ${conflict.name}` : ""
-                  }`
-                : `Slot ${slot}${isActive ? ", selected" : ""}`
-            }
-            onPress={() => {
-              if (isDisabled) return;
-              onChange(isActive ? null : slot);
-            }}
-            style={({ pressed }) => [
-              styles.tileSlotChip,
-              {
-                borderColor: conflict ? colors.destructive : colors.border,
-                backgroundColor: isActive ? colors.primary : "transparent",
-                opacity: isDisabled ? 0.45 : pressed ? 0.7 : 1,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.tileSlotChipText,
-                {
-                  color: isActive
-                    ? colors.primaryForeground
-                    : conflict
-                      ? colors.destructive
-                      : colors.foreground,
-                },
-              ]}
-            >
-              {slot}
-            </Text>
-            {conflict ? (
-              <Text
-                style={[
-                  styles.tileSlotChipSub,
-                  { color: colors.mutedForeground },
-                ]}
-                numberOfLines={1}
-              >
-                {conflict.name || "used"}
-              </Text>
-            ) : null}
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-/** Pairs explanatory text with an accessible native Android or fallback switch. */
+/** Pairs a setting label with its accessible switch. */
 function ToggleRow({
   label,
   sub,
@@ -669,19 +514,13 @@ function ToggleRow({
           </Text>
         ) : null}
       </View>
-      {Platform.OS === "android" ? (
-        <MaterialToggle label={label} value={value} onChange={onChange} />
-      ) : (
-        <Switch
-          value={value}
-          onValueChange={onChange}
-          thumbColor={
-            value ? colors.primaryForeground : colors.onSurfaceVariant
-          }
-          trackColor={{ false: colors.border, true: colors.primary }}
-          ios_backgroundColor={colors.border}
-        />
-      )}
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        thumbColor={value ? colors.primaryForeground : colors.onSurfaceVariant}
+        trackColor={{ false: colors.border, true: colors.primary }}
+        ios_backgroundColor={colors.border}
+      />
     </View>
   );
 }
@@ -692,12 +531,12 @@ const styles = StyleSheet.create({
   embeddedContent: { width: "100%", maxWidth: 900, alignSelf: "center" },
   h1: {
     fontSize: 28,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_700Bold",
+    fontFamily: "Inter_700Bold",
     letterSpacing: -0.4,
   },
   sectionTitle: {
-    fontSize: Platform.OS === "android" ? 14 : 11,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
     letterSpacing: 0.6,
     marginBottom: 8,
     paddingHorizontal: 4,
@@ -706,11 +545,11 @@ const styles = StyleSheet.create({
   field: { paddingVertical: 12 },
   fieldLabel: {
     fontSize: 14,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold",
   },
   fieldSub: {
     fontSize: 12,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
+    fontFamily: "Inter_400Regular",
     marginTop: 2,
     marginBottom: 4,
   },
@@ -720,7 +559,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
+    fontFamily: "Inter_400Regular",
     marginTop: 8,
   },
   keyRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -738,11 +577,11 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     fontSize: 14,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_500Medium",
+    fontFamily: "Inter_500Medium",
   },
   toggleSub: {
     fontSize: 12,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
+    fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
   warning: {
@@ -753,7 +592,7 @@ const styles = StyleSheet.create({
   },
   warningText: {
     fontSize: 12,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_500Medium",
+    fontFamily: "Inter_500Medium",
     flex: 1,
   },
   deleteBtn: {
@@ -768,7 +607,7 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     fontSize: 14,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold",
   },
   footer: {
     flexDirection: "row",
@@ -787,7 +626,7 @@ const styles = StyleSheet.create({
   },
   btnGhostText: {
     fontSize: 15,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold",
     paddingHorizontal: 2,
   },
   btnPrimary: {
@@ -802,38 +641,7 @@ const styles = StyleSheet.create({
   },
   btnPrimaryText: {
     fontSize: 15,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_700Bold",
+    fontFamily: "Inter_700Bold",
     paddingHorizontal: 2,
-  },
-  tileSlotRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
-  },
-  tileSlotChip: {
-    minWidth: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  tileSlotChipText: {
-    fontSize: 14,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
-    paddingHorizontal: 2,
-  },
-  tileSlotChipSub: {
-    fontSize: 10,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
-    marginTop: 2,
-    maxWidth: 90,
-  },
-  tileSlotHint: {
-    fontSize: 12,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
-    marginTop: 10,
-    lineHeight: 17,
   },
 });

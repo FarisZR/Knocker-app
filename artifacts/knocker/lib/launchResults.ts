@@ -2,13 +2,10 @@ import {
   grantConfigurationFingerprint,
   nativeConfigurationFingerprint,
 } from "./profileConfiguration";
-import { applyKnockResult, mergeGrantsForSave } from "./grants";
+import { applyKnockResult } from "./grants";
 import { nativeKnockResult } from "./nativeKnockResult";
 import type { Profile } from "./profiles";
-import type {
-  NativeLaunchKnockResult,
-  NativeProfileSnapshot,
-} from "knocker-native";
+import type { NativeLaunchKnockResult } from "knocker-native";
 
 /** Matches permission identity across display edits; legacy results need an exact snapshot. */
 function acceptsNativeResult(
@@ -72,12 +69,4 @@ export function applyLaunchResults(
       ? applyKnockResult(profile, profile, nativeKnockResult(result))
       : profile;
   });
-}
-
-/** Reconciles tile/renewal grants with the same ordering rules used when saving edits. */
-export function mergeExpiryFromNative(
-  profiles: Profile[],
-  snapshots: NativeProfileSnapshot[],
-): Profile[] {
-  return mergeGrantsForSave(profiles, snapshots);
 }

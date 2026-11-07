@@ -1,5 +1,4 @@
 import { isWhitelisted } from "@/lib/profileStatus";
-import { HomeActions } from "@/components/NativeActions";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import React, {
@@ -12,7 +11,6 @@ import React, {
 import {
   Alert,
   AppState,
-  BackHandler,
   FlatList,
   Platform,
   StyleSheet,
@@ -31,8 +29,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Ellipse, G, Path } from "react-native-svg";
 
 import { AnimatedPressable } from "@/components/AnimatedPressable";
-import { DevBuildBanner } from "@/components/DevBuildBanner";
-import { NetworkStatus } from "@/components/NetworkStatus";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { ProfileCard } from "@/components/ProfileCard";
 import { Snackbar } from "@/components/Snackbar";
@@ -41,7 +37,6 @@ import { useColors } from "@/hooks/useColors";
 import { useAdaptiveLayout } from "@/hooks/useAdaptiveLayout";
 import { useProfiles } from "@/context/ProfilesContext";
 import { performKnockHaptic, performTapHaptic } from "@/lib/haptics";
-import { homeActionsHeight } from "@/lib/homeActionsLayout";
 
 /** Shows saved profiles immediately and adapts editing and actions to the available panes. */
 export default function HomeScreen() {
@@ -138,18 +133,6 @@ export default function HomeScreen() {
     [commitSelection, editorDirty, selectedProfileId],
   );
 
-  useEffect(() => {
-    if (showTwoPanes || !selectedProfileId || Platform.OS !== "android") return;
-    const subscription = BackHandler.addEventListener(
-      "hardwareBackPress",
-      () => {
-        requestSelection(null);
-        return true;
-      },
-    );
-    return () => subscription.remove();
-  }, [requestSelection, selectedProfileId, showTwoPanes]);
-
   /** Opens a new draft in the detail pane or the compact editor route. */
   const onNew = () => {
     performTapHaptic();
@@ -202,12 +185,7 @@ export default function HomeScreen() {
   const showDetailPane = selectedProfileId !== null;
   const floatingActionBottom =
     bottomPad + 16 + (showTwoPanes && editorDirty ? 76 : 0);
-  const actionClearance =
-    Platform.OS === "android"
-      ? floatingActionBottom +
-        homeActionsHeight(profiles.length > 0, pinned.length, height) +
-        16
-      : bottomPad + 220;
+  const actionClearance = bottomPad + 220;
   const animatedFloatingActionBottom = useSharedValue(floatingActionBottom);
   useEffect(() => {
     animatedFloatingActionBottom.value = withTiming(floatingActionBottom, {
@@ -218,113 +196,93 @@ export default function HomeScreen() {
   const floatingActionStyle = useAnimatedStyle(() => ({
     bottom: animatedFloatingActionBottom.value,
   }));
-  const floatingActions =
-    !loaded ? null : Platform.OS === "android" ? (
+  const floatingActions = !loaded ? null : profiles.length > 0 ? (
+    <Animated.View
+      style={[styles.fabStack, { right: 16 }, floatingActionStyle]}
+      pointerEvents="box-none"
+    >
       <Animated.View
-        style={[
-          {
-            position: "absolute",
-            right: 16,
-          },
-          floatingActionStyle,
-        ]}
+        entering={FadeInDown.duration(motion.duration.medium).easing(
+          motion.easing.standard,
+        )}
       >
-        <HomeActions
-          hasProfiles={profiles.length > 0}
-          onNew={onNew}
-          onKnockAll={onKnockAll}
-        />
-      </Animated.View>
-    ) : profiles.length > 0 ? (
-      <Animated.View
-        style={[styles.fabStack, { right: 16 }, floatingActionStyle]}
-        pointerEvents="box-none"
-      >
-        <Animated.View
-          entering={FadeInDown.duration(motion.duration.medium).easing(
-            motion.easing.standard,
-          )}
+        <AnimatedPressable
+          onPress={onNew}
+          scaleTo={0.96}
+          style={[
+            styles.fabSecondary,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
         >
-          <AnimatedPressable
-            onPress={onNew}
-            scaleTo={0.96}
+          <Feather name="plus" size={16} color={colors.onSurfaceVariant} />
+          <Text
             style={[
-              styles.fabSecondary,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
+              styles.fabSecondaryText,
+              { color: colors.onSurfaceVariant },
             ]}
           >
-            <Feather name="plus" size={16} color={colors.onSurfaceVariant} />
-            <Text
-              style={[
-                styles.fabSecondaryText,
-                { color: colors.onSurfaceVariant },
-              ]}
-            >
-              New profile
-            </Text>
-          </AnimatedPressable>
-        </Animated.View>
+            New profile
+          </Text>
+        </AnimatedPressable>
+      </Animated.View>
 
-        {pinned.map((profile, index) => (
-          <Animated.View
-            key={profile.id}
-            entering={FadeInDown.delay(Math.min(index * 20, 80))
-              .duration(motion.duration.medium)
-              .easing(motion.easing.standard)}
-          >
-            <AnimatedPressable
-              onPress={() => onKnockPinned(profile.id)}
-              scaleTo={0.96}
-              style={[
-                styles.fabPinned,
-                { backgroundColor: colors.primaryContainer },
-              ]}
-            >
-              <Feather
-                name="bookmark"
-                size={13}
-                color={colors.onPrimaryContainer}
-              />
-              <Feather name="zap" size={16} color={colors.onPrimaryContainer} />
-              <Text
-                style={[
-                  styles.fabPinnedText,
-                  { color: colors.onPrimaryContainer },
-                ]}
-                numberOfLines={1}
-              >
-                Knock {profile.name || "profile"}
-              </Text>
-            </AnimatedPressable>
-          </Animated.View>
-        ))}
-
+      {pinned.map((profile, index) => (
         <Animated.View
-          entering={FadeInDown.delay(Math.min((pinned.length + 1) * 20, 100))
+          key={profile.id}
+          entering={FadeInDown.delay(Math.min(index * 20, 80))
             .duration(motion.duration.medium)
             .easing(motion.easing.standard)}
         >
           <AnimatedPressable
-            onPress={onKnockAll}
+            onPress={() => onKnockPinned(profile.id)}
             scaleTo={0.96}
-            style={[styles.fabPrimary, { backgroundColor: colors.primary }]}
+            style={[
+              styles.fabPinned,
+              { backgroundColor: colors.primaryContainer },
+            ]}
           >
-            <Feather name="zap" size={22} color={colors.primaryForeground} />
+            <Feather
+              name="bookmark"
+              size={13}
+              color={colors.onPrimaryContainer}
+            />
+            <Feather name="zap" size={16} color={colors.onPrimaryContainer} />
             <Text
               style={[
-                styles.fabPrimaryText,
-                { color: colors.primaryForeground },
+                styles.fabPinnedText,
+                { color: colors.onPrimaryContainer },
               ]}
+              numberOfLines={1}
             >
-              Knock all
+              Knock {profile.name || "profile"}
             </Text>
           </AnimatedPressable>
         </Animated.View>
+      ))}
+
+      <Animated.View
+        entering={FadeInDown.delay(Math.min((pinned.length + 1) * 20, 100))
+          .duration(motion.duration.medium)
+          .easing(motion.easing.standard)}
+      >
+        <AnimatedPressable
+          onPress={onKnockAll}
+          scaleTo={0.96}
+          style={[styles.fabPrimary, { backgroundColor: colors.primary }]}
+        >
+          <Feather name="zap" size={22} color={colors.primaryForeground} />
+          <Text
+            style={[styles.fabPrimaryText, { color: colors.primaryForeground }]}
+          >
+            Knock all
+          </Text>
+        </AnimatedPressable>
       </Animated.View>
-    ) : null;
+    </Animated.View>
+  ) : null;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -350,25 +308,9 @@ export default function HomeScreen() {
                 : `${profiles.length} profile${profiles.length === 1 ? "" : "s"} · ${activeCount} active`}
             </Text>
             <View style={styles.wordmarkFrame}>
-              {Platform.OS === "android" ? (
-                <Text
-                  style={{
-                    fontSize: 36,
-                    color: colors.foreground,
-                    fontFamily: "sans-serif",
-                    lineHeight: 38,
-                  }}
-                >
-                  Knocker
-                </Text>
-              ) : (
-                <KnockerWordmark />
-              )}
+              <KnockerWordmark />
             </View>
-            <NetworkStatus />
           </Animated.View>
-
-          <DevBuildBanner />
 
           {!loaded ? (
             <View style={styles.empty}>
@@ -386,21 +328,19 @@ export default function HomeScreen() {
                 Set the endpoint URL and API key for your Caddy Knocker server.
                 We'll handle the rest.
               </Text>
-              {Platform.OS !== "android" ? (
-                <AnimatedPressable
-                  onPress={onNew}
-                  scaleTo={0.96}
-                  style={[styles.emptyCta, { backgroundColor: colors.primary }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add new profile"
-                >
-                  <Feather
-                    name="plus"
-                    size={24}
-                    color={colors.primaryForeground}
-                  />
-                </AnimatedPressable>
-              ) : null}
+              <AnimatedPressable
+                onPress={onNew}
+                scaleTo={0.96}
+                style={[styles.emptyCta, { backgroundColor: colors.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="Add new profile"
+              >
+                <Feather
+                  name="plus"
+                  size={24}
+                  color={colors.primaryForeground}
+                />
+              </AnimatedPressable>
             </Animated.View>
           ) : (
             <FlatList
@@ -415,9 +355,7 @@ export default function HomeScreen() {
                   onOpen={onOpenProfile}
                 />
               )}
-              ItemSeparatorComponent={() => (
-                <View style={{ height: Platform.OS === "android" ? 3 : 8 }} />
-              )}
+              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
               contentContainerStyle={{
                 paddingHorizontal: 16,
                 paddingTop: 8,
@@ -427,7 +365,7 @@ export default function HomeScreen() {
             />
           )}
 
-          {!showTwoPanes || Platform.OS === "android" ? floatingActions : null}
+          {!showTwoPanes ? floatingActions : null}
 
           <Snackbar bottomOffset={actionClearance} />
         </View>
@@ -462,7 +400,7 @@ export default function HomeScreen() {
           ) : null}
         </View>
       </View>
-      {showTwoPanes && Platform.OS !== "android" ? floatingActions : null}
+      {showTwoPanes ? floatingActions : null}
     </View>
   );
 }
@@ -535,7 +473,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingBottom: 8 },
   kicker: {
     fontSize: 13,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_500Medium",
+    fontFamily: "Inter_500Medium",
   },
   wordmarkFrame: {
     width: 188,
@@ -554,14 +492,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     alignSelf: "stretch",
     fontSize: 20,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold",
     marginTop: 8,
     textAlign: "center",
   },
   emptyBody: {
     alignSelf: "stretch",
     fontSize: 14,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_400Regular",
+    fontFamily: "Inter_400Regular",
     textAlign: "center",
   },
   emptyCta: {
@@ -588,7 +526,7 @@ const styles = StyleSheet.create({
   },
   fabSecondaryText: {
     fontSize: 12.5,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold",
   },
   fabPinned: {
     flexDirection: "row",
@@ -601,7 +539,7 @@ const styles = StyleSheet.create({
   },
   fabPinnedText: {
     fontSize: 13.5,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_600SemiBold",
+    fontFamily: "Inter_600SemiBold",
   },
   fabPrimary: {
     flexDirection: "row",
@@ -613,7 +551,7 @@ const styles = StyleSheet.create({
   },
   fabPrimaryText: {
     fontSize: 16,
-    fontFamily: Platform.OS === "android" ? "sans-serif" : "Inter_700Bold",
+    fontFamily: "Inter_700Bold",
     letterSpacing: 0.2,
   },
 });

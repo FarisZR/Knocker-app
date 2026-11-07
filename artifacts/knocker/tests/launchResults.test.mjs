@@ -5,8 +5,12 @@ const {
   nativeConfigurationFingerprint: fingerprint,
   grantConfigurationFingerprint: grantFingerprint,
 } = loadTypeScript(new URL("../lib/profileConfiguration.ts", import.meta.url));
-const { selectLaunchResults, applyLaunchResults, mergeExpiryFromNative } =
-  loadTypeScript(new URL("../lib/launchResults.ts", import.meta.url));
+const { mergeGrantsForSave } = loadTypeScript(
+  new URL("../lib/grants.ts", import.meta.url),
+);
+const { selectLaunchResults, applyLaunchResults } = loadTypeScript(
+  new URL("../lib/launchResults.ts", import.meta.url),
+);
 const profile = {
   id: "home",
   name: "Home",
@@ -115,11 +119,11 @@ test("native snapshot merges require the same configuration and retain all grant
     configurationFingerprint: fingerprint(profile),
   };
   assert.equal(
-    mergeExpiryFromNative([profile], [snapshot])[0].whitelistedEntry,
+    mergeGrantsForSave([profile], [snapshot])[0].whitelistedEntry,
     result.whitelistedEntry,
   );
   const changed = { ...profile, apiKey: "rotated" };
-  assert.equal(mergeExpiryFromNative([changed], [snapshot])[0], changed);
+  assert.equal(mergeGrantsForSave([changed], [snapshot])[0], changed);
 });
 test("failed launch renewal preserves a still-valid grant", () => {
   const current = { ...profile, expiresAt: 10000, whitelistedAt: 1000 };

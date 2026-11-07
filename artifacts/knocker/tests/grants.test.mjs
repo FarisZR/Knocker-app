@@ -8,9 +8,6 @@ const {
   mergeGrantsForSave,
   applyKnockResult,
 } = loadTypeScript(new URL("../lib/grants.ts", import.meta.url));
-const { mergeExpiryFromNative } = loadTypeScript(
-  new URL("../lib/launchResults.ts", import.meta.url),
-);
 const { nativeConfigurationFingerprint } = loadTypeScript(
   new URL("../lib/profileConfiguration.ts", import.meta.url),
 );
@@ -90,7 +87,7 @@ test("older native grant cannot replace a newer JS grant even with a later expir
     configurationFingerprint: nativeConfigurationFingerprint(current),
   };
   assert.equal(isNewerGrant(older, current), false);
-  assert.equal(mergeExpiryFromNative([current], [older])[0], current);
+  assert.equal(mergeGrantsForSave([current], [older])[0], current);
 });
 test("recording timestamps order same-second grants without relying on expiry", () => {
   const cached = {
@@ -181,7 +178,7 @@ test("a valid grant is retained without erasing feedback from a later failed att
   assert.equal(saved.lastKnockStatus, "error");
   assert.equal(saved.lastError, "Denied");
 });
-test("both native merge paths preserve a JS failure newer than grant receipt", () => {
+test("native grant reconciliation preserves a JS failure newer than grant receipt", () => {
   const current = {
     ...profile,
     lastKnockAt: 3000,
@@ -194,11 +191,9 @@ test("both native merge paths preserve a JS failure newer than grant receipt", (
     grantRecordedAt: 2100,
     expiresAt: 22000,
   };
-  for (const merge of [mergeGrantsForSave, mergeExpiryFromNative]) {
-    const [merged] = merge([current], [cached]);
-    assert.equal(merged.expiresAt, 22000);
-    assert.equal(merged.lastKnockStatus, "error");
-    assert.equal(merged.lastError, "Denied");
-    assert.equal(merged.lastKnockAt, 3000);
-  }
+  const [merged] = mergeGrantsForSave([current], [cached]);
+  assert.equal(merged.expiresAt, 22000);
+  assert.equal(merged.lastKnockStatus, "error");
+  assert.equal(merged.lastError, "Denied");
+  assert.equal(merged.lastKnockAt, 3000);
 });

@@ -7,10 +7,8 @@ import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,8 +23,6 @@ import com.facebook.react.uimanager.events.NativeGestureUtil
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
-import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 /** One Android-owned Compose tree, including navigation, insets, IME, dialogs and feedback. */
 class KnockerAppView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
@@ -38,11 +34,7 @@ class KnockerAppView(context: Context, appContext: AppContext) : ExpoView(contex
     addView(ComposeView(context).apply {
       setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
       setContent {
-        val dark = isSystemInDarkTheme()
-        val scheme = if (Build.VERSION.SDK_INT >= 31) {
-          if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        } else if (dark) darkColorScheme() else lightColorScheme()
-        MaterialExpressiveTheme(colorScheme = scheme) {
+        KnockerTheme {
           NativeApp(snapshot, ::emit, ::haptic)
         }
       }
@@ -86,25 +78,22 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
   // NavEntry retains destination content. Read the current bridge snapshot inside
   // that content instead of capturing the snapshot that created the entry.
   val latestState = rememberUpdatedState(state)
-  val scope = rememberCoroutineScope()
   var route by rememberSaveable { mutableStateOf("home") }
-  val backStack = remember { mutableStateListOf("home").apply { if (route != "home") add(route) } }
   val snackbar = remember { SnackbarHostState() }
   var dirty by remember { mutableStateOf(false) }
-  var discardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+  var discardDestination by remember { mutableStateOf<String?>(null) }
   var preferences by remember { mutableStateOf(false) }
   var pendingOperation by remember { mutableStateOf<String?>(null) }
   var editorError by remember { mutableStateOf<String?>(null) }
 
   fun navigate(next: String) {
-    val action = {
-      dirty = false; editorError = null
-      if (next == "home") { while (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
-      else if (backStack.size == 1) backStack.add(next) else backStack[backStack.lastIndex] = next
-      route = next
-    }
     if (pendingOperation != null) return
-    if (dirty) discardAction = action else action()
+    if (dirty) {
+      discardDestination = next
+      return
+    }
+    editorError = null
+    route = next
   }
   fun dispatch(type: String, payload: Map<String, Any?> = emptyMap()) {
     haptic("tap"); emit(type, payload)
@@ -132,6 +121,14 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
       snackbar.showSnackbar(result.optString("message", "Profile saved"), withDismissAction = true)
     } else {
       editorError = result.optString("message", "Could not save. Try again."); haptic("error")
+      // A delete can remove metadata before secret cleanup fails. Keep that
+      // failure visible even though its destination no longer exists.
+      if (route.startsWith("profile:") && state.profiles.none { it.optString("id") == route.removePrefix("profile:") }) {
+        val message = editorError.orEmpty()
+        dirty = false; navigate("home")
+        snackbar.currentSnackbarData?.dismiss()
+        snackbar.showSnackbar(message, withDismissAction = true)
+      }
     }
   }
   LaunchedEffect(state.feedback?.optLong("id")) {
@@ -150,46 +147,49 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
       duration = if (!success && (feedback.optBoolean("persistent") || feedback.optBoolean("retry"))) SnackbarDuration.Indefinite else SnackbarDuration.Short)
     if (result == SnackbarResult.ActionPerformed) dispatch("retry") else emit("dismiss", emptyMap())
   }
-  BackHandler(enabled = backStack.size > 1 && (dirty || pendingOperation != null)) { navigate("home") }
+  BackHandler(enabled = route != "home" && (dirty || pendingOperation != null)) { navigate("home") }
 
-  run {
-    NavDisplay(
-      backStack = backStack,
-      modifier = Modifier.fillMaxSize(),
-      onBack = { navigate("home") },
-      entryProvider = { destination ->
-        NavEntry(destination) {
-          val sceneState = latestState.value
-          if (sceneState.fatal != null) {
-            Scaffold(topBar = { TopAppBar(title = { Text("Knocker") }) }) { padding ->
-              Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Unable to open Knocker", style = MaterialTheme.typography.headlineSmall)
-                Text(sceneState.fatal)
-                Button(onClick = { dispatch("restart") }) { Text("Try again") }
-              }
+  NavDisplay(
+    backStack = if (route == "home") listOf("home") else listOf("home", route),
+    modifier = Modifier.fillMaxSize(),
+    onBack = { navigate("home") },
+    entryProvider = { destination ->
+      NavEntry(destination) {
+        val sceneState = latestState.value
+        if (sceneState.fatal != null) {
+          Scaffold(topBar = { TopAppBar(title = { Text("Knocker") }) }) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+              Text("Unable to open Knocker", style = MaterialTheme.typography.headlineSmall)
+              Text(sceneState.fatal)
+              Button(onClick = { dispatch("restart") }) { Text("Try again") }
             }
-          } else if (destination == "home") {
-            NativeHome(sceneState, snackbar, onOpen = { haptic("tap"); navigate("profile:$it") },
-              onNew = { haptic("tap"); navigate("new") },
-              onKnock = { dispatch("knock", mapOf("id" to it)) },
-              onKnockAll = { dispatch("knockAll") },
-              onPreferences = { haptic("tap"); preferences = true })
-          } else {
-            NativeEditor(destination.removePrefix("profile:"), sceneState, snackbar, pendingOperation != null, editorError,
-              onDirty = { dirty = it }, onBack = { navigate("home") },
-              onSave = { operation("save", profile = it) },
-              onDelete = { operation("delete", id = it) }, feedback = haptic)
           }
+        } else if (destination == "home") {
+          NativeHome(sceneState, snackbar, onOpen = { haptic("tap"); navigate("profile:$it") },
+            onNew = { haptic("tap"); navigate("new") },
+            onKnock = { dispatch("knock", mapOf("id" to it)) },
+            onKnockAll = { dispatch("knockAll") },
+            onPreferences = { haptic("tap"); preferences = true })
+        } else {
+          NativeEditor(if (destination == "new") null else destination.removePrefix("profile:"), sceneState, snackbar, pendingOperation != null, editorError,
+            onDirty = { dirty = it }, onBack = { navigate("home") },
+            onSave = { operation("save", profile = it) },
+            onDelete = { operation("delete", id = it) }, feedback = haptic)
         }
       }
-    )
-  }
-  if (discardAction != null) AlertDialog(
-    onDismissRequest = { discardAction = null },
+    }
+  )
+  if (discardDestination != null) AlertDialog(
+    onDismissRequest = { discardDestination = null },
     title = { Text("Discard unsaved changes?") },
     text = { Text("Your changes to this profile have not been saved.") },
-    confirmButton = { TextButton(onClick = { haptic("tap"); discardAction?.invoke(); discardAction = null }) { Text("Discard") } },
-    dismissButton = { TextButton(onClick = { discardAction = null }) { Text("Keep editing") } }
+    confirmButton = { TextButton(onClick = {
+      haptic("tap")
+      dirty = false
+      discardDestination?.let { navigate(it) }
+      discardDestination = null
+    }) { Text("Discard") } },
+    dismissButton = { TextButton(onClick = { discardDestination = null }) { Text("Keep editing") } }
   )
   if (preferences) AlertDialog(
     onDismissRequest = { preferences = false },

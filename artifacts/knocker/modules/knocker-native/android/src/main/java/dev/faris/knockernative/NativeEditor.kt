@@ -22,15 +22,15 @@ import androidx.compose.ui.unit.dp
 
 /** A native editor has one app-bar title; drafts and IME interaction never round-trip through JS. */
 @Composable
-internal fun NativeEditor(id: String, state: NativeUiState, snackbar: SnackbarHostState, saving: Boolean, error: String?,
+internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarHostState, saving: Boolean, error: String?,
   onDirty: (Boolean) -> Unit, onBack: () -> Unit, onSave: (ProfileForm) -> Unit, onDelete: (String) -> Unit,
   feedback: (String) -> Unit) {
   val current = state.profiles.firstOrNull { !it.textOrNull("id").isNullOrBlank() && it.optString("id") == id }?.let(ProfileForm::from)
-  if (!state.loaded || (id != "new" && current == null)) {
+  if (!state.loaded || (id != null && current == null)) {
     // Restored routes can outlive their profile. Never turn one into a new draft,
     // and let a deletion's acknowledgement arrive before leaving its route.
     if (state.loaded && !saving) LaunchedEffect(id) { onDirty(false); onBack() }
-    Scaffold(topBar = { TopAppBar(title = { Text(if (id == "new") "New profile" else "Edit profile") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(if (id == null) "New profile" else "Edit profile") }) }) { padding ->
       Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     }
     return
@@ -54,10 +54,10 @@ internal fun NativeEditor(id: String, state: NativeUiState, snackbar: SnackbarHo
   }
   Scaffold(
     topBar = {
-      TopAppBar(title = { Text(if (id == "new") "New profile" else "Edit profile") },
+      TopAppBar(title = { Text(if (id == null) "New profile" else "Edit profile") },
         navigationIcon = { IconButton(onClick = { feedback("tap"); onBack() }, enabled = !saving) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
         actions = {
-          if (id != "new") IconButton(onClick = { feedback("tap"); confirmDelete = true }, enabled = !saving) { Icon(Icons.Default.DeleteOutline, "Delete profile") }
+          if (id != null) IconButton(onClick = { feedback("tap"); confirmDelete = true }, enabled = !saving) { Icon(Icons.Default.DeleteOutline, "Delete profile") }
           TextButton(onClick = ::save, enabled = !saving) {
             if (saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Save")
           }
