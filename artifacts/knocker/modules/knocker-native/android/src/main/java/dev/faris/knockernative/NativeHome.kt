@@ -4,6 +4,7 @@ package dev.faris.knockernative
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.*
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -139,6 +140,15 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val custom = !profile.textOrNull("ipOverride").isNullOrBlank()
   val warning = !custom && (ipChanged || (connectionChanged && match != "same"))
   val showNotice = active && !custom && (warning || connection?.optBoolean("isConnected") == false)
+  // A warning may already be present when this row is first hydrated. Start
+  // hidden explicitly so that first appearance receives the same entrance.
+  val noticeVisibility = remember(id) { MutableTransitionState(false) }
+  LaunchedEffect(showNotice) {
+    // Give the newly measured row its initial frame before starting entry.
+    // This only schedules presentation; action availability uses showNotice.
+    if (showNotice) withFrameNanos { }
+    noticeVisibility.targetState = showNotice
+  }
   val noticeColor = if (dark) Color(0xFF493600) else Color(0xFFFFF1C2)
   val noticeContent = if (dark) Color(0xFFFFE2A4) else Color(0xFF5B4300)
   // One elevated card owns the server and its warning. The amber footer stays
@@ -195,9 +205,10 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
         if (pending) LinearWavyProgressIndicator(Modifier.fillMaxWidth(), color = content)
       }
     }
-    AnimatedVisibility(visible = showNotice,
-      enter = expandVertically(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(), expandFrom = Alignment.Top) +
-        fadeIn(animationSpec = MaterialTheme.motionScheme.fastEffectsSpec()),
+    AnimatedVisibility(visibleState = noticeVisibility,
+      enter = expandVertically(animationSpec = MaterialTheme.motionScheme.slowSpatialSpec(), expandFrom = Alignment.Top) +
+        slideInVertically(animationSpec = MaterialTheme.motionScheme.slowSpatialSpec()) { -it } +
+        fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()),
       exit = shrinkVertically(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(), shrinkTowards = Alignment.Top) +
         fadeOut(animationSpec = MaterialTheme.motionScheme.fastEffectsSpec())) {
       Surface(color = noticeColor, contentColor = noticeContent,

@@ -3,7 +3,6 @@
 package dev.faris.knockernative
 
 import androidx.compose.material3.MaterialExpressiveTheme
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -153,7 +152,7 @@ class NativeAppTest {
     val state = mutableStateOf(NativeUiState(json))
     val knocks = mutableListOf<String>()
     compose.setContent { MaterialExpressiveTheme {
-      NativeHome(state.value, SnackbarHostState(), {}, {}, { knocks.add(it) }, {}, {})
+      NativeApp(state.value, { type, payload -> if (type == "knock") knocks.add(payload["id"] as String) }, {})
     } }
     compose.mainClock.autoAdvance = false
     compose.runOnIdle {
@@ -161,14 +160,48 @@ class NativeAppTest {
       changed.getJSONObject("network").getJSONObject("connection").put("id", "cellular")
       state.value = NativeUiState(changed)
     }
-    compose.mainClock.advanceTimeByFrame()
-    compose.mainClock.advanceTimeByFrame()
+    compose.mainClock.advanceTimeBy(64)
     val notice = compose.onNodeWithContentDescription("Connection notice for Home server")
     val initialHeight = notice.fetchSemanticsNode().boundsInRoot.height
     compose.onNodeWithContentDescription("Knock Home server").performClick()
     compose.runOnIdle { assertEquals(listOf("home"), knocks) }
     compose.mainClock.advanceTimeBy(2000)
-    assertTrue("The footer expands with native motion", notice.fetchSemanticsNode().boundsInRoot.height > initialHeight)
+    val fullHeight = notice.fetchSemanticsNode().boundsInRoot.height
+    assertTrue("The footer expands with native motion", fullHeight > initialHeight)
+    compose.runOnIdle { state.value = NativeUiState(JSONObject(json.toString())) }
+    compose.mainClock.advanceTimeByFrame()
+    compose.mainClock.advanceTimeBy(100)
+    assertTrue("The footer shrinks on dismissal", notice.fetchSemanticsNode().boundsInRoot.height < fullHeight)
+    compose.mainClock.advanceTimeBy(2000)
+    notice.assertDoesNotExist()
+    compose.runOnIdle {
+      val changed = JSONObject(json.toString())
+      changed.getJSONObject("network").getJSONObject("connection").put("id", "cellular")
+      state.value = NativeUiState(changed)
+    }
+    compose.mainClock.advanceTimeBy(64)
+    assertTrue("Repeated appearances must animate too", notice.fetchSemanticsNode().boundsInRoot.height < fullHeight)
+    compose.mainClock.advanceTimeBy(2000)
     compose.mainClock.autoAdvance = true
   }
+  @Test fun aHydratedWarningAnimatesOnItsFirstAppearance() {
+    val state = mutableStateOf(loaded().let { NativeUiState(JSONObject(it.json.toString()).put("profiles", org.json.JSONArray())) })
+    compose.setContent { MaterialExpressiveTheme { NativeApp(state.value, { _, _ -> }, {}) } }
+    compose.mainClock.autoAdvance = false
+    compose.runOnIdle {
+      val json = loaded().json
+      val now = System.currentTimeMillis()
+      json.getJSONArray("profiles").getJSONObject(0).put("expiresAt", now + 60000)
+        .put("whitelistedAt", now).put("grantNetworkId", "wifi")
+      json.getJSONObject("network").put("connection", JSONObject().put("id", "cellular").put("isConnected", true))
+      state.value = NativeUiState(json)
+    }
+    compose.mainClock.advanceTimeBy(64)
+    val notice = compose.onNodeWithContentDescription("Connection notice for Home server")
+    val firstHeight = notice.fetchSemanticsNode().boundsInRoot.height
+    compose.mainClock.advanceTimeBy(2000)
+    assertTrue("A newly composed notice must expand in", notice.fetchSemanticsNode().boundsInRoot.height > firstHeight)
+    compose.mainClock.autoAdvance = true
+  }
+
 }
