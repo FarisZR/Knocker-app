@@ -14,6 +14,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
@@ -77,6 +82,7 @@ class KnockerAppView(context: Context, appContext: AppContext) : ExpoView(contex
 internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -> Unit, haptic: (String) -> Unit) {
   // NavEntry retains destination content. Read the current bridge snapshot inside
   // that content instead of capturing the snapshot that created the entry.
+  val appearance = LocalAppearance.current
   val latestState = rememberUpdatedState(state)
   var route by rememberSaveable { mutableStateOf("home") }
   val snackbar = remember { SnackbarHostState() }
@@ -161,7 +167,9 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
             Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
               Text("Unable to open Knocker", style = MaterialTheme.typography.headlineSmall)
               Text(sceneState.fatal)
-              Button(onClick = { dispatch("restart") }) { Text("Try again") }
+              Button(onClick = { dispatch("restart") }, colors = knockerActionColors().let {
+                ButtonDefaults.buttonColors(containerColor = it.container, contentColor = it.content)
+              }) { Text("Try again") }
             }
           }
         } else if (destination == "home") {
@@ -196,17 +204,32 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
     icon = { Icon(Icons.Default.Settings, contentDescription = null) },
     title = { Text("Settings") },
     text = {
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Public-IP checks · ${if (state.network.optBoolean("checksEnabled")) "On" else "Off"}", style = MaterialTheme.typography.titleMedium)
-        Text("Compare your IP using ipify while the app is open. This shares your public IP with ipify.")
+      Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (Build.VERSION.SDK_INT >= 31) {
+          Row(Modifier.fillMaxWidth().toggleable(value = appearance.wallpaperColors, role = Role.Switch,
+            onValueChange = { haptic("tap"); appearance.setWallpaperColors(it) }),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+              Text("Use wallpaper colors", style = MaterialTheme.typography.titleMedium)
+              Text("Material You · off uses Knocker yellow", style = MaterialTheme.typography.bodyMedium)
+            }
+            Switch(checked = appearance.wallpaperColors, onCheckedChange = null)
+          }
+          HorizontalDivider()
+        }
+        Row(Modifier.fillMaxWidth().toggleable(value = state.network.optBoolean("checksEnabled"), role = Role.Switch,
+          onValueChange = { dispatch("toggleIp", mapOf("enabled" to it)) }),
+          verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          Column(Modifier.weight(1f)) {
+            Text("Public-IP checks", style = MaterialTheme.typography.titleMedium)
+            Text("Compare your IP using ipify while the app is open. This shares your public IP with ipify.",
+              style = MaterialTheme.typography.bodyMedium)
+          }
+          Switch(checked = state.network.optBoolean("checksEnabled"), onCheckedChange = null)
+        }
         if (state.network.optBoolean("checksEnabled")) TextButton(onClick = { preferences = false; dispatch("refreshIp") }) { Text("Check now") }
       }
     },
-    confirmButton = {
-      TextButton(onClick = { preferences = false; dispatch("toggleIp", mapOf("enabled" to !state.network.optBoolean("checksEnabled"))) }) {
-        Text(if (state.network.optBoolean("checksEnabled")) "Turn off" else "Enable checks")
-      }
-    },
-    dismissButton = { TextButton(onClick = { preferences = false }) { Text(if (state.network.optBoolean("checksEnabled")) "Close" else "Keep off") } }
+    confirmButton = { TextButton(onClick = { preferences = false }) { Text("Close") } }
   )
 }

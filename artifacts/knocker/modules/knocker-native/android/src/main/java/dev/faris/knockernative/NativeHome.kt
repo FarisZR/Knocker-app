@@ -50,6 +50,7 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
   onNew: () -> Unit, onKnock: (String) -> Unit, onKnockAll: () -> Unit, onPreferences: () -> Unit) {
   val now = grantClock()
   val colors = MaterialTheme.colorScheme
+  val actionColors = knockerActionColors()
   var actionsHeight by remember { mutableIntStateOf(0) }
   val density = LocalDensity.current
   val clearance = with(density) { actionsHeight.toDp() } + 24.dp
@@ -86,9 +87,10 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
           Button(onClick = onKnockAll, enabled = state.pending.isEmpty(), shapes = ButtonDefaults.shapes(),
             modifier = Modifier.heightIn(min = 64.dp).semantics { contentDescription = "Knock all servers" },
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
-            colors = ButtonDefaults.buttonColors(disabledContainerColor = colors.primary, disabledContentColor = colors.onPrimary)
+            colors = ButtonDefaults.buttonColors(containerColor = actionColors.container, contentColor = actionColors.content,
+              disabledContainerColor = actionColors.container, disabledContentColor = actionColors.content)
           ) {
-            if (state.pending.isNotEmpty()) LoadingIndicator(Modifier.size(28.dp), color = colors.onPrimary)
+            if (state.pending.isNotEmpty()) LoadingIndicator(Modifier.size(28.dp), color = actionColors.content)
             else Icon(Icons.Default.Bolt, null)
             Spacer(Modifier.width(10.dp))
             Text(if (state.pending.isEmpty()) "Knock all" else "Connecting…", style = MaterialTheme.typography.titleLarge)
@@ -118,6 +120,7 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
 private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Long,
   onOpen: (String) -> Unit, onKnock: (String) -> Unit) {
   val colors = MaterialTheme.colorScheme
+  val actionColors = knockerActionColors()
   val dark = isSystemInDarkTheme()
   val id = profile.optString("id"); val name = profile.optString("name").ifBlank { "Untitled profile" }
   val hasIdentity = !profile.textOrNull("id").isNullOrBlank()
@@ -182,17 +185,17 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
               style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
           Button(onClick = { onKnock(id) }, enabled = hasIdentity && !pending && profile.optString("apiKey").isNotBlank(), shapes = ButtonDefaults.shapes(),
-            colors = ButtonDefaults.buttonColors(containerColor = if (active) success else colors.primary,
-              contentColor = if (active) onSuccess else colors.onPrimary,
-              disabledContainerColor = if (active) success else colors.primary,
-              disabledContentColor = if (active) onSuccess else colors.onPrimary),
+            colors = ButtonDefaults.buttonColors(containerColor = if (active) success else actionColors.container,
+              contentColor = if (active) onSuccess else actionColors.content,
+              disabledContainerColor = if (active) success else actionColors.container,
+              disabledContentColor = if (active) onSuccess else actionColors.content),
             modifier = Modifier.semantics { contentDescription = "Knock $name" }
           ) { Text(if (pending) "Knocking" else if (warning && active) "Update IP" else if (active) "Renew" else "Knock") }
         }
         val status = if (pending) "${if (active) "Renewing" else "Connecting"}…" else if (active) "Whitelisted · $count" else if (!failed && expiry > 0L) "Expired" else null
         if (status != null) {
-          Surface(shape = MaterialTheme.shapes.small, color = if (pending) colors.primary else if (active) success else colors.secondaryContainer,
-            contentColor = if (pending) colors.onPrimary else if (active) onSuccess else colors.onSecondaryContainer) {
+          Surface(shape = MaterialTheme.shapes.small, color = if (pending) actionColors.container else if (active) success else colors.secondaryContainer,
+            contentColor = if (pending) actionColors.content else if (active) onSuccess else colors.onSecondaryContainer) {
             Text(status, Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium)
           }
         }
