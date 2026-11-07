@@ -50,3 +50,6 @@ Thumbs.db
 
 # Local Android test deliverables
 /builds/
+
+# Local Android distribution output
+play-release-notes/
