@@ -210,6 +210,7 @@ export default function HomeScreen() {
       <ScrollView
         style={{ maxHeight: Math.max(0, height * 0.55 - floatingActionBottom) }}
         contentContainerStyle={styles.fabStackContent}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
