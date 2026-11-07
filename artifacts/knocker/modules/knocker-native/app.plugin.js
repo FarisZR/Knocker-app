@@ -87,6 +87,23 @@ function withKnockerManifest(config) {
     ];
     if (!existingReceiver) application.receiver.push(receiverNode);
 
+    const networkReceiver = `${PACKAGE}.NetworkChangeReceiver`;
+    if (
+      !application.receiver.some(
+        (r) => r.$?.["android:name"] === networkReceiver,
+      )
+    ) {
+      application.receiver.push({
+        $: { "android:name": networkReceiver, "android:exported": "false" },
+        "intent-filter": [
+          {
+            action: [
+              { $: { "android:name": "android.intent.action.BOOT_COMPLETED" } },
+            ],
+          },
+        ],
+      });
+    }
     return cfg;
   });
 }
@@ -95,6 +112,8 @@ function withKnockerManifest(config) {
 function withKnockerPermissions(config) {
   return AndroidConfig.Permissions.withPermissions(config, [
     "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.RECEIVE_BOOT_COMPLETED",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.SCHEDULE_EXACT_ALARM",
   ]);

@@ -104,7 +104,7 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
         NativeSwitchRow("Knock when app opens", null, draft.onOpen, !saving) {
           feedback("tap"); change(draft.copy(onOpen = it))
         }
-        NativeSwitchRow("Auto-renew", null, draft.renew, !saving) {
+        NativeSwitchRow("Auto-renew", "Re-knock before expiry and after network changes", draft.renew, !saving) {
           feedback("tap"); change(draft.copy(renew = it))
           requestAlarmAccess = it
         }

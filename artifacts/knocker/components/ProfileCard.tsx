@@ -11,6 +11,7 @@ import { useProfiles } from "@/context/ProfilesContext";
 import { motion } from "@/constants/motion";
 import { formatCountdown, formatHostname } from "@/lib/format";
 import { performKnockHaptic } from "@/lib/haptics";
+import { useNetworkStatus } from "@/context/NetworkContext";
 import type { Profile } from "@/lib/profiles";
 
 /** Provides the cross-platform profile fallback with shared pending and renewal-error feedback. */
@@ -29,6 +30,8 @@ export function ProfileCard({
   const router = useRouter();
   const colors = useColors();
   const { knockOne, pendingKnocks } = useProfiles();
+  const network = useNetworkStatus();
+  const observation = network.statuses[profile.id];
   const [now, setNow] = useState(Date.now());
   const knocking = pendingKnocks.has(profile.id);
 
@@ -151,6 +154,28 @@ export function ProfileCard({
               </>
             )}
           </View>
+          {!profile.ipOverride && observation && !observation.whitelisted ? (
+            <View
+              style={{
+                backgroundColor: colors.primaryContainer,
+                padding: 10,
+                borderRadius: 10,
+                marginTop: 8,
+              }}
+            >
+              <Text style={{ color: colors.onPrimaryContainer }}>
+                Current IP is not whitelisted
+              </Text>
+              <Text style={{ color: colors.onPrimaryContainer }}>
+                Current IP · {observation.ipAddress}
+              </Text>
+              {profile.whitelistedEntry ? (
+                <Text style={{ color: colors.onPrimaryContainer }}>
+                  Last knock · {profile.whitelistedEntry}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
           {isActive && isError ? (
             <Text
               style={[

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useProfiles } from "@/context/ProfilesContext";
 import { useNetworkStatus } from "@/context/NetworkContext";
-import { compareGrantAddress } from "@/lib/publicIp";
+import { compareGrantAddress } from "@/lib/addresses";
 import { newProfile, type Profile } from "@/lib/profiles";
 import {
   NativeAppView,
@@ -22,16 +22,27 @@ export function NativeApp() {
   } | null>(null);
   const stateJson = JSON.stringify({
     loaded: store.loaded,
-    profiles: store.profiles.map((p) => ({
-      ...p,
-      addressMatch: compareGrantAddress(p.whitelistedEntry, network.addresses),
-    })),
+    profiles: store.profiles.map((p) => {
+      const status = network.statuses[p.id];
+      return {
+        ...p,
+        statusChecked: Object.hasOwn(network.statuses, p.id),
+        connectionStatus: status ?? null,
+        addressMatch: compareGrantAddress(
+          p.whitelistedEntry,
+          status
+            ? {
+                [status.ipAddress.includes(":") ? "ipv6" : "ipv4"]:
+                  status.ipAddress,
+              }
+            : {},
+        ),
+      };
+    }),
     pending: [...store.pendingKnocks],
     requestedProfile: profile ?? null,
     network: {
       connection: network.connection,
-      checksEnabled: network.checksEnabled,
-      checking: network.checking,
     },
     feedback: store.snackbar
       ? { ...store.snackbar, retry: !!store.snackbar.retry }
@@ -72,10 +83,7 @@ export function NativeApp() {
             message: "Profile deleted",
           });
           break;
-        case "toggleIp":
-          network.setChecksEnabled(action.enabled === true);
-          break;
-        case "refreshIp":
+        case "refreshStatus":
           network.refresh();
           break;
         case "dismiss":

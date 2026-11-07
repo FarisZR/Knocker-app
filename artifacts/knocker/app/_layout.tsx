@@ -86,7 +86,7 @@ function StartupReadyController() {
     const frame = requestAnimationFrame(() => {
       void SplashScreen.hideAsync();
       // Begin the cached native batch on the next frame, without awaiting JS
-      // profile/key hydration, animations, font loading or public-IP checks.
+      // profile/key hydration, animations, font loading or connection checks.
       knockFrame = requestAnimationFrame(startLaunchKnocks);
     });
     return () => {

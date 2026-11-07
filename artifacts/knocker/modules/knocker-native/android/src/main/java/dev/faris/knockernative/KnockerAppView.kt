@@ -217,17 +217,8 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
           }
           HorizontalDivider()
         }
-        Row(Modifier.fillMaxWidth().toggleable(value = state.network.optBoolean("checksEnabled"), role = Role.Switch,
-          onValueChange = { dispatch("toggleIp", mapOf("enabled" to it)) }),
-          verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-          Column(Modifier.weight(1f)) {
-            Text("Public-IP checks", style = MaterialTheme.typography.titleMedium)
-            Text("Compare your IP using ipify while the app is open. This shares your public IP with ipify.",
-              style = MaterialTheme.typography.bodyMedium)
-          }
-          Switch(checked = state.network.optBoolean("checksEnabled"), onCheckedChange = null)
-        }
-        if (state.network.optBoolean("checksEnabled")) TextButton(onClick = { preferences = false; dispatch("refreshIp") }) { Text("Check now") }
+        Text("Connection checks use only your configured Knocker servers.", style = MaterialTheme.typography.bodyMedium)
+        TextButton(onClick = { preferences = false; dispatch("refreshStatus") }) { Text("Check now") }
       }
     },
     confirmButton = { TextButton(onClick = { preferences = false }) { Text("Close") } }

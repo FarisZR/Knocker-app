@@ -55,6 +55,7 @@ class KnockerNativeModule : Module() {
 
     AsyncFunction("syncProfiles") { profilesJson: String ->
       KnockerStore.replaceProfiles(context, profilesJson)
+      NetworkChangeMonitor.update(context)
       KnockerTileService.refreshAll(context)
     }
 

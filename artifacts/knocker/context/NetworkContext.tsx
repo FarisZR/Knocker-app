@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Network from "expo-network";
 import React, {
   createContext,
@@ -9,134 +8,140 @@ import React, {
   useState,
 } from "react";
 import { AppState } from "react-native";
-import type { NativeNetworkIdentity } from "knocker-native";
+import { isNativeAvailable, type NativeNetworkIdentity } from "knocker-native";
 import {
   currentNetworkIdentity,
   recordNetworkState,
 } from "@/lib/networkIdentity";
-import { lookupPublicAddresses, type PublicAddresses } from "@/lib/publicIp";
+import { checkServerStatus, type ServerStatus } from "@/lib/serverStatus";
+import { grantConfigurationFingerprint } from "@/lib/profileConfiguration";
+import { useProfiles } from "./ProfilesContext";
 
-const STORAGE_KEY = "knocker.publicIpChecks.v1";
 interface NetworkStatus {
   connection: NativeNetworkIdentity | null;
-  checksEnabled: boolean;
-  checking: boolean;
-  addresses: PublicAddresses;
-  setChecksEnabled: (enabled: boolean) => void;
+  statuses: Record<string, ServerStatus | null>;
   refresh: () => void;
 }
 const NetworkContext = createContext<NetworkStatus | null>(null);
 
-/** Tracks local connections independently of the opt-in, foreground-only public-IP checks. */
+/** Local events trigger bounded checks against each profile's own server. No IP polling. */
 export function NetworkProvider({ children }: { children: React.ReactNode }) {
+  const { profiles, loaded, knockOne } = useProfiles();
   const [connection, setConnection] = useState<NativeNetworkIdentity | null>(
     null,
   );
-  const [checksEnabled, setEnabled] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [addresses, setAddresses] = useState<PublicAddresses>({});
-  const enabledRef = useRef(false);
-  const userChangedPreference = useRef(false);
-  const connectionRef = useRef<NativeNetworkIdentity | null>(null);
-  const controller = useRef<AbortController | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, ServerStatus | null>>(
+    {},
+  );
   const generation = useRef(0);
+  const sampling = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  const connectionRef = useRef<NativeNetworkIdentity | null>(null);
+  const latest = useRef({ profiles, knockOne });
+  latest.current = { profiles, knockOne };
+  // Only target/grant changes invalidate observations; display edits do not send requests.
+  const targets = JSON.stringify(
+    profiles.map((p) => [
+      p.id,
+      grantConfigurationFingerprint(p),
+      p.grantRecordedAt,
+      p.autoRenew,
+    ]),
+  );
 
-  /** Refreshes local identity first, then performs a cancellable IP check only when enabled. */
-  const refresh = useCallback(async (checkPublic = true) => {
-    const version = ++generation.current;
+  const refresh = useCallback(async (force = true) => {
+    const sample = ++sampling.current;
     const local = await currentNetworkIdentity();
-    if (version !== generation.current || AppState.currentState !== "active")
+    if (sample !== sampling.current || AppState.currentState !== "active")
       return;
-    const changed =
-      local?.id !== connectionRef.current?.id ||
-      local?.isConnected !== connectionRef.current?.isConnected;
+    const changed = local?.id !== connectionRef.current?.id;
     connectionRef.current = local;
     setConnection(local);
-    if (!checkPublic && !changed) return;
+    if (!force && !changed) return;
+    const version = ++generation.current;
     controller.current?.abort();
-    setAddresses({});
-    if (!enabledRef.current || local?.isConnected === false) {
-      setChecking(false);
-      return;
-    }
+    setStatuses({});
+    if (!local?.isConnected) return;
     const pending = new AbortController();
     controller.current = pending;
-    setChecking(true);
-    const timeout = setTimeout(() => pending.abort(), 4000);
+    const timer = setTimeout(() => pending.abort(), 4000);
     try {
-      const result = await lookupPublicAddresses(
-        enabledRef.current,
-        pending.signal,
+      await Promise.all(
+        latest.current.profiles
+          .filter((p) => !p.ipOverride)
+          .map(async (profile) => {
+            const status = await checkServerStatus(profile, pending.signal);
+            const current = latest.current.profiles.find(
+              (p) => p.id === profile.id,
+            );
+            if (
+              (pending.signal.aborted && status !== null) ||
+              version !== generation.current ||
+              !current ||
+              grantConfigurationFingerprint(current) !==
+                grantConfigurationFingerprint(profile)
+            )
+              return;
+            setStatuses((previous) => ({ ...previous, [profile.id]: status }));
+            // Android handles automatic recovery natively, including when JS is suspended.
+            if (
+              !isNativeAvailable &&
+              current.autoRenew &&
+              status &&
+              !status.whitelisted
+            )
+              void latest.current.knockOne(profile.id);
+          }),
       );
-      if (controller.current === pending && enabledRef.current)
-        setAddresses(result);
     } finally {
-      clearTimeout(timeout);
-      if (controller.current === pending) {
-        controller.current = null;
-        setChecking(false);
-      }
+      clearTimeout(timer);
     }
   }, []);
 
-  /** Persists explicit consent and immediately cancels and clears checks when disabled. */
-  const setChecksEnabled = useCallback(
-    (enabled: boolean) => {
-      userChangedPreference.current = true;
-      enabledRef.current = enabled;
-      setEnabled(enabled);
+  useEffect(() => {
+    if (!loaded) return;
+    void refresh();
+    return () => {
+      ++sampling.current;
+      ++generation.current;
       controller.current?.abort();
-      controller.current = null;
-      setAddresses({});
-      setChecking(false);
-      void AsyncStorage.setItem(STORAGE_KEY, String(enabled)).catch(() => {});
-      if (enabled) void refresh();
-    },
-    [refresh],
-  );
+    };
+  }, [loaded, targets, refresh]);
 
   useEffect(() => {
-    let mounted = true;
-    void AsyncStorage.getItem(STORAGE_KEY)
-      .then((value) => {
-        if (!mounted || userChangedPreference.current || value !== "true")
-          return;
-        enabledRef.current = true;
-        setEnabled(true);
-        void refresh();
-      })
-      .catch(() => {});
-    void refresh(false);
+    let debounce: ReturnType<typeof setTimeout> | undefined;
     const network = Network.addNetworkStateListener((state) => {
       recordNetworkState(state);
-      void refresh(false);
+      ++sampling.current;
+      ++generation.current;
+      controller.current?.abort();
+      setStatuses({});
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        void refresh();
+      }, 1500);
     });
     const app = AppState.addEventListener("change", (state) => {
       if (state === "active") void refresh();
       else {
+        ++sampling.current;
         ++generation.current;
         controller.current?.abort();
-        controller.current = null;
-        setChecking(false);
+        clearTimeout(debounce);
       }
     });
-    // Local polling also catches VPN/default-network changes without external requests.
-    const localTimer = setInterval(() => {
+    // Local sampling catches default-network/VPN changes without HTTP polling.
+    const timer = setInterval(() => {
       if (AppState.currentState === "active") void refresh(false);
     }, 10000);
-    const publicTimer = setInterval(() => {
-      if (enabledRef.current && AppState.currentState === "active")
-        void refresh();
-    }, 60000);
     return () => {
-      mounted = false;
+      ++sampling.current;
       ++generation.current;
       controller.current?.abort();
-      controller.current = null;
+      clearTimeout(debounce);
+      clearInterval(timer);
       network.remove();
       app.remove();
-      clearInterval(localTimer);
-      clearInterval(publicTimer);
     };
   }, [refresh]);
 
@@ -144,10 +149,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     <NetworkContext.Provider
       value={{
         connection,
-        checksEnabled,
-        checking,
-        addresses,
-        setChecksEnabled,
+        statuses,
         refresh: () => {
           void refresh();
         },
@@ -158,7 +160,6 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Requires the shared network provider so consent and address checks stay consistent. */
 export function useNetworkStatus() {
   const context = useContext(NetworkContext);
   if (!context)

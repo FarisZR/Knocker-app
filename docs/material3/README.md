@@ -12,7 +12,7 @@ Action feedback calls Android `View.performHapticFeedback` on the UI thread befo
 
 Single, bulk, retry and launch results carry an explicit outcome to the native surface, including successful results whose TTL is capped. Material loading, ripple, pressed-shape motion, snackbars and result visuals run natively. The attached warning footer explicitly starts hidden, including when a hydrated row already has a warning. Entry begins on the next native frame after the network snapshot, then slides down and expands with the expressive theme’s slow spatial spring and default fade; dismissal shrinks and fades. Full-navigation tests cover first composition, later network changes and repeated appearances while ensuring knock dispatch remains immediate. The list retains Compose’s standard Android overscroll behavior: scrollable content stretches at its boundaries; short lists do not get a custom stretch effect. Notice motion never gates a command. Navigation uses Jetpack's own transition and predictive-back implementation. Compose respects the system animation duration scale. Profiles have no entrance animation or minimum loading duration.
 
-An active grant remains green during renewal. The draining ring retains its server-granted interval while a small native loader indicates renewal in progress. Profile names, endpoints, IP details and loading actions keep matching foreground/background colors. Expiry clears green state; a failed renewal retains still-valid access and reports the failure. Cards show status only for connecting, active or expired grants, plus a single “IP” line. Idle profiles have no “Ready to connect” badge. Pinned/auto-renew captions, empty-state instructions and redundant editor subtitles are removed. Each profile uses one elevated Material card with rounded expressive shapes, 16 dp content padding and 12 dp spacing. Connection changes appear in an attached amber footer within the same card outline, outside the clickable green status section. The shared container and elevation keep the notice visibly associated with its server. Optional public-IP checks live behind the Settings icon.
+An active grant remains green during renewal. The draining ring retains its server-granted interval while a small native loader indicates renewal in progress. Profile names, endpoints, IP details and loading actions keep matching foreground/background colors. Expiry clears green state; a failed renewal retains still-valid access and reports the failure. Cards show status only for connecting, active or expired grants, plus a single “IP” line. Idle profiles have no “Ready to connect” badge. Pinned/auto-renew captions, empty-state instructions and redundant editor subtitles are removed. Each profile uses one elevated Material card with rounded expressive shapes, 16 dp content padding and 12 dp spacing. Connection changes appear in an attached amber footer within the same card outline, outside the clickable green status section. The shared container and elevation keep the notice visibly associated with its server. Connection checks use the configured Knocker server.
 
 Successful confirmations use a short native snackbar and dismiss automatically, including launch results previously marked persistent. Success text is reduced to “Connected”; capped TTLs remain identified. Pending progress stays on the cards and actions without a duplicate loading snackbar. Failures retain their retry action.
 
@@ -28,7 +28,7 @@ After the first visible frame, one cached Android startup batch begins independe
 
 Successful in-flight grants survive rename, pin, slot, TTL and renewal edits. Endpoint, key or normalized IP-target changes invalidate them. Native storage uses the latest renewal settings and preserves newer grants. Both JS merge paths preserve later attempt failures while recovering earlier valid permissions. Snapshot writes remain serialized. The optimized build retains the WorkManager/Room reflection keep rules.
 
-Local connection identity detects Wi-Fi/cellular/default-network changes without SSID, location or a public-IP service. Public-IP comparison is opt-in and off by default. The Settings dialog exposes a Public-IP checks switch, names ipify and explains disclosure alongside it. Toggling uses the existing saved network preference and keeps Settings open; Check now appears while enabled. Existing checks remain same-family/CIDR aware, foreground-only, cancellable, bounded to four seconds and independent of knocking. Turning them off cancels requests and clears comparison data.
+Local connection identity detects Wi-Fi/cellular/default-network changes without SSID or location access. On launch, resume and network changes, authenticated status checks use each profile's own Knocker server. A covered current address suppresses warnings; an uncovered address shows the current IP alongside the last knock. Auto-renew also recovers after connection changes through native Android callbacks and bounded WorkManager batches, with no persistent service or HTTP polling. Delivery may be delayed by Android battery restrictions; ordinary process death is supported by a PendingIntent availability subscription. Status failures remain unknown, and custom remote-IP profiles retain independent expiry renewal.
 
 ## State ownership and failure guarantees
 
@@ -68,9 +68,7 @@ Instrumentation tests explicitly use Espresso 3.8.0-alpha03: Compose's older tra
 
 The default-yellow change passed workspace type checking, all 54 JavaScript tests, all 15 native JVM tests and all 13 Compose/navigation tests on the Android 16 emulator. The new UI test verifies default-off behavior, immediate wallpaper-color selection, preference restoration after theme recreation and returning to the branded palette.
 
-After revising light mode to use exact-yellow filled actions and neutral surfaces, all 13 Compose/navigation tests and the release build passed again. The subsequent Public-IP switch change passed all 14 Compose/navigation tests and the release build, including on/off command payloads, bridge state updates and keeping Settings open. Installed-app checks confirmed both switch states and the conditional Check now action.
-
-The optimized release APK also passed installed-app checks for light/dark appearance, immediate palette switching and both on/off choices surviving relaunch. Captures: `yellow-home-dark.png`, `yellow-home-light.png`, `yellow-settings-dark.png`, `yellow-settings-light.png` `wallpaper-settings-dark.png` and `public-ip-settings-light.png` in `screenshots/`. The profile uses demonstration data.
+The optimized release APK also passed installed-app checks for light/dark appearance, immediate palette switching and both on/off choices surviving relaunch. Captures: `yellow-home-dark.png`, `yellow-home-light.png` in `screenshots/`. The profile uses demonstration data.
 
 Android lint was also run. It reported nine errors in unchanged network, notification and tile code (`KnockerNetwork.kt`, `KnockerTileNotifier.kt`, `KnockerTileService.kt`), concerning permission declarations/checks and the deprecated tile-launch overload, plus 16 warnings. The appearance changes have no lint errors. These existing findings remain outside the appearance change.
 
@@ -78,11 +76,34 @@ Android lint was also run. It reported nine errors in unchanged network, notific
 
 `node artifacts/knocker/scripts/ui-test-server.mjs` starts a loopback-only Caddy-shaped fixture. Use an HTTPS tunnel and fake keys. `/ok` succeeds, `/denied` returns 403, and paths containing `/slow/` wait eight seconds. `/slow/denied` combines the delay and failure. Returned IP `203.0.113.42` is documentation data. The fixture is not part of app runtime.
 
-Installed-release checks passed for cold-start hydration, profile opening, one editor title, native system Back, a dirty draft retained through rotation, Keep editing, save acknowledgement and grant retention after rename. Also exercised bulk mixed success/failure, successful individual renewal, native privacy disclosure/Keep off, new-profile single-title presentation and inline validation.
+Installed-release checks passed for cold-start hydration, profile opening, one editor title, native system Back, a dirty draft retained through rotation, Keep editing, save acknowledgement and grant retention after rename. Also exercised bulk mixed success/failure, successful individual renewal, new-profile single-title presentation and inline validation.
 
 Android's vibrator-service history recorded `CONTEXT_CLICK` as a tick for the bulk action, `REJECT` as a double-click for its failure result, and `CONFIRM` as a click after a successful individual knock. This verifies native dispatch, not physical motor feel. The controlled cold launch sent exactly one request per cached profile, arriving 2 ms apart; that demonstrates concurrency rather than total startup latency.
 
-Current home captures: `minimal-home-dark.png`, `minimal-warning-dark.png`, `minimal-settings-dark.png` and `minimal-home-light.png`. The current editor capture is `minimal-editor-dark.png`; earlier Compose captures document validation and unsaved-draft workflows before the caption reduction. Native UI validation and these screenshots are recorded in PR #15. Earlier screenshots in this directory document prior builds, including the wrapper-based UI that this implementation replaces. A successful build does not establish physical haptic feel, live Caddy behavior or alarm delivery. The previous emulator's expanded Quick Settings accessibility snapshot failed repeatedly, so actual tile invocation remains a physical-device validation item; slot assignment is covered in the editor.
+Current home captures: `minimal-home-dark.png`, `minimal-warning-dark.png` and `minimal-home-light.png`. The current editor capture is `minimal-editor-dark.png`; earlier Compose captures document validation and unsaved-draft workflows before the caption reduction. Native UI validation and these screenshots are recorded in PR #15. Earlier screenshots in this directory document prior builds, including the wrapper-based UI that this implementation replaces. A successful build does not establish physical haptic feel, live Caddy behavior or alarm delivery. The previous emulator's expanded Quick Settings accessibility snapshot failed repeatedly, so actual tile invocation remains a physical-device validation item; slot assignment is covered in the editor.
+
+## Server status and network recovery validation
+
+The server-status change passes 55 JavaScript tests and 19 native JVM tests. The
+Android 16 emulator passes all 21 Compose/worker tests, exercising native HTTP
+status/knock handling, opt-out,
+remote-IP exclusion, duplicate events and cooldowns. The x86_64 debug APK builds
+successfully. Module lint retains five existing notification-permission and legacy
+tile-launch errors in unchanged files; network permissions are declared by the module.
+
+Installed-app QA uses `scripts/network-test-server.mjs` through an HTTPS tunnel,
+with a fake API key and documentation IP addresses. A real Wi-Fi-to-cellular switch
+with Auto-renew disabled showed the amber footer and both addresses. Confirmed
+coverage on a different address suppressed the footer without another knock.
+With the app on the launcher, a cellular-to-Wi-Fi switch sent one status request
+at 23:37:11 UTC and one knock immediately afterward. The worker completed without
+opening the activity. Exact-alarm access was denied during this test, demonstrating
+that the network-change path is independent of that permission. Screen-off/Doze,
+force-stop, reboot and physical-carrier behavior remain separate validation cases.
+
+Captures: `server-status-uncovered.png`, `server-status-covered.png` and
+`network-auto-renew.png`. Obsolete settings captures were removed with the old
+external IP lookup UI.
 
 ## References
 
