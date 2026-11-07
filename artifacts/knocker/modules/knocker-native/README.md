@@ -93,6 +93,12 @@ opens Android's alarms-and-reminders settings if access is missing. Denying
 access keeps the inexact fallback; granting access does not guarantee timely
 network work during Doze.
 
+On Android 12+, each pending renewal keeps an independent inexact backup even
+while exact access is granted. The two alarms share a persisted generation token: the
+receiver accepts one current delivery and cancels its sibling, while rejecting
+old deliveries after rescheduling. Android's permission-granted broadcast
+upgrades still-pending renewals without requiring another save or knock.
+
 ## Background release QA
 
 Use the installed release build, a dedicated test endpoint/key and server-side
@@ -108,8 +114,10 @@ checks client behavior but does not establish live Caddy compatibility.
   tile state; repeat with a denied response and retry.
 - [ ] Observe renewal with the screen off and in Doze. Record actual dispatch
   and expiry times rather than treating alarm registration as HTTP delivery.
-- [ ] Change Wi-Fi/cellular connectivity and revoke alarm access; confirm safe
-  fallback and recovery. Check reboot separately: AlarmManager alarms are
+- [ ] Revoke alarm access with an exact renewal pending; confirm its independent
+  inexact backup still delivers. Grant access again and confirm the pending
+  renewal upgrades without saving or knocking. Change Wi-Fi/cellular connectivity
+  and confirm recovery. Check reboot separately: AlarmManager alarms are
   cleared on reboot, and this module has no boot-time rescheduling receiver.
 - [ ] Against live Caddy, verify successful/denied knocks, server-capped TTL,
   tile invocation and background renewal. Check physical haptic feel on hardware.
