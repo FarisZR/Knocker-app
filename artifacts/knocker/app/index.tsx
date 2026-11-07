@@ -13,6 +13,7 @@ import {
   AppState,
   FlatList,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -52,6 +53,7 @@ export default function HomeScreen() {
     profileParam ?? null,
   );
   const [editorDirty, setEditorDirty] = useState(false);
+  const [actionsHeight, setActionsHeight] = useState(0);
   const previousProfileIdRef = useRef<string | null>(null);
 
   const [statusNow, setStatusNow] = useState(Date.now());
@@ -185,7 +187,10 @@ export default function HomeScreen() {
   const showDetailPane = selectedProfileId !== null;
   const floatingActionBottom =
     bottomPad + 16 + (showTwoPanes && editorDirty ? 76 : 0);
-  const actionClearance = bottomPad + 220;
+  const actionClearance =
+    profiles.length > 0
+      ? floatingActionBottom + actionsHeight + 16
+      : bottomPad + 16;
   const animatedFloatingActionBottom = useSharedValue(floatingActionBottom);
   useEffect(() => {
     animatedFloatingActionBottom.value = withTiming(floatingActionBottom, {
@@ -200,87 +205,97 @@ export default function HomeScreen() {
     <Animated.View
       style={[styles.fabStack, { right: 16 }, floatingActionStyle]}
       pointerEvents="box-none"
+      onLayout={(event) => setActionsHeight(event.nativeEvent.layout.height)}
     >
-      <Animated.View
-        entering={FadeInDown.duration(motion.duration.medium).easing(
-          motion.easing.standard,
-        )}
+      <ScrollView
+        style={{ maxHeight: Math.max(0, height * 0.55 - floatingActionBottom) }}
+        contentContainerStyle={styles.fabStackContent}
+        showsVerticalScrollIndicator={false}
       >
-        <AnimatedPressable
-          onPress={onNew}
-          scaleTo={0.96}
-          style={[
-            styles.fabSecondary,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            },
-          ]}
+        <Animated.View
+          entering={FadeInDown.duration(motion.duration.medium).easing(
+            motion.easing.standard,
+          )}
         >
-          <Feather name="plus" size={16} color={colors.onSurfaceVariant} />
-          <Text
+          <AnimatedPressable
+            onPress={onNew}
+            scaleTo={0.96}
             style={[
-              styles.fabSecondaryText,
-              { color: colors.onSurfaceVariant },
+              styles.fabSecondary,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
             ]}
           >
-            New profile
-          </Text>
-        </AnimatedPressable>
-      </Animated.View>
+            <Feather name="plus" size={16} color={colors.onSurfaceVariant} />
+            <Text
+              style={[
+                styles.fabSecondaryText,
+                { color: colors.onSurfaceVariant },
+              ]}
+            >
+              New profile
+            </Text>
+          </AnimatedPressable>
+        </Animated.View>
 
-      {pinned.map((profile, index) => (
+        {pinned.map((profile, index) => (
+          <Animated.View
+            key={profile.id}
+            entering={FadeInDown.delay(Math.min(index * 20, 80))
+              .duration(motion.duration.medium)
+              .easing(motion.easing.standard)}
+          >
+            <AnimatedPressable
+              onPress={() => onKnockPinned(profile.id)}
+              scaleTo={0.96}
+              style={[
+                styles.fabPinned,
+                { backgroundColor: colors.primaryContainer },
+              ]}
+            >
+              <Feather
+                name="bookmark"
+                size={13}
+                color={colors.onPrimaryContainer}
+              />
+              <Feather name="zap" size={16} color={colors.onPrimaryContainer} />
+              <Text
+                style={[
+                  styles.fabPinnedText,
+                  { color: colors.onPrimaryContainer },
+                ]}
+                numberOfLines={1}
+              >
+                Knock {profile.name || "profile"}
+              </Text>
+            </AnimatedPressable>
+          </Animated.View>
+        ))}
+
         <Animated.View
-          key={profile.id}
-          entering={FadeInDown.delay(Math.min(index * 20, 80))
+          entering={FadeInDown.delay(Math.min((pinned.length + 1) * 20, 100))
             .duration(motion.duration.medium)
             .easing(motion.easing.standard)}
         >
           <AnimatedPressable
-            onPress={() => onKnockPinned(profile.id)}
+            onPress={onKnockAll}
             scaleTo={0.96}
-            style={[
-              styles.fabPinned,
-              { backgroundColor: colors.primaryContainer },
-            ]}
+            style={[styles.fabPrimary, { backgroundColor: colors.primary }]}
           >
-            <Feather
-              name="bookmark"
-              size={13}
-              color={colors.onPrimaryContainer}
-            />
-            <Feather name="zap" size={16} color={colors.onPrimaryContainer} />
+            <Feather name="zap" size={22} color={colors.primaryForeground} />
             <Text
               style={[
-                styles.fabPinnedText,
-                { color: colors.onPrimaryContainer },
+                styles.fabPrimaryText,
+                { color: colors.primaryForeground },
               ]}
-              numberOfLines={1}
             >
-              Knock {profile.name || "profile"}
+              Knock all
             </Text>
           </AnimatedPressable>
         </Animated.View>
-      ))}
-
-      <Animated.View
-        entering={FadeInDown.delay(Math.min((pinned.length + 1) * 20, 100))
-          .duration(motion.duration.medium)
-          .easing(motion.easing.standard)}
-      >
-        <AnimatedPressable
-          onPress={onKnockAll}
-          scaleTo={0.96}
-          style={[styles.fabPrimary, { backgroundColor: colors.primary }]}
-        >
-          <Feather name="zap" size={22} color={colors.primaryForeground} />
-          <Text
-            style={[styles.fabPrimaryText, { color: colors.primaryForeground }]}
-          >
-            Knock all
-          </Text>
-        </AnimatedPressable>
-      </Animated.View>
+      </ScrollView>
     </Animated.View>
   ) : null;
 
@@ -512,6 +527,9 @@ const styles = StyleSheet.create({
   },
   fabStack: {
     position: "absolute",
+    alignItems: "flex-end",
+  },
+  fabStackContent: {
     alignItems: "flex-end",
     gap: 12,
   },

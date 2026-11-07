@@ -158,7 +158,9 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const showSnackbar = useCallback((s: Omit<SnackbarState, "id">) => {
-    setSnackbar({ ...s, id: ++snackbarId.current });
+    const id = ++snackbarId.current;
+    setSnackbar({ ...s, id });
+    return id;
   }, []);
 
   const dismissSnackbar = useCallback(() => setSnackbar(null), []);
@@ -305,7 +307,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     [persist],
   );
 
-  /** Removes a hydrated profile snapshot before deleting its separate secret. */
+  /** Reports partial deletion if secret cleanup fails after metadata is committed. */
   const remove = useCallback(
     async (id: string) => {
       if (!loadedRef.current) throw new Error("Profiles are still loading");
@@ -320,6 +322,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let finish: (() => void) | undefined;
+    let startupSnackbarId: number | undefined;
     const finishPending = () => {
       finish?.();
       finish = undefined;
@@ -337,7 +340,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
       );
       if (launchIds.size) {
         finish = beginKnocks([...launchIds]);
-        showSnackbar({
+        startupSnackbarId = showSnackbar({
           ...pendingKnockFeedback(
             launchIds.size,
             "Startup request sent · waiting for Knocker server",
@@ -437,7 +440,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
               }
             : undefined,
         });
-      } else if (launchIds.size) dismissSnackbar();
+      }
       await write;
     })()
       .catch((error) => {
@@ -445,27 +448,34 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled && !loadedRef.current)
           setLoadError(new Error("Could not read saved profiles. Try again."));
       })
-      .finally(finishPending);
+      .finally(() => {
+        finishPending();
+        if (!cancelled && startupSnackbarId !== undefined)
+          setSnackbar((current) =>
+            current?.id === startupSnackbarId ? null : current,
+          );
+      });
     return () => {
       cancelled = true;
       finishPending();
     };
-  }, [beginKnocks, dismissSnackbar, persist, runKnock, showSnackbar]);
+  }, [beginKnocks, persist, runKnock, showSnackbar]);
 
   // Tiles and background renewals can finish while the activity is stopped.
   useEffect(() => {
     if (!loaded || !isKnockerNativeAvailable) return;
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
-      void loadProfilesFromNative().then((nativeProfiles) => {
-        const previous = profilesRef.current;
-        const merged = mergeGrantsForSave(previous, nativeProfiles);
-        if (!merged.some((profile, index) => profile !== previous[index]))
-          return;
-        void persist(merged).catch((error) => {
-          console.warn("Failed to persist native grant updates.", error);
+      void loadProfilesFromNative()
+        .then((nativeProfiles) => {
+          const previous = profilesRef.current;
+          const merged = mergeGrantsForSave(previous, nativeProfiles);
+          if (merged.some((profile, index) => profile !== previous[index]))
+            return persist(merged);
+        })
+        .catch((error) => {
+          console.warn("Failed to refresh native grant state.", error);
         });
-      });
     });
     return () => subscription.remove();
   }, [loaded, persist]);

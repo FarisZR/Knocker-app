@@ -39,7 +39,7 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
   var draft by remember(id) { mutableStateOf(baseline) }
   var showKey by remember(id) { mutableStateOf(false) }
   var attempted by remember(id) { mutableStateOf(false) }
-  var confirmDelete by remember { mutableStateOf(false) }
+  var confirmDelete by remember(id) { mutableStateOf(false) }
   val dirty = draft != baseline
   val errors = draft.errors()
   LaunchedEffect(dirty) { onDirty(dirty) }

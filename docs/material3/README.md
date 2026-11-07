@@ -38,6 +38,8 @@ The remaining coordination state has distinct jobs: draft/baseline comparison pr
 
 Storage read errors and malformed metadata reject hydration instead of becoming an empty list or empty key that a later save could overwrite. The existing native recovery screen offers retry. Key, metadata and native-cache write errors propagate to the editor acknowledgement. Failed saves retain the draft for retry; a secret-cleanup failure after deletion remains visible on home. These stores do not form a cross-store transaction: a rejected operation can have partial writes, so it must never be presented as a successful save or deletion.
 
+If secret cleanup fails after a committed deletion, its API key can remain in platform key storage under the deleted ID. The removed profile is no longer available to launch, foreground, tile or renewal callers. There is currently no automatic retry of orphan-key cleanup; the operation reports failure rather than claiming that cleanup succeeded. Startup progress feedback is cleared on settlement only while its ID still matches, so failures cannot leave stale progress or dismiss newer feedback. Resume refresh uses one rejection handler for reads, reconciliation and persistence. Web/iOS floating actions have a scrollable height limit and measured clearance for the list and snackbar.
+
 `KnockerTheme` supplies the same Android dynamic-color and appearance settings to the app and all instrumentation tests. Tests render the production `NativeApp` tree with fixture data and captured command/haptic callbacks; they no longer use Material's default pink palette. Their Android test activity is a separate host, not another frontend shipped in the APK. Release verification uses the installed, optimized app itself.
 
 ## Build and checks
