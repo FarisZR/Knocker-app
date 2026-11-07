@@ -2,6 +2,7 @@
 
 package dev.faris.knockernative
 
+import android.app.AlarmManager
 import android.content.SharedPreferences
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Rule
@@ -23,6 +25,28 @@ class NativeAppTest {
     "endpointUrl":"https://example.test","apiKey":"fake-key","autoRenew":false,
     "knockOnOpen":true,"pinnedToHome":true}],"network":{"checksEnabled":false}
   }"""))
+
+  @Test fun backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch() {
+    compose.setContent { KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) } }
+    compose.onNodeWithText("New profile").performClick()
+    compose.onNodeWithText("Auto-renew").performScrollTo().assertIsOff()
+    compose.onNodeWithText("Allow precise renewal").assertDoesNotExist()
+    compose.onNodeWithText("Allow timely background renewal?").assertDoesNotExist()
+    compose.onNodeWithText("Auto-renew").performClick()
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+      !context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) {
+      compose.onNodeWithText("Allow timely background renewal?").assertExists()
+      compose.onNodeWithText("Not now").performClick()
+      compose.onNodeWithText("Allow timely background renewal?").assertDoesNotExist()
+      compose.onNodeWithText("Allow precise renewal").performScrollTo().assertExists()
+      compose.onNodeWithText("Allow precise renewal").performClick()
+      compose.onNodeWithText("Allow timely background renewal?").assertExists()
+      compose.onNodeWithText("Not now").performClick()
+    }
+    compose.onNodeWithText("Auto-renew").performScrollTo().performClick()
+    compose.onNodeWithText("Allow precise renewal").assertDoesNotExist()
+  }
 
   @Test fun wallpaperColorsAreOptInPersistAndCanReturnToBrandColors() {
     if (Build.VERSION.SDK_INT < 31) return

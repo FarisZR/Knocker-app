@@ -15,7 +15,7 @@ internal data class ProfileForm(
   val remote: Boolean = false,
   val ip: String = "",
   val onOpen: Boolean = true,
-  val renew: Boolean = true,
+  val renew: Boolean = false,
   val safety: String = "300",
   val pinned: Boolean = false,
   val slot: Int? = null
@@ -48,7 +48,7 @@ internal data class ProfileForm(
       id = profile.getString("id"), name = profile.optString("name"), endpoint = profile.optString("endpointUrl"),
       key = profile.optString("apiKey"), ttl = profile.textOrNull("ttlSeconds").orEmpty(),
       remote = !profile.textOrNull("ipOverride").isNullOrBlank(), ip = profile.textOrNull("ipOverride").orEmpty(),
-      onOpen = profile.optBoolean("knockOnOpen", true), renew = profile.optBoolean("autoRenew", true),
+      onOpen = profile.optBoolean("knockOnOpen", true), renew = profile.optBoolean("autoRenew", false),
       safety = profile.optInt("autoRenewSafetyWindowSec", 300).toString(),
       pinned = profile.optBoolean("pinnedToHome"), slot = profile.textOrNull("tileSlot")?.toIntOrNull()
     )

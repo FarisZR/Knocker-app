@@ -73,18 +73,30 @@ function withKnockerManifest(config) {
     const receiverNode = existingReceiver || {};
     ensureAttr(receiverNode, "android:name", receiverName);
     ensureAttr(receiverNode, "android:exported", "false");
+    receiverNode["intent-filter"] = [
+      {
+        action: [
+          {
+            $: {
+              "android:name":
+                "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED",
+            },
+          },
+        ],
+      },
+    ];
     if (!existingReceiver) application.receiver.push(receiverNode);
 
     return cfg;
   });
 }
 
+/** Requests user-granted alarm access without the restricted automatic grant. */
 function withKnockerPermissions(config) {
   return AndroidConfig.Permissions.withPermissions(config, [
     "android.permission.INTERNET",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.SCHEDULE_EXACT_ALARM",
-    "android.permission.USE_EXACT_ALARM",
   ]);
 }
 
