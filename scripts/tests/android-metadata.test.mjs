@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const script = resolve('scripts/android-metadata.mjs');
+/** Exercise metadata generation in an isolated workspace and remove generated files. */
 function run(overrides) {
   const cwd = mkdtempSync(join(tmpdir(), 'knocker-version-'));
   mkdirSync(join(cwd, 'artifacts/knocker'), { recursive: true });

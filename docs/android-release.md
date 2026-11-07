@@ -46,7 +46,7 @@ For automatic submission on a **published GitHub release**, set repository varia
 | `PLAY_RELEASE_STATUS` | `draft` initially; `completed` when ready for submission |
 | `PLAY_CHANGES_NOT_SENT_FOR_REVIEW` | Optional `true` for accounts requiring explicit review submission in Console |
 
-Use a semantic version tag and put **only the Play changelog (1–500 characters)** in the GitHub release body when auto publishing is enabled. Notes are passed as data, never interpolated into shell commands. Submission failures leave the AAB available for manual upload. For an already uploaded version, promote it in Console instead of attempting to upload the same version code again. Avoid publishing older runs after newer ones: Play requires increasing codes.
+Use a semantic version tag and put **only the Play changelog (1–500 characters)** in the GitHub release body when auto publishing is enabled. Notes are passed as data, never interpolated into shell commands. Submission failures leave the AAB available for manual upload. For an already uploaded version, promote it in Console instead of attempting to upload the same version code again. Publishing workflows share a concurrency group, and the submission job rejects older runs if a newer run has already published successfully. Play requires increasing codes.
 
 ## Local reproduction
 

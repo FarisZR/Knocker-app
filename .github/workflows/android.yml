@@ -32,7 +32,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.event_name }}-${{ github.ref }}
+  # Serialize build + submission across release and dispatch triggers.
+  group: ${{ (github.event_name == 'release' || inputs.publish == true) && 'android-play-publishing' || format('android-{0}-{1}', github.event_name, github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -151,6 +152,21 @@ jobs:
         with:
           name: knocker-playstore-aab-${{ github.run_number }}
           path: distribution
+      - name: Reject stale publishing runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Concurrency is not FIFO. Reject an older run after any newer submission succeeded.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/android.yml/runs?per_page=100" \
+            --jq ".workflow_runs[] | select(.run_number > $GITHUB_RUN_NUMBER) | .id" > "$RUNNER_TEMP/newer-runs"
+          while read -r run_id; do
+            published=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" \
+              --jq 'any(.jobs[]; .name == "publish" and .conclusion == "success")')
+            if [ "$published" = true ]; then
+              echo '::error::A newer run already published. Start a new workflow run for a new version code.'
+              exit 1
+            fi
+          done < "$RUNNER_TEMP/newer-runs"
       - name: Validate Play credentials
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}

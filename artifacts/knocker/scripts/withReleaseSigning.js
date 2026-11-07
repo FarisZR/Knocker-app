@@ -1,6 +1,6 @@
 const { withAppBuildGradle } = require('expo/config-plugins');
 
-// Keep signing in the Expo source of truth: android/ is regenerated on each build.
+/** Configure upload signing in regenerated Android projects without persisting credentials. */
 module.exports = function withReleaseSigning(config) {
   return withAppBuildGradle(config, (config) => {
     config.modResults.contents += `
@@ -18,7 +18,11 @@ if (System.getenv("KNOCKER_SIGN_RELEASE") == "true") {
     }
     android.buildTypes.release.signingConfig = android.signingConfigs.upload
 } else if (System.getenv("CI") == "true" && System.getenv("KNOCKER_ALLOW_DEBUG_SIGNING") != "true") {
-    throw new GradleException("CI release signing must be explicitly configured")
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.allTasks.any { it.project.path == ":app" && it.name.contains("Release") }) {
+            throw new GradleException("CI release signing must be explicitly configured")
+        }
+    }
 }
 `;
     return config;
