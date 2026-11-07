@@ -28,7 +28,7 @@ After the first visible frame, one cached Android startup batch begins independe
 
 Successful in-flight grants survive rename, pin, slot, TTL and renewal edits. Endpoint, key or normalized IP-target changes invalidate them. Native storage uses the latest renewal settings and preserves newer grants. Both JS merge paths preserve later attempt failures while recovering earlier valid permissions. Snapshot writes remain serialized. The optimized build retains the WorkManager/Room reflection keep rules.
 
-Local connection identity detects Wi-Fi/cellular/default-network changes without SSID, location or a public-IP service. Public-IP comparison is opt-in and off by default. The native dialog names ipify and explains disclosure before enabling it. Existing checks remain same-family/CIDR aware, foreground-only, cancellable, bounded to four seconds and independent of knocking. Turning them off cancels requests and clears comparison data.
+Local connection identity detects Wi-Fi/cellular/default-network changes without SSID, location or a public-IP service. Public-IP comparison is opt-in and off by default. The Settings dialog exposes a Public-IP checks switch, names ipify and explains disclosure alongside it. Toggling uses the existing saved network preference and keeps Settings open; Check now appears while enabled. Existing checks remain same-family/CIDR aware, foreground-only, cancellable, bounded to four seconds and independent of knocking. Turning them off cancels requests and clears comparison data.
 
 ## State ownership and failure guarantees
 
@@ -68,9 +68,9 @@ Instrumentation tests explicitly use Espresso 3.8.0-alpha03: Compose's older tra
 
 The default-yellow change passed workspace type checking, all 54 JavaScript tests, all 15 native JVM tests and all 13 Compose/navigation tests on the Android 16 emulator. The new UI test verifies default-off behavior, immediate wallpaper-color selection, preference restoration after theme recreation and returning to the branded palette.
 
-After revising light mode to use exact-yellow filled actions and neutral surfaces, all 13 Compose/navigation tests and the release build passed again.
+After revising light mode to use exact-yellow filled actions and neutral surfaces, all 13 Compose/navigation tests and the release build passed again. The subsequent Public-IP switch change passed all 14 Compose/navigation tests and the release build, including on/off command payloads, bridge state updates and keeping Settings open. Installed-app checks confirmed both switch states and the conditional Check now action.
 
-The optimized release APK also passed installed-app checks for light/dark appearance, immediate palette switching and both on/off choices surviving relaunch. Captures: `yellow-home-dark.png`, `yellow-home-light.png`, `yellow-settings-dark.png`, `yellow-settings-light.png` and `wallpaper-settings-dark.png` in `screenshots/`. The profile uses demonstration data.
+The optimized release APK also passed installed-app checks for light/dark appearance, immediate palette switching and both on/off choices surviving relaunch. Captures: `yellow-home-dark.png`, `yellow-home-light.png`, `yellow-settings-dark.png`, `yellow-settings-light.png` `wallpaper-settings-dark.png` and `public-ip-settings-light.png` in `screenshots/`. The profile uses demonstration data.
 
 Android lint was also run. It reported nine errors in unchanged network, notification and tile code (`KnockerNetwork.kt`, `KnockerTileNotifier.kt`, `KnockerTileService.kt`), concerning permission declarations/checks and the deprecated tile-launch overload, plus 16 warnings. The appearance changes have no lint errors. These existing findings remain outside the appearance change.
 

@@ -171,7 +171,35 @@ class NativeAppTest {
       .assert(hasAnyAncestor(hasContentDescription("Edit Home server")).not())
       .assert(hasAnyAncestor(hasContentDescription("Profile Home server")))
     compose.onNodeWithContentDescription("Settings").performClick()
-    compose.onNodeWithText("Public-IP checks · Off").assertExists()
+    compose.onNodeWithText("Public-IP checks").assertIsOff()
+  }
+
+  @Test fun publicIpSwitchUsesBridgeStateAndKeepsSettingsOpen() {
+    val state = mutableStateOf(loaded())
+    val actions = mutableListOf<Pair<String, Map<String, Any?>>>()
+    compose.setContent { KnockerTheme { NativeApp(state.value, { type, payload -> actions.add(type to payload) }, {}) } }
+    compose.onNodeWithContentDescription("Settings").performClick()
+    compose.onNodeWithText("Public-IP checks").assertIsOff().performClick()
+    compose.runOnIdle {
+      assertEquals("toggleIp", actions.last().first)
+      assertEquals(true, actions.last().second["enabled"])
+      val json = loaded().json
+      json.getJSONObject("network").put("checksEnabled", true)
+      state.value = NativeUiState(json)
+    }
+    compose.onNodeWithText("Public-IP checks").assertIsOn()
+    compose.onNodeWithText("Check now").assertExists()
+    compose.onNodeWithText("Close").assertExists()
+    compose.onNodeWithText("Public-IP checks").performClick()
+    compose.runOnIdle {
+      assertEquals("toggleIp", actions.last().first)
+      assertEquals(false, actions.last().second["enabled"])
+      state.value = loaded()
+    }
+    compose.onNodeWithText("Public-IP checks").assertIsOff()
+    compose.onNodeWithText("Check now").assertDoesNotExist()
+    compose.onNodeWithText("Close").performClick()
+    compose.onNodeWithContentDescription("Knocker").assertExists()
   }
 
   @Test fun successfulFeedbackAutoDismissesEvenIfAnOldSnapshotMarksItPersistent() {

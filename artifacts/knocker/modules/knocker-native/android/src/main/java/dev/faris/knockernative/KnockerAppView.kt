@@ -217,16 +217,19 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
           }
           HorizontalDivider()
         }
-        Text("Public-IP checks · ${if (state.network.optBoolean("checksEnabled")) "On" else "Off"}", style = MaterialTheme.typography.titleMedium)
-        Text("Compare your IP using ipify while the app is open. This shares your public IP with ipify.")
+        Row(Modifier.fillMaxWidth().toggleable(value = state.network.optBoolean("checksEnabled"), role = Role.Switch,
+          onValueChange = { dispatch("toggleIp", mapOf("enabled" to it)) }),
+          verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          Column(Modifier.weight(1f)) {
+            Text("Public-IP checks", style = MaterialTheme.typography.titleMedium)
+            Text("Compare your IP using ipify while the app is open. This shares your public IP with ipify.",
+              style = MaterialTheme.typography.bodyMedium)
+          }
+          Switch(checked = state.network.optBoolean("checksEnabled"), onCheckedChange = null)
+        }
         if (state.network.optBoolean("checksEnabled")) TextButton(onClick = { preferences = false; dispatch("refreshIp") }) { Text("Check now") }
       }
     },
-    confirmButton = {
-      TextButton(onClick = { preferences = false; dispatch("toggleIp", mapOf("enabled" to !state.network.optBoolean("checksEnabled"))) }) {
-        Text(if (state.network.optBoolean("checksEnabled")) "Turn off" else "Enable checks")
-      }
-    },
-    dismissButton = { TextButton(onClick = { preferences = false }) { Text(if (state.network.optBoolean("checksEnabled")) "Close" else "Keep off") } }
+    confirmButton = { TextButton(onClick = { preferences = false }) { Text("Close") } }
   )
 }
