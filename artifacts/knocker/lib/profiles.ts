@@ -39,7 +39,7 @@ export function newProfile(): Profile {
     ttlSeconds: null,
     ipOverride: null,
     knockOnOpen: true,
-    autoRenew: true,
+    autoRenew: false,
     autoRenewSafetyWindowSec: 300,
     pinnedToHome: false,
     tileSlot: null,

@@ -88,6 +88,11 @@ Then on the device:
 5. Enable "Auto-renew" on a profile and observe renewal requests on the test
    server while the app is closed.
 
+Auto-renew is off for new profiles. Quick Settings tiles and foreground knocks
+do not require exact-alarm access. Enabling Auto-renew reveals the permission
+action if needed; it never opens system settings automatically. Saved renewal
+choices are preserved.
+
 When Auto-renew is enabled in the profile editor, **Allow precise renewal**
 opens Android's alarms-and-reminders settings if access is missing. Denying
 access keeps the inexact fallback; granting access does not guarantee timely
@@ -105,23 +110,42 @@ Use the installed release build, a dedicated test endpoint/key and server-side
 request timestamps. The [controlled fixture](../../scripts/ui-test-server.mjs)
 checks client behavior but does not establish live Caddy compatibility.
 
-- [ ] With alarms-and-reminders access denied, save an auto-renew profile;
+- [x] With alarms-and-reminders access denied, save an auto-renew profile;
   confirm no crash, an inexact scheduled alarm and an honest delay warning.
-- [ ] Grant access from the editor, return and confirm the permission action
-  disappears; connect and observe renewal without reopening the app.
-- [ ] Pin an assigned Quick Settings tile and invoke it with the app closed
-  and after ordinary process death. Confirm the request, persisted grant and
-  tile state; repeat with a denied response and retry.
+- [x] Grant access from the editor, return and confirm the permission action
+  disappears and the pending alarm upgrades without another save or knock.
+- [x] Revoke access with an exact renewal pending; confirm its independent
+  inexact backup remains and delivers while the app is closed.
+- [x] Invoke an assigned Quick Settings tile with Knocker backgrounded,
+  Auto-renew off and exact-alarm access denied. Confirm HTTP success, an active
+  tile and no scheduled renewal alarms.
+- [ ] Repeat tile invocation after ordinary process death, and with a denied
+  response followed by retry.
 - [ ] Observe renewal with the screen off and in Doze. Record actual dispatch
   and expiry times rather than treating alarm registration as HTTP delivery.
-- [ ] Revoke alarm access with an exact renewal pending; confirm its independent
-  inexact backup still delivers. Grant access again and confirm the pending
-  renewal upgrades without saving or knocking. Change Wi-Fi/cellular connectivity
-  and confirm recovery. Check reboot separately: AlarmManager alarms are
+- [ ] Change Wi-Fi/cellular connectivity and confirm recovery. Check reboot
+  separately: AlarmManager alarms are
   cleared on reboot, and this module has no boot-time rescheduling receiver.
 - [ ] Against live Caddy, verify successful/denied knocks, server-capped TTL,
   tile invocation and background renewal. Check physical haptic feel on hardware.
 
-These checks remain pending as of 2026-11-07. Simulator discovery failed twice
-with `Device support failed during waiting for the device hub to answer.`
-No simulator or live-Caddy result is claimed for this change.
+Release-build checks above passed on the Android 16 emulator on 2026-11-07,
+using the HTTPS fixture, fake credentials, TTL 180 seconds and a 120-second
+safety window. Denied access registered one inexact alarm. Granting access
+registered an exact alarm plus backup and removed the editor warning. The
+server observed one renewal at 14:49:55 UTC and the next at 14:50:58 UTC.
+Revocation killed the app process and removed the exact alarm; the backup
+survived and renewed at 14:52:32 UTC without reopening Knocker.
+
+After the user added Knock 1, a tile tap with Auto-renew disabled and alarm
+access denied sent one request at 15:00:42 UTC, completed at 15:00:43 UTC,
+activated the tile and left zero renewal alarms. The device tool reported a
+foreground-app mismatch, but the server response and tile screenshot confirm
+the action succeeded. A cold tile process was not established by the attempted
+background process kill, so that case is not marked passed.
+
+The emulator Compose test `backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch`
+also passed: a new profile starts with Auto-renew off, enabling it reveals
+the alarm-permission action when access is missing, and disabling it removes
+the action. Screen-off/Doze, network changes, reboot, remaining tile cases,
+live Caddy and physical haptic feel remain pending.

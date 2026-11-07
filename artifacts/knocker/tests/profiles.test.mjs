@@ -43,6 +43,16 @@ function storage({
   return { ...profiles, metadata, secrets };
 }
 
+test("background renewal requires opt-in and preserves saved choices", async () => {
+  const store = storage();
+  assert.equal(store.newProfile().autoRenew, false);
+  for (const enabled of [false, true]) {
+    const profile = { ...store.newProfile(), apiKey: "fake-key", autoRenew: enabled };
+    await store.saveProfiles([profile]);
+    assert.equal((await store.loadProfiles())[0].autoRenew, enabled);
+  }
+});
+
 test("saved profiles round-trip while keys stay out of metadata", async () => {
   const store = storage();
   const profile = { ...store.newProfile(), apiKey: "private-test-key" };

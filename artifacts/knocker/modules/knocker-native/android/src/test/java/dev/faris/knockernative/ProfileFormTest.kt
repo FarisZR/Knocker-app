@@ -7,6 +7,15 @@ import org.json.JSONObject
 class ProfileFormTest {
   private val valid = ProfileForm(name = "Home", endpoint = "https://knock.example.com:8562", key = "fake-key")
 
+  @Test fun backgroundRenewalRequiresOptInAndPreservesSavedChoices() {
+    assertFalse(ProfileForm().renew)
+    assertFalse(ProfileForm.from(JSONObject(valid.toJson()).apply { remove("autoRenew") }).renew)
+    for (enabled in listOf(false, true)) {
+      val saved = JSONObject(valid.copy(renew = enabled).toJson())
+      assertEquals(enabled, ProfileForm.from(saved).renew)
+    }
+  }
+
   @Test fun requiresAnHttpsHostAndDoesNotAcceptEmbeddedCredentials() {
     assertTrue(valid.errors().isEmpty())
     assertTrue(valid.copy(endpoint = "HTTPS://knock.example.com").errors().isEmpty())
@@ -19,7 +28,7 @@ class ProfileFormTest {
       assertTrue(ttl, "ttl" in valid.copy(ttl = ttl).errors())
     assertFalse("ttl" in valid.copy(ttl = "60").errors())
     assertFalse("safety" in valid.copy(safety = "0").errors())
-    assertTrue("safety" in valid.copy(safety = "").errors())
+    assertTrue("safety" in valid.copy(renew = true, safety = "").errors())
     assertFalse("safety" in valid.copy(renew = false, safety = "").errors())
   }
 
