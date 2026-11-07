@@ -2,6 +2,11 @@
 
 package dev.faris.knockernative
 
+import android.app.AlarmManager
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,12 +18,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 
 /** A native editor has one app-bar title; drafts and IME interaction never round-trip through JS. */
 @Composable
@@ -100,6 +107,7 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
           feedback("tap"); change(draft.copy(renew = it))
         }
         if (draft.renew) {
+          RenewalAlarmPermission(enabled = !saving)
           NativeField("Renewal safety window (seconds)", draft.safety,
             { change(draft.copy(safety = it.filter(Char::isDigit))) }, saving,
             if (attempted) errors["safety"] else null, KeyboardType.Number)
@@ -128,6 +136,27 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
     title = { Text("Delete profile?") }, text = { Text("${draft.name.ifBlank { "This profile" }} and its saved API key will be removed. This cannot be undone.") },
     confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete(draft.id) }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
     dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } })
+}
+
+/** Exact alarms require an explicit user grant; renewal can still use the inexact fallback. */
+@Composable
+private fun RenewalAlarmPermission(enabled: Boolean) {
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+  val context = LocalContext.current
+  val alarms = context.getSystemService(AlarmManager::class.java)
+  var allowed by remember { mutableStateOf(alarms.canScheduleExactAlarms()) }
+  LifecycleResumeEffect(alarms) {
+    allowed = alarms.canScheduleExactAlarms()
+    onPauseOrDispose { }
+  }
+  if (!allowed) {
+    Text("Allow alarms and reminders for precise renewal. Without access, Android may renew after your connection expires.",
+      style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    TextButton(enabled = enabled, onClick = {
+      context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+        Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }) { Text("Allow precise renewal") }
+  }
 }
 
 @Composable

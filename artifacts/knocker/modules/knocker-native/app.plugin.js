@@ -84,7 +84,6 @@ function withKnockerPermissions(config) {
     "android.permission.INTERNET",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.SCHEDULE_EXACT_ALARM",
-    "android.permission.USE_EXACT_ALARM",
   ]);
 }
 

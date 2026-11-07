@@ -9,6 +9,8 @@ Local Expo module that adds two Android-only features to Knocker:
 2. **Background auto-renew** — `RenewAlarmReceiver` schedules itself with
    `AlarmManager.setExactAndAllowWhileIdle` so a renewal knock fires before
    each profile's whitelist entry expires, even when the app process is gone.
+   Precise scheduling requires the user's alarms-and-reminders grant on
+   Android 12+; without it, renewal uses an inexact alarm and may arrive late.
 
 Neither feature exists in Expo Go. They require a custom dev or production
 build that includes this module.
@@ -39,8 +41,10 @@ build that includes this module.
 The config plugin (`app.plugin.js`) injects:
 
 - `INTERNET` — for the knock HTTP call.
-- `SCHEDULE_EXACT_ALARM` (pre-Android 13) and `USE_EXACT_ALARM` (Android 13+) —
-  for `setExactAndAllowWhileIdle`.
+- `SCHEDULE_EXACT_ALARM` — user-granted alarms-and-reminders access on Android
+  12+ for `setExactAndAllowWhileIdle`. Knocker does not request the restricted
+  `USE_EXACT_ALARM` permission.
+- `POST_NOTIFICATIONS` — for tile and renewal results.
 
 It also injects the `<service>` and `<receiver>` entries the tiles & alarm
 receiver need.
@@ -78,10 +82,38 @@ Then on the device:
    "Quick Settings tile slot" picker.
 3. The mapping is one-to-one: the Android tile named "Knock 3" triggers the
    profile assigned to slot `3` in Knocker.
-4. Force-stop the app and tap the tile. You should get a toast and the tile
-   state should update even while the app is closed.
-5. Enable "Auto-renew before expiry" on a profile and observe that renewals
-   continue even after the app is killed (logcat tag `KnockerRenewAlarm`).
+4. Close the app normally and tap the tile. You should get a toast and the tile
+   state should update even while the app is closed. Force-stop is a separate
+   Android restriction, not ordinary process death.
+5. Enable "Auto-renew" on a profile and observe renewal requests on the test
+   server while the app is closed.
 
-If the in-app banner says "Exact alarms disabled", tap it to open the system
-permission screen and grant the permission.
+When Auto-renew is enabled in the profile editor, **Allow precise renewal**
+opens Android's alarms-and-reminders settings if access is missing. Denying
+access keeps the inexact fallback; granting access does not guarantee timely
+network work during Doze.
+
+## Background release QA
+
+Use the installed release build, a dedicated test endpoint/key and server-side
+request timestamps. The [controlled fixture](../../scripts/ui-test-server.mjs)
+checks client behavior but does not establish live Caddy compatibility.
+
+- [ ] With alarms-and-reminders access denied, save an auto-renew profile;
+  confirm no crash, an inexact scheduled alarm and an honest delay warning.
+- [ ] Grant access from the editor, return and confirm the permission action
+  disappears; connect and observe renewal without reopening the app.
+- [ ] Pin an assigned Quick Settings tile and invoke it with the app closed
+  and after ordinary process death. Confirm the request, persisted grant and
+  tile state; repeat with a denied response and retry.
+- [ ] Observe renewal with the screen off and in Doze. Record actual dispatch
+  and expiry times rather than treating alarm registration as HTTP delivery.
+- [ ] Change Wi-Fi/cellular connectivity and revoke alarm access; confirm safe
+  fallback and recovery. Check reboot separately: AlarmManager alarms are
+  cleared on reboot, and this module has no boot-time rescheduling receiver.
+- [ ] Against live Caddy, verify successful/denied knocks, server-capped TTL,
+  tile invocation and background renewal. Check physical haptic feel on hardware.
+
+These checks remain pending as of 2026-11-07. Simulator discovery failed twice
+with `Device support failed during waiting for the device hub to answer.`
+No simulator or live-Caddy result is claimed for this change.
