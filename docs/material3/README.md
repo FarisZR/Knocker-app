@@ -4,7 +4,7 @@ Android renders one `KnockerAppView`, an Expo native module containing a complet
 
 `NativeHome.kt` and `NativeEditor.kt` use Material 3 `Scaffold`, app bars, native lazy scrolling, outlined fields, switches, chips, expressive buttons, loading indicators and `SnackbarHost`. `KnockerAppView.kt` uses Jetpack Navigation 3 `NavDisplay` for destination transitions and system/predictive back. Each destination has one app-bar title. Home uses the original vector wordmark in a roomier native top bar; profile counts and connection metadata no longer occupy a second header. There is no Expo Router modal header or second page heading above the editor.
 
-The old per-control Expo UI wrappers and their button patch have been removed. The complete native surface uses Material 3's expressive theme and button-shape APIs directly. Current pins: Compose 1.12.1, Material 3 1.5.0-rc01, Navigation 3 1.2.1. Knocker yellow (`#FDE562`, shared with the wordmark) anchors the default light and dark palettes. Dark mode uses it as the primary accent; light mode uses yellow containers and darker gold foregrounds for contrast. Android 12+ users can opt into wallpaper-based Material You colors with **Settings → Use wallpaper colors**. This native preference defaults to off, persists across restarts, and updates every destination immediately. Older Android versions always use the branded palette. Both options follow Android light/dark appearance, with paired content/container colors and a contrasting green permission state.
+The old per-control Expo UI wrappers and their button patch have been removed. The complete native surface uses Material 3's expressive theme and button-shape APIs directly. Current pins: Compose 1.12.1, Material 3 1.5.0-rc01, Navigation 3 1.2.1. Knocker yellow (`#FDE562`, shared with the wordmark) anchors the default light and dark palettes. Dark mode uses it as the primary accent. Light mode uses the exact yellow on filled actions with dark text, pale lemon secondary actions and neutral white/gray surfaces. Text actions and field labels stay dark for readability. Android 12+ users can opt into wallpaper-based Material You colors with **Settings → Use wallpaper colors**. This native preference defaults to off, persists across restarts, and updates every destination immediately. Older Android versions always use the branded palette. Both options follow Android light/dark appearance, with paired content/container colors and a contrasting green permission state.
 
 ## Interaction and feedback
 
@@ -67,6 +67,8 @@ Instrumentation tests explicitly use Espresso 3.8.0-alpha03: Compose's older tra
 ## Branded appearance validation
 
 The default-yellow change passed workspace type checking, all 54 JavaScript tests, all 15 native JVM tests and all 13 Compose/navigation tests on the Android 16 emulator. The new UI test verifies default-off behavior, immediate wallpaper-color selection, preference restoration after theme recreation and returning to the branded palette.
+
+After revising light mode to use exact-yellow filled actions and neutral surfaces, all 13 Compose/navigation tests and the release build passed again.
 
 The optimized release APK also passed installed-app checks for light/dark appearance, immediate palette switching and both on/off choices surviving relaunch. Captures: `yellow-home-dark.png`, `yellow-home-light.png`, `yellow-settings-dark.png`, `yellow-settings-light.png` and `wallpaper-settings-dark.png` in `screenshots/`. The profile uses demonstration data.
 

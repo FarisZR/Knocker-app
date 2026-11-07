@@ -167,7 +167,9 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
             Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
               Text("Unable to open Knocker", style = MaterialTheme.typography.headlineSmall)
               Text(sceneState.fatal)
-              Button(onClick = { dispatch("restart") }) { Text("Try again") }
+              Button(onClick = { dispatch("restart") }, colors = knockerActionColors().let {
+                ButtonDefaults.buttonColors(containerColor = it.container, contentColor = it.content)
+              }) { Text("Try again") }
             }
           }
         } else if (destination == "home") {
