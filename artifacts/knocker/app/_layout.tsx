@@ -29,6 +29,7 @@ Sentry.init({
   // Keep request and user context opt-in because the app handles profile data.
   // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
   sendDefaultPii: false,
+  environment: process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT || (__DEV__ ? "development" : "production"),
 
   // Keep log collection disabled because console output may contain user data.
   enableLogs: false,

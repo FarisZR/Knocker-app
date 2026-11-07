@@ -1,0 +1,184 @@
+name: Android CI and release
+
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name, for example 1.0.1 (blank uses app.json)'
+        type: string
+      publish:
+        description: Submit the signed AAB to Google Play
+        type: boolean
+        default: false
+      changelog:
+        description: 'Play release notes in English (maximum 500 characters)'
+        type: string
+      track:
+        description: Google Play track
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
+      status:
+        description: 'Use draft until the initial Play setup is complete'
+        type: choice
+        options: [draft, completed]
+        default: draft
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize build + submission across release and dispatch triggers.
+  group: ${{ (github.event_name == 'release' || inputs.publish == true) && 'android-play-publishing' || format('android-{0}-{1}', github.event_name, github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      publish: ${{ steps.metadata.outputs.publish }}
+      version: ${{ steps.metadata.outputs.version }}
+    env:
+      CI: 'true'
+      EXPO_NO_TELEMETRY: '1'
+      KNOCKER_SIGN_RELEASE: ${{ github.event_name != 'pull_request' }}
+      KNOCKER_ALLOW_DEBUG_SIGNING: ${{ github.event_name == 'pull_request' }}
+      STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_DISABLE_AUTO_UPLOAD: ${{ github.event_name == 'pull_request' }}
+      SENTRY_URL: https://de.sentry.io/
+      SENTRY_ORG: fariszr
+      SENTRY_PROJECT: knocker-app
+      EXPO_PUBLIC_SENTRY_ENVIRONMENT: ${{ (github.event_name == 'release' || inputs.publish == true) && 'production' || 'ci' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set temporary signing path
+        run: echo "KNOCKER_KEYSTORE_PATH=$RUNNER_TEMP/upload.p12" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-android
+      - name: Release tooling tests
+        run: node --test scripts/tests/*.test.mjs
+      - name: Version and publishing metadata
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish || (github.event_name == 'release' && vars.PLAY_PUBLISH_ENABLED == 'true') }}
+          CHANGELOG: ${{ inputs.changelog || github.event.release.body }}
+        run: node scripts/android-metadata.mjs
+      - name: Validate release credentials
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD SENTRY_AUTH_TOKEN; do
+            if [ -z "${!name}" ]; then echo "::error::Missing required secret: $name"; exit 1; fi
+          done
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KNOCKER_KEYSTORE_PATH"
+      - name: JavaScript tests
+        run: pnpm --filter @workspace/knocker test
+      - name: Workspace typecheck
+        run: pnpm typecheck
+      - name: Generate Android project
+        run: pnpm --filter @workspace/knocker android:prebuild
+      - name: Native tests and UI test compilation
+        working-directory: artifacts/knocker/android
+        run: ./gradlew :knocker-native:testDebugUnitTest :knocker-native:compileDebugAndroidTestKotlin --console=plain --max-workers=2
+      - name: Build APK and AAB with embedded JavaScript and Sentry source maps
+        working-directory: artifacts/knocker/android
+        run: ./gradlew :app:assembleRelease :app:bundleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64 --console=plain --max-workers=2
+      - name: Verify signed artifacts
+        run: bash scripts/verify-android.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: knocker-apk-${{ github.run_number }}
+          path: artifacts/knocker/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: knocker-playstore-aab-${{ github.run_number }}
+          path: |
+            artifacts/knocker/android/app/build/outputs/bundle/release/*.aab
+            play-release-notes/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-results-${{ github.run_number }}-${{ github.event_name }}
+          path: artifacts/knocker/modules/knocker-native/android/build/test-results/
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$KNOCKER_KEYSTORE_PATH"
+
+  release-apk:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: knocker-apk-${{ github.run_number }}
+          path: apk
+      - name: Attach APK to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" apk/*.apk --repo "$GITHUB_REPOSITORY" --clobber
+
+  publish:
+    if: needs.build.outputs.publish == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: google-play
+    concurrency:
+      group: google-play
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: knocker-playstore-aab-${{ github.run_number }}
+          path: distribution
+      - name: Reject stale publishing runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Concurrency is not FIFO. Reject an older run after any newer submission succeeded.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/android.yml/runs?per_page=100" \
+            --jq ".workflow_runs[] | select(.run_number > $GITHUB_RUN_NUMBER) | .id" > "$RUNNER_TEMP/newer-runs"
+          while read -r run_id; do
+            published=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" \
+              --jq 'any(.jobs[]; .name == "publish" and .conclusion == "success")')
+            if [ "$published" = true ]; then
+              echo '::error::A newer run already published. Start a new workflow run for a new version code.'
+              exit 1
+            fi
+          done < "$RUNNER_TEMP/newer-runs"
+      - name: Validate Play credentials
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then echo '::error::Missing PLAY_SERVICE_ACCOUNT_JSON'; exit 1; fi
+      - uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.fariszr.knocker
+          releaseFiles: distribution/artifacts/knocker/android/app/build/outputs/bundle/release/*.aab
+          track: ${{ inputs.track || vars.PLAY_TRACK || 'internal' }}
+          status: ${{ inputs.status || vars.PLAY_RELEASE_STATUS || 'draft' }}
+          releaseName: ${{ needs.build.outputs.version }}
+          whatsNewDirectory: distribution/play-release-notes
+          changesNotSentForReview: ${{ vars.PLAY_CHANGES_NOT_SENT_FOR_REVIEW == 'true' }}
