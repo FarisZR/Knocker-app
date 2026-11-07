@@ -149,8 +149,9 @@ The previous opt-in Compose test and manual release checks passed: a new
 profile starts with Auto-renew off, enabling it reveals the alarm-permission
 action when access is missing, and disabling it removes the action. The test
 `backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch` now also checks
-the explanation dialog, dismissal and reopening. This extended test compiles,
-but execution is pending because the emulator remained owned by another
-thread after the device tool's supported wait. Screen-off/Doze, network changes,
+the explanation dialog, dismissal and reopening. This extended test passed
+after the emulator was restarted. Manual checks in the optimized release also
+confirmed the popup appears on enabling Auto-renew and **Open settings** opens
+Android's alarms-and-reminders screen. Screen-off/Doze, network changes,
 reboot, remaining tile cases,
 live Caddy and physical haptic feel remain pending.
