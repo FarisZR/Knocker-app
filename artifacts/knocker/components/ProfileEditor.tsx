@@ -1,3 +1,5 @@
+import { nativeConfigurationFingerprint } from "@/lib/profileConfiguration";
+import { prepareProfileSave } from "@/lib/grants";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -7,26 +9,18 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
-  Text,
   TextInput,
+  Text,
   View,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import Animated, {
-  FadeInUp,
-  FadeOutDown,
-} from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { motion } from "@/constants/motion";
 import { useColors } from "@/hooks/useColors";
 import { useProfiles } from "@/context/ProfilesContext";
 import { isValidUrl } from "@/lib/format";
 import { newProfile, type Profile } from "@/lib/profiles";
-import {
-  isNativeAvailable as isKnockerNativeAvailable,
-  TILE_SLOT_COUNT,
-} from "knocker-native";
 
 interface ProfileEditorProps {
   profileId: string;
@@ -37,6 +31,7 @@ interface ProfileEditorProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
+/** Owns an editable draft; clean drafts refresh from storage while dirty drafts survive layout changes. */
 export function ProfileEditor({
   profileId,
   embedded = false,
@@ -60,6 +55,7 @@ export function ProfileEditor({
 
   const [draft, setDraft] = useState<Profile>(() => existing ?? newProfile());
   const [showKey, setShowKey] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [allowIpOverride, setAllowIpOverride] = useState(
     !!(existing?.ipOverride && existing.ipOverride.length > 0),
   );
@@ -67,9 +63,20 @@ export function ProfileEditor({
   const baselineAllowIpOverrideRef = useRef(allowIpOverride);
   const initializedProfileIdRef = useRef<string | null>(null);
 
+  const isDirty =
+    JSON.stringify(draft) !== JSON.stringify(baselineRef.current) ||
+    allowIpOverride !== baselineAllowIpOverrideRef.current;
+
   useEffect(() => {
     if (!loaded) return;
-    if (initializedProfileIdRef.current === profileId) return;
+    if (
+      initializedProfileIdRef.current === profileId &&
+      (isDirty ||
+        !existing ||
+        nativeConfigurationFingerprint(existing) ===
+          nativeConfigurationFingerprint(baselineRef.current))
+    )
+      return;
     const next = existing ?? newProfile();
     const nextAllowIpOverride = Boolean(
       next.ipOverride && next.ipOverride.length > 0,
@@ -80,11 +87,7 @@ export function ProfileEditor({
     baselineRef.current = next;
     baselineAllowIpOverrideRef.current = nextAllowIpOverride;
     initializedProfileIdRef.current = profileId;
-  }, [existing, isNew, loaded, profileId]);
-
-  const isDirty =
-    JSON.stringify(draft) !== JSON.stringify(baselineRef.current) ||
-    allowIpOverride !== baselineAllowIpOverrideRef.current;
+  }, [existing, isNew, loaded, profileId, isDirty]);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -105,25 +108,28 @@ export function ProfileEditor({
     draft.apiKey.trim().length > 0;
   const showSaveAction = !embedded || isDirty;
 
+  /** Normalizes user input and preserves grants only when the permission target is unchanged. */
   const onSave = async () => {
-    const sanitized: Profile = {
-      ...draft,
-      name: draft.name.trim(),
-      endpointUrl: draft.endpointUrl.trim(),
-      apiKey: draft.apiKey.trim(),
-      ipOverride:
-        allowIpOverride && draft.ipOverride ? draft.ipOverride.trim() : null,
-      lastKnockStatus: existing
-        ? existing.lastKnockStatus
-        : draft.lastKnockStatus,
-      lastKnockAt: existing ? existing.lastKnockAt : draft.lastKnockAt,
-      lastError: existing ? existing.lastError : draft.lastError,
-      whitelistedEntry: existing
-        ? existing.whitelistedEntry
-        : draft.whitelistedEntry,
-      expiresAt: existing ? existing.expiresAt : draft.expiresAt,
-    };
-    await upsert(sanitized);
+    setStorageError(null);
+    const sanitized: Profile = prepareProfileSave(
+      {
+        ...draft,
+        name: draft.name.trim(),
+        endpointUrl: draft.endpointUrl.trim(),
+        apiKey: draft.apiKey.trim(),
+        ipOverride:
+          allowIpOverride && draft.ipOverride ? draft.ipOverride.trim() : null,
+      },
+      existing,
+    );
+    try {
+      await upsert(sanitized);
+    } catch (error) {
+      setStorageError(
+        error instanceof Error ? error.message : "Could not save profile",
+      );
+      return;
+    }
     setDraft(sanitized);
     baselineRef.current = sanitized;
     baselineAllowIpOverrideRef.current = allowIpOverride;
@@ -131,10 +137,18 @@ export function ProfileEditor({
     onSaved(sanitized);
   };
 
+  /** Confirms removal before deleting both the profile and its securely stored key. */
   const onDelete = () => {
     if (isNew) return;
     const doIt = async () => {
-      await remove(draft.id);
+      try {
+        await remove(draft.id);
+      } catch (error) {
+        setStorageError(
+          error instanceof Error ? error.message : "Could not delete profile",
+        );
+        return;
+      }
       onDirtyChange?.(false);
       onDeleted(draft.id);
     };
@@ -178,10 +192,14 @@ export function ProfileEditor({
         <Text style={[styles.h1, { color: colors.foreground }]}>
           {isNew ? "New profile" : "Edit profile"}
         </Text>
+        {storageError ? (
+          <Text style={{ color: colors.destructive }}>{storageError}</Text>
+        ) : null}
 
         <Section title="Server" colors={colors}>
           <Field label="Name" colors={colors}>
             <TextInput
+              accessibilityLabel="Name"
               value={draft.name}
               onChangeText={(t) => patch({ name: t })}
               placeholder="Home Server"
@@ -195,6 +213,7 @@ export function ProfileEditor({
           </Field>
           <Field label="Endpoint URL" colors={colors}>
             <TextInput
+              accessibilityLabel="Endpoint URL"
               value={draft.endpointUrl}
               onChangeText={(t) => patch({ endpointUrl: t })}
               placeholder="https://knock.example.com (HTTPS required)"
@@ -211,6 +230,7 @@ export function ProfileEditor({
           <Field label="API key" colors={colors}>
             <View style={styles.keyRow}>
               <TextInput
+                accessibilityLabel="API key"
                 value={draft.apiKey}
                 onChangeText={(t) => patch({ apiKey: t })}
                 placeholder="X-Api-Key value"
@@ -230,6 +250,8 @@ export function ProfileEditor({
               <Pressable
                 onPress={() => setShowKey((s) => !s)}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={showKey ? "Hide API key" : "Show API key"}
                 style={styles.eye}
               >
                 <Feather
@@ -246,6 +268,7 @@ export function ProfileEditor({
             colors={colors}
           >
             <TextInput
+              accessibilityLabel="TTL (seconds)"
               value={draft.ttlSeconds === null ? "" : String(draft.ttlSeconds)}
               onChangeText={(t) => {
                 const n = parseInt(t.replace(/[^0-9]/g, ""), 10);
@@ -277,6 +300,7 @@ export function ProfileEditor({
           {allowIpOverride ? (
             <Field label="IP or CIDR" colors={colors}>
               <TextInput
+                accessibilityLabel="IP or CIDR"
                 value={draft.ipOverride ?? ""}
                 onChangeText={(t) => patch({ ipOverride: t })}
                 placeholder="203.0.113.42 or 203.0.113.0/24"
@@ -321,39 +345,12 @@ export function ProfileEditor({
         <Section title="Quick access" colors={colors}>
           <ToggleRow
             label="Pin to home"
-            sub="Adds a dedicated knock button above Knock all"
+            sub={"Adds a dedicated knock button above Knock all"}
             value={draft.pinnedToHome}
             onChange={(v) => patch({ pinnedToHome: v })}
             colors={colors}
-            last={!isKnockerNativeAvailable}
+            last
           />
-          {isKnockerNativeAvailable ? (
-            <View style={[styles.field, { paddingTop: 14 }]}>
-              <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-                Quick Settings tile slot
-              </Text>
-              <Text
-                style={[styles.fieldSub, { color: colors.mutedForeground }]}
-              >
-                Android names these system tiles Knock 1-{TILE_SLOT_COUNT}. Pick
-                the same number here and in the Quick Settings editor.
-              </Text>
-              <TileSlotPicker
-                value={draft.tileSlot}
-                profiles={profiles}
-                currentId={draft.id}
-                onChange={(slot) => patch({ tileSlot: slot })}
-                colors={colors}
-              />
-              <Text
-                style={[styles.tileSlotHint, { color: colors.mutedForeground }]}
-              >
-                {draft.tileSlot === null
-                  ? "Add a Knock tile in Android, then match its number here."
-                  : `This profile will respond to the Android tile labeled \"Knock ${draft.tileSlot}\".`}
-              </Text>
-            </View>
-          ) : null}
         </Section>
 
         {!isNew ? (
@@ -377,12 +374,6 @@ export function ProfileEditor({
 
       {showSaveAction ? (
         <Animated.View
-          entering={FadeInUp.duration(motion.duration.medium).easing(
-            motion.easing.standard,
-          )}
-          exiting={FadeOutDown.duration(motion.duration.short).easing(
-            motion.easing.standard,
-          )}
           style={[
             styles.footer,
             {
@@ -416,11 +407,7 @@ export function ProfileEditor({
               },
             ]}
           >
-            <Feather
-              name="check"
-              size={18}
-              color={colors.primaryForeground}
-            />
+            <Feather name="check" size={18} color={colors.primaryForeground} />
             <Text
               style={[
                 styles.btnPrimaryText,
@@ -436,6 +423,7 @@ export function ProfileEditor({
   );
 }
 
+/** Groups the web/iOS editor fields. */
 function Section({
   title,
   children,
@@ -447,7 +435,14 @@ function Section({
 }) {
   return (
     <View>
-      <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
+      <Text
+        style={[
+          styles.sectionTitle,
+          {
+            color: colors.mutedForeground,
+          },
+        ]}
+      >
         {title.toUpperCase()}
       </Text>
       <View style={[styles.sectionBody, { backgroundColor: colors.surface }]}>
@@ -457,6 +452,7 @@ function Section({
   );
 }
 
+/** Adds supporting text while letting native text fields own their Android labels. */
 function Field({
   label,
   sub,
@@ -483,108 +479,7 @@ function Field({
   );
 }
 
-function TileSlotPicker({
-  value,
-  profiles,
-  currentId,
-  onChange,
-  colors,
-}: {
-  value: number | null;
-  profiles: Profile[];
-  currentId: string;
-  onChange: (slot: number | null) => void;
-  colors: ReturnType<typeof useColors>;
-}) {
-  const slots = Array.from({ length: TILE_SLOT_COUNT }, (_, i) => i + 1);
-  const ownerOf = (slot: number) =>
-    profiles.find((p) => p.tileSlot === slot && p.id !== currentId);
-  return (
-    <View style={styles.tileSlotRow}>
-      <Pressable
-        onPress={() => onChange(null)}
-        style={({ pressed }) => [
-          styles.tileSlotChip,
-          {
-            borderColor: colors.border,
-            backgroundColor: value === null ? colors.primary : "transparent",
-            opacity: pressed ? 0.7 : 1,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.tileSlotChipText,
-            {
-              color:
-                value === null ? colors.primaryForeground : colors.foreground,
-            },
-          ]}
-        >
-          Off
-        </Text>
-      </Pressable>
-      {slots.map((slot) => {
-        const conflict = ownerOf(slot);
-        const isActive = value === slot;
-        const isDisabled = Boolean(conflict) && !isActive;
-        return (
-          <Pressable
-            key={slot}
-            disabled={isDisabled}
-            accessibilityState={{ disabled: isDisabled, selected: isActive }}
-            accessibilityLabel={
-              isDisabled
-                ? `Slot ${slot}, unavailable${
-                    conflict?.name ? `, used by ${conflict.name}` : ""
-                  }`
-                : `Slot ${slot}${isActive ? ", selected" : ""}`
-            }
-            onPress={() => {
-              if (isDisabled) return;
-              onChange(isActive ? null : slot);
-            }}
-            style={({ pressed }) => [
-              styles.tileSlotChip,
-              {
-                borderColor: conflict ? colors.destructive : colors.border,
-                backgroundColor: isActive ? colors.primary : "transparent",
-                opacity: isDisabled ? 0.45 : pressed ? 0.7 : 1,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.tileSlotChipText,
-                {
-                  color: isActive
-                    ? colors.primaryForeground
-                    : conflict
-                      ? colors.destructive
-                      : colors.foreground,
-                },
-              ]}
-            >
-              {slot}
-            </Text>
-            {conflict ? (
-              <Text
-                style={[
-                  styles.tileSlotChipSub,
-                  { color: colors.mutedForeground },
-                ]}
-                numberOfLines={1}
-              >
-                {conflict.name || "used"}
-              </Text>
-            ) : null}
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
+/** Pairs a setting label with its accessible switch. */
 function ToggleRow({
   label,
   sub,
@@ -634,7 +529,11 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scrollContent: { padding: 20, gap: 18 },
   embeddedContent: { width: "100%", maxWidth: 900, alignSelf: "center" },
-  h1: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.4 },
+  h1: {
+    fontSize: 28,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.4,
+  },
   sectionTitle: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
@@ -644,7 +543,10 @@ const styles = StyleSheet.create({
   },
   sectionBody: { borderRadius: 18, paddingHorizontal: 16, paddingVertical: 4 },
   field: { paddingVertical: 12 },
-  fieldLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  fieldLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
   fieldSub: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
@@ -661,21 +563,38 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   keyRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  eye: { padding: 8, marginTop: 8 },
+  eye: {
+    minWidth: 48,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
   },
-  toggleLabel: { fontSize: 14, fontFamily: "Inter_500Medium" },
-  toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  toggleLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  toggleSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
   warning: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingVertical: 10,
   },
-  warningText: { fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 },
+  warningText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    flex: 1,
+  },
   deleteBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -686,7 +605,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginTop: 8,
   },
-  deleteText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  deleteText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
   footer: {
     flexDirection: "row",
     gap: 12,
@@ -721,36 +643,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_700Bold",
     paddingHorizontal: 2,
-  },
-  tileSlotRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
-  },
-  tileSlotChip: {
-    minWidth: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  tileSlotChipText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    paddingHorizontal: 2,
-  },
-  tileSlotChipSub: {
-    fontSize: 10,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-    maxWidth: 90,
-  },
-  tileSlotHint: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 10,
-    lineHeight: 17,
   },
 });

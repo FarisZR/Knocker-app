@@ -29,6 +29,7 @@ abstract class KnockerTileService : TileService() {
     renderCurrentState()
   }
 
+  /** Shows pending feedback immediately and attaches to shared native work off the main thread. */
   override fun onClick() {
     super.onClick()
 
@@ -47,59 +48,45 @@ abstract class KnockerTileService : TileService() {
     renderTile(cachedProfile, Tile.STATE_UNAVAILABLE, profileSubtitle("Knocking..."))
     KnockerExecutors.io.execute {
       try {
-        val profile = latestProfile?.takeIf { it.tileSlot == slot }
-          ?: KnockerStore.findProfileBySlot(applicationContext, slot)
+        val profile = KnockerStore.findProfileBySlot(applicationContext, slot)
         latestProfile = profile
-
-        if (profile == null) {
-          renderTile(null, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
-          KnockerTileNotifier.notifyFailure(this, slot, null, "Assign a profile to Knock $slot in Knocker.")
-          showToast("Assign a profile to Knock $slot in Knocker")
+        if (profile == null || !profile.canKnock()) {
+          renderTile(profile, Tile.STATE_INACTIVE, "Assign this tile in Knocker")
+          KnockerTileNotifier.notifyFailure(this, slot, profile, "Assign a configured profile to Knock $slot in Knocker.")
           openApp()
+          finishCurrentKnock()
           return@execute
         }
-
-        if (!profile.canKnock()) {
-          renderTile(profile, Tile.STATE_INACTIVE, profileSubtitle("Finish setup in Knocker"))
-          KnockerTileNotifier.notifyFailure(this, slot, profile, "Finish setup in Knocker before using this tile.")
-          showToast("${profileDisplayName(profile)} is missing its endpoint or API key")
-          openApp()
-          refreshCurrentStateSoon()
-          return@execute
-        }
-
-        val result = KnockerHttp.knock(profile)
-        when (result) {
-          is KnockOutcome.Success -> {
-            val updated = KnockerStore.updateExpiry(this, profile.id, result.expiresAtMillis)
-            val current = updated ?: profile
+        // The coordinator also serves foreground, startup and renewal callers.
+        // Attach a callback instead of occupying an IO worker waiting on IO.
+        KnockerRequests.knock(this, profile).whenComplete { result, error ->
+          try {
+            val current = KnockerStore.findProfileById(this, profile.id) ?: profile
             latestProfile = current
-            val nextFireAt = updated?.renewalAtMillis()
-            if (nextFireAt != null) {
-              KnockerRenewScheduler.schedule(this, profile.id, nextFireAt)
-            } else if (updated != null) {
-              KnockerRenewScheduler.cancel(this, profile.id)
+            if (error == null && result.ok) {
+              renderTile(current, currentTileState(current), profileSubtitle("Knocked"))
+              refreshCurrentStateAtExpiry(current)
+              KnockerTileNotifier.notifySuccess(this, slot, current, result.whitelistedEntry)
+              showToast("Knocked ${profileDisplayName(current)}")
+            } else {
+              val message = if (error == null) result.message ?: "Request failed" else "Native knock failed"
+              renderTile(current, currentTileState(current), profileSubtitle("Failed - tap again"))
+              KnockerTileNotifier.notifyFailure(this, slot, current, message)
+              showToast("Knock failed: $message")
+              openApp()
             }
-            renderTile(current, Tile.STATE_ACTIVE, profileSubtitle("Knocked"))
-            refreshCurrentStateAtExpiry(current)
-            KnockerTileNotifier.notifySuccess(this, slot, current, result.whitelistedEntry)
-            showToast("Knocked ${profileDisplayName(current)}")
-          }
-          is KnockOutcome.Failure -> {
-            latestProfile = profile
-            renderTile(profile, currentTileState(profile), profileSubtitle("Failed - tap again"))
-            KnockerTileNotifier.notifyFailure(this, slot, profile, result.message)
-            showToast("Knock failed: ${result.message}")
-            openApp()
-          }
+          } finally { finishCurrentKnock() }
         }
-      } finally {
-        isKnocking.set(false)
-        refreshCurrentStateSoon()
-      }
+      } catch (_: Exception) { finishCurrentKnock() }
     }
   }
 
+  private fun finishCurrentKnock() {
+    isKnocking.set(false)
+    refreshCurrentStateSoon()
+  }
+
+  /** Reads the latest slot assignment and schedules active-grant expiry feedback off the main thread. */
   protected fun renderCurrentState() {
     KnockerExecutors.io.execute {
       val profile = KnockerStore.findProfileBySlot(applicationContext, slot)
@@ -125,6 +112,7 @@ abstract class KnockerTileService : TileService() {
     }
   }
 
+  /** Updates system tile state on the main thread while tolerating an unavailable tile instance. */
   private fun renderTile(profile: StoredProfile?, state: Int, subtitle: String?) {
     mainHandler.post {
       val tile = qsTile ?: return@post
@@ -141,6 +129,7 @@ abstract class KnockerTileService : TileService() {
     return "Tile $slot - $status"
   }
 
+  /** Marks a tile active only while its persisted permission is unexpired. */
   private fun currentTileState(profile: StoredProfile): Int {
     val expiresAt = profile.expiresAt ?: return Tile.STATE_INACTIVE
     return if (expiresAt > System.currentTimeMillis()) {
@@ -154,6 +143,7 @@ abstract class KnockerTileService : TileService() {
     return profile.name.takeIf { it.isNotBlank() } ?: "Profile"
   }
 
+  /** Formats the remaining grant time for the system tile subtitle. */
   private fun currentStatus(profile: StoredProfile): String {
     val expiresAt = profile.expiresAt ?: return "Ready"
     val minutes = ((expiresAt - System.currentTimeMillis()) / 60_000L).coerceAtLeast(0L)
@@ -164,6 +154,7 @@ abstract class KnockerTileService : TileService() {
     mainHandler.postDelayed({ renderCurrentState() }, 1500L)
   }
 
+  /** Schedules a refresh at permission expiry only for grants that remain active. */
   private fun refreshCurrentStateAtExpiry(profile: StoredProfile) {
     val expiresAt = profile.expiresAt ?: return
     val delay = (expiresAt - System.currentTimeMillis()).coerceAtLeast(0L)
@@ -177,6 +168,7 @@ abstract class KnockerTileService : TileService() {
     }
   }
 
+  /** Collapses Quick Settings into the installed app using the supported Android launch API. */
   private fun openApp() {
     mainHandler.post {
       val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return@post
@@ -199,17 +191,17 @@ abstract class KnockerTileService : TileService() {
   companion object {
     fun refreshAll(context: android.content.Context) {
       val appContext = context.applicationContext
-      tileComponents.forEach { component ->
+      tileComponents(appContext).forEach { component ->
         requestListeningState(appContext, component)
       }
     }
 
-    private val tileComponents = listOf(
-      ComponentName("dev.faris.knocker", KnockerTileService1::class.java.name),
-      ComponentName("dev.faris.knocker", KnockerTileService2::class.java.name),
-      ComponentName("dev.faris.knocker", KnockerTileService3::class.java.name),
-      ComponentName("dev.faris.knocker", KnockerTileService4::class.java.name),
-      ComponentName("dev.faris.knocker", KnockerTileService5::class.java.name),
+    private fun tileComponents(context: android.content.Context) = listOf(
+      ComponentName(context.packageName, KnockerTileService1::class.java.name),
+      ComponentName(context.packageName, KnockerTileService2::class.java.name),
+      ComponentName(context.packageName, KnockerTileService3::class.java.name),
+      ComponentName(context.packageName, KnockerTileService4::class.java.name),
+      ComponentName(context.packageName, KnockerTileService5::class.java.name),
     )
   }
 }

@@ -18,7 +18,7 @@ const palette = {
 };
 
 const colors = {
-  light: {
+  dark: {
     text: palette.foreground,
     tint: palette.primary,
     background: palette.bg,
@@ -48,4 +48,33 @@ const colors = {
   radius: 24,
 };
 
-export default colors;
+// Material 3 baseline for platforms without Android dynamic colors.
+const light = {
+  ...colors.dark,
+  text: "#1D1B20",
+  foreground: "#1D1B20",
+  background: "#FEF7FF",
+  card: "#F3EDF7",
+  cardForeground: "#1D1B20",
+  surface: "#F3EDF7",
+  tint: "#6750A4",
+  primary: "#6750A4",
+  primaryForeground: "#FFFFFF",
+  primaryContainer: "#EADDFF",
+  onPrimaryContainer: "#21005D",
+  secondary: "#E8DEF8",
+  secondaryForeground: "#1D192B",
+  muted: "#E7E0EC",
+  mutedForeground: "#49454F",
+  accent: "#E8DEF8",
+  accentForeground: "#49454F",
+  onSurfaceVariant: "#49454F",
+  border: "#79747E",
+  borderVariant: "#CAC4D0",
+  input: "#79747E",
+  destructive: "#B3261E",
+  destructiveForeground: "#FFFFFF",
+  success: "#386A20",
+  onSuccess: "#FFFFFF",
+};
+export default { ...colors, light };

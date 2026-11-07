@@ -1,5 +1,6 @@
 package dev.faris.knockernative
 
+import android.content.Context
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -8,7 +9,14 @@ import org.json.JSONObject
 sealed interface KnockOutcome {
   data class Success(
     val expiresAtMillis: Long?,
-    val whitelistedEntry: String?
+    val whitelistedEntry: String?,
+    val whitelistedAtMillis: Long,
+    val networkId: String?,
+    val networkType: String,
+    val expiresInSeconds: Long?,
+    val requestedTtlSeconds: Int?,
+    val ttlCapped: Boolean,
+    val completedAtMillis: Long = System.currentTimeMillis()
   ) : KnockOutcome
 
   data class Failure(
@@ -18,7 +26,10 @@ sealed interface KnockOutcome {
 }
 
 object KnockerHttp {
-  fun knock(profile: StoredProfile): KnockOutcome {
+  /** Sends one bounded request on the captured Android network and returns grant or failure metadata. */
+  fun knock(profile: StoredProfile, context: Context): KnockOutcome {
+    val captured = KnockerNetwork.capture(context)
+    val network = captured.identity
     if (!profile.canKnock()) {
       return KnockOutcome.Failure(null, "Profile is not fully configured")
     }
@@ -36,7 +47,7 @@ object KnockerHttp {
 
     return try {
       val url = URL(profile.endpointUrl.trimEnd('/') + "/knock")
-      connection = (url.openConnection() as HttpURLConnection).apply {
+      connection = ((captured.network?.openConnection(url) ?: url.openConnection()) as HttpURLConnection).apply {
         requestMethod = "POST"
         connectTimeout = 10_000
         readTimeout = 10_000
@@ -64,9 +75,20 @@ object KnockerHttp {
       }
 
       val json = payload?.let { JSONObject(it) } ?: JSONObject()
+      val seconds = json.optNullableLong("expires_in_seconds")
+      val requestedTtl = profile.ttlSeconds?.takeIf { it > 0 }
       KnockOutcome.Success(
         expiresAtMillis = json.optNullableLong("expires_at")?.times(1000L),
-        whitelistedEntry = json.optNullableString("whitelisted_entry")
+        whitelistedEntry = json.optNullableString("whitelisted_entry"),
+        whitelistedAtMillis = json.optNullableLong("expires_at")?.times(1000L)?.let { expiry ->
+          val seconds = json.optNullableLong("expires_in_seconds")
+          if (seconds != null && seconds > 0) expiry - seconds * 1000L else System.currentTimeMillis()
+        } ?: System.currentTimeMillis(),
+        networkId = network.id,
+        networkType = network.type,
+        expiresInSeconds = seconds,
+        requestedTtlSeconds = requestedTtl,
+        ttlCapped = requestedTtl != null && seconds != null && seconds > 0 && seconds < requestedTtl.toLong() - 5L
       )
     } catch (error: Exception) {
       val message = when (error) {
@@ -79,6 +101,7 @@ object KnockerHttp {
     }
   }
 
+  /** Consumes and closes a response stream, treating empty payloads as absent. */
   private fun InputStream?.readTextSafely(): String? {
     if (this == null) return null
     return use { input ->
@@ -86,6 +109,7 @@ object KnockerHttp {
     }.takeIf { it.isNotBlank() }
   }
 
+  /** Prefers the server error field but retains plain-text failures for useful feedback. */
   private fun extractErrorMessage(raw: String): String {
     return try {
       val json = JSONObject(raw)
@@ -95,11 +119,13 @@ object KnockerHttp {
     }
   }
 
+  /** Keeps missing grant times nullable rather than interpreting them as epoch zero. */
   private fun JSONObject.optNullableLong(key: String): Long? {
     if (isNull(key) || !has(key)) return null
     return optLong(key)
   }
 
+  /** Omits absent or blank server text from the result metadata. */
   private fun JSONObject.optNullableString(key: String): String? {
     if (isNull(key) || !has(key)) return null
     return optString(key).takeIf { it.isNotBlank() }

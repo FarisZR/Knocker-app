@@ -9,12 +9,17 @@ export interface KnockSuccess {
   requestedTtlSeconds: number | null;
   /** True when the server returned a TTL shorter than what we asked for. */
   ttlCapped: boolean;
+  whitelistedAt?: number;
+  grantNetworkId?: string | null;
+  grantNetworkType?: string | null;
+  completedAtMillis?: number;
 }
 
 export interface KnockFailure {
   ok: false;
   status: number | null;
   message: string;
+  completedAtMillis?: number;
 }
 
 export type KnockResult = KnockSuccess | KnockFailure;
@@ -23,6 +28,7 @@ function trimSlash(url: string): string {
   return url.replace(/\/+$/, "");
 }
 
+/** Sends one bounded HTTP knock and interprets grant duration, server caps and errors. */
 export async function knock(profile: Profile): Promise<KnockResult> {
   const url = `${trimSlash(profile.endpointUrl)}/knock`;
   const body: Record<string, unknown> = {};
@@ -64,7 +70,9 @@ export async function knock(profile: Profile): Promise<KnockResult> {
     const expiresInSeconds = Number(data.expires_in_seconds ?? 0);
     // Treat a 5s slack as "applied as requested" to absorb network round-trip.
     const ttlCapped =
-      requestedTtl !== null && expiresInSeconds > 0 && expiresInSeconds < requestedTtl - 5;
+      requestedTtl !== null &&
+      expiresInSeconds > 0 &&
+      expiresInSeconds < requestedTtl - 5;
 
     return {
       ok: true,

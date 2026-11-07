@@ -1,3 +1,4 @@
+import { startLaunchKnocks } from "knocker-native";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -7,18 +8,19 @@ import {
 } from "@expo-google-fonts/inter";
 import Feather from "@expo/vector-icons/Feather";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { router, Stack } from "expo-router";
+import { Slot, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as Sentry from "@sentry/react-native";
 import React, { useEffect } from "react";
-import { InteractionManager, PermissionsAndroid, Platform } from "react-native";
+import { PermissionsAndroid, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProfilesProvider } from "@/context/ProfilesContext";
+import { NetworkProvider } from "@/context/NetworkContext";
 import { useColors } from "@/hooks/useColors";
 
 Sentry.init({
@@ -36,10 +38,8 @@ Sentry.init({
   // spotlight: __DEV__,
 });
 
-// Expo Router's static singleton has a narrower prefetch signature than the
-// router shape accepted by Sentry's wrapper.
-Sentry.wrapExpoRouter(router as unknown as Sentry.ExpoRouter);
-
+// Navigation uses useRouter() within mounted screens. SDK 58 resets its global
+// imperative router during activity recreation, so do not wrap that singleton.
 void SplashScreen.preventAutoHideAsync();
 
 function reportErrorBoundaryError(error: Error, componentStack: string): void {
@@ -51,15 +51,20 @@ function reportErrorBoundaryError(error: Error, componentStack: string): void {
 
 const queryClient = new QueryClient();
 
+/** Keeps route navigation available while optional startup work runs separately. */
 function RootLayoutNav() {
   const colors = useColors();
+  if (Platform.OS === "android") return <Slot />;
   return (
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.foreground,
         headerShadowVisible: false,
-        headerTitleStyle: { fontFamily: "Inter_600SemiBold" },
+        headerTitleStyle: {
+          fontFamily: "Inter_600SemiBold",
+        },
+        animation: "slide_from_right",
         contentStyle: { backgroundColor: colors.background },
       }}
     >
@@ -77,16 +82,23 @@ function RootLayoutNav() {
 
 function StartupReadyController() {
   useEffect(() => {
+    let knockFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
       void SplashScreen.hideAsync();
+      // Begin the cached native batch on the next frame, without awaiting JS
+      // profile/key hydration, animations, font loading or public-IP checks.
+      knockFrame = requestAnimationFrame(startLaunchKnocks);
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (knockFrame !== null) cancelAnimationFrame(knockFrame);
+    };
   }, []);
 
   return null;
 }
 
-function RootLayout() {
+function FallbackFonts() {
   useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -94,13 +106,21 @@ function RootLayout() {
     Inter_700Bold,
     ...Feather.font,
   });
+  return null;
+}
+
+function RootLayout() {
+  const Container =
+    Platform.OS === "android" ? React.Fragment : GestureHandlerRootView;
+  const KeyboardContainer =
+    Platform.OS === "android" ? React.Fragment : KeyboardProvider;
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
     if (Number(Platform.Version) < 33) return;
 
     let timeout: ReturnType<typeof setTimeout> | null = null;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = requestIdleCallback(() => {
       timeout = setTimeout(() => {
         void (async () => {
           const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
@@ -113,7 +133,7 @@ function RootLayout() {
     });
 
     return () => {
-      task.cancel();
+      cancelIdleCallback(task);
       if (timeout) clearTimeout(timeout);
     };
   }, []);
@@ -122,19 +142,22 @@ function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary onError={reportErrorBoundaryError}>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView>
-            <KeyboardProvider>
+          <Container>
+            <KeyboardContainer>
+              {Platform.OS !== "android" ? <FallbackFonts /> : null}
               {/*
                 Load fonts and profiles in the background, but hide the splash
                 as soon as the first frame is ready so startup stays responsive.
               */}
               <ProfilesProvider>
-                <StartupReadyController />
-                <StatusBar style="light" />
-                <RootLayoutNav />
+                <NetworkProvider>
+                  <StartupReadyController />
+                  <StatusBar style="auto" />
+                  <RootLayoutNav />
+                </NetworkProvider>
               </ProfilesProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+            </KeyboardContainer>
+          </Container>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

@@ -1,11 +1,9 @@
+import { isWhitelisted } from "@/lib/profileStatus";
 import { Feather } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, {
-  FadeInDown,
-  LinearTransition,
-} from "react-native-reanimated";
+import Animated, { LinearTransition } from "react-native-reanimated";
 
 import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { useColors } from "@/hooks/useColors";
@@ -15,6 +13,7 @@ import { formatCountdown, formatHostname } from "@/lib/format";
 import { performKnockHaptic } from "@/lib/haptics";
 import type { Profile } from "@/lib/profiles";
 
+/** Provides the cross-platform profile fallback with shared pending and renewal-error feedback. */
 export function ProfileCard({
   profile,
   index = 0,
@@ -23,13 +22,15 @@ export function ProfileCard({
 }: {
   profile: Profile;
   index?: number;
+  count?: number;
   selected?: boolean;
   onOpen?: (profileId: string) => void;
 }) {
+  const router = useRouter();
   const colors = useColors();
-  const { knockOne } = useProfiles();
+  const { knockOne, pendingKnocks } = useProfiles();
   const [now, setNow] = useState(Date.now());
-  const [knocking, setKnocking] = useState(false);
+  const knocking = pendingKnocks.has(profile.id);
 
   useEffect(() => {
     if (!profile.expiresAt) return;
@@ -37,22 +38,15 @@ export function ProfileCard({
     return () => clearInterval(t);
   }, [profile.expiresAt]);
 
-  const isActive =
-    profile.lastKnockStatus === "success" &&
-    profile.expiresAt !== null &&
-    profile.expiresAt > now;
+  const isActive = isWhitelisted(profile, now);
   const isError = profile.lastKnockStatus === "error";
 
   const onKnock = async () => {
-    setKnocking(true);
     performKnockHaptic();
-    try {
-      await knockOne(profile.id);
-    } finally {
-      setKnocking(false);
-    }
+    await knockOne(profile.id);
   };
 
+  /** Uses the embedded selection handler when supplied, otherwise the current router. */
   const openProfile = () => {
     if (onOpen) {
       onOpen(profile.id);
@@ -64,9 +58,6 @@ export function ProfileCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(Math.min(index * 20, 120))
-        .duration(motion.duration.medium)
-        .easing(motion.easing.standard)}
       layout={LinearTransition.duration(motion.duration.short).easing(
         motion.easing.standard,
       )}
@@ -111,7 +102,11 @@ export function ProfileCard({
             </Text>
           </View>
           <View style={styles.statusRow}>
-            {isActive ? (
+            {knocking ? (
+              <Text style={[styles.statusText, { color: colors.primary }]}>
+                Knocking…
+              </Text>
+            ) : isActive ? (
               <>
                 <Feather name="check-circle" size={13} color={colors.success} />
                 <Text style={[styles.statusText, { color: colors.success }]}>
@@ -156,6 +151,16 @@ export function ProfileCard({
               </>
             )}
           </View>
+          {isActive && isError ? (
+            <Text
+              style={[
+                styles.statusText,
+                { color: colors.destructive, marginTop: 6 },
+              ]}
+            >
+              Renewal failed · {profile.lastError || "Try again"}
+            </Text>
+          ) : null}
         </View>
 
         <AnimatedPressable
