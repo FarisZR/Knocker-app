@@ -1,44 +1,58 @@
 #!/usr/bin/env python3
 """Render Play listing images from emulator captures. Requires Pillow."""
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / 'screenshots'
 OUT.mkdir(exist_ok=True)
-BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-REGULAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+FONT = '/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf'
 
-def font(size, bold=False): return ImageFont.truetype(BOLD if bold else REGULAR, size)
-def centered(draw, y, text, f, fill):
-    box = draw.textbbox((0, 0), text, font=f)
-    draw.text(((1080-(box[2]-box[0]))/2, y), text, font=f, fill=fill)
+def center(draw, y, text, font):
+    box = draw.textbbox((0, 0), text, font=font)
+    draw.text(((1080 - (box[2] - box[0])) / 2, y), text, font=font, fill='#f7f4e9')
 
-def render(source, name, kicker, lines, sub):
-    image = Image.new('RGB', (1080, 1920), '#11110f')
-    d = ImageDraw.Draw(image)
-    # Quiet warm geometry echoes the app's yellow accent.
-    d.ellipse((-420, 700, 520, 1640), fill='#1d1c14')
-    d.ellipse((730, 350, 1400, 1020), fill='#1b1a13')
-    d.rounded_rectangle((411, 69, 669, 116), 24, fill='#302e1d')
-    centered(d, 78, kicker, font(21, True), '#ffe66a')
-    for i, line in enumerate(lines): centered(d, 155+i*86, line, font(70, True), '#f8f5ed')
-    centered(d, 155+len(lines)*86+14, sub, font(28), '#c7c4b9')
-    # Pixel 7 front profile: rounded corners, dark bezel and centred camera.
-    x, y, w, h = 209, 505, 662, 1488
+def rounded_paste(canvas, img, xy, radius):
+    mask = Image.new('L', img.size)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, img.width - 1, img.height - 1), radius, fill=255)
+    canvas.paste(img, xy, mask)
+
+def render(source, name, lines, focus=None):
+    image = Image.new('RGBA', (1080, 1920), '#15140f')
+    draw = ImageDraw.Draw(image)
+    headline = ImageFont.truetype(FONT, 80)
+    for i, line in enumerate(lines):
+        center(draw, 125 + i * 90, line, headline)
+
+    # A simplified Pixel 7 front, matching the emulator's device profile.
+    x, y, w, h = 209, 455, 662, 1488
     shadow = Image.new('RGBA', image.size)
-    sd = ImageDraw.Draw(shadow); sd.rounded_rectangle((x-15,y+12,x+w+15,y+h+25), 92, fill=(0,0,0,160))
-    image = Image.alpha_composite(image.convert('RGBA'), shadow.filter(ImageFilter.GaussianBlur(28)))
-    d = ImageDraw.Draw(image)
-    d.rounded_rectangle((x-6,y-3,x+w+6,y+h+3), 86, fill='#686862')
-    d.rounded_rectangle((x,y,x+w,y+h), 81, fill='#090909')
-    shot = Image.open(ROOT/'source'/source).convert('RGB').resize((630, 1400), Image.Resampling.LANCZOS)
-    mask = Image.new('L', shot.size); ImageDraw.Draw(mask).rounded_rectangle((0,0,629,1399), 65, fill=255)
-    image.paste(shot, (x+16,y+18), mask)
-    d = ImageDraw.Draw(image); d.ellipse((534,y+28,546,y+40), fill='#050505')
-    image.convert('RGB').save(OUT/name, optimize=True)
+    ImageDraw.Draw(shadow).rounded_rectangle((x - 9, y + 10, x + w + 9, y + h + 20), 90, fill=(0, 0, 0, 130))
+    image = Image.alpha_composite(image, shadow.filter(ImageFilter.GaussianBlur(24)))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((x - 4, y - 4, x + w + 4, y + h + 4), 85, fill='#5c5b54')
+    draw.rounded_rectangle((x, y, x + w, y + h), 80, fill='#080807')
+    original = Image.open(ROOT / 'source' / source).convert('RGB')
+    screen = original.resize((630, 1400), Image.Resampling.LANCZOS)
+    if focus:
+        # De-emphasize the rest of the system shade; the enlarged detail below
+        # is an unaltered crop from the same emulator screenshot.
+        screen = ImageEnhance.Brightness(screen.filter(ImageFilter.GaussianBlur(18))).enhance(.42)
+    rounded_paste(image, screen, (x + 16, y + 18), 65)
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((534, y + 28, 546, y + 40), fill='#050505')
+    if focus:
+        box, width, top = focus
+        crop = original.crop(box)
+        crop = crop.resize((width, round(crop.height * width / crop.width)), Image.Resampling.LANCZOS)
+        left = (1080 - width) // 2
+        shade = Image.new('RGBA', image.size)
+        ImageDraw.Draw(shade).rounded_rectangle((left-4, top+10, left+width+4, top+crop.height+14), 55, fill=(0, 0, 0, 160))
+        image = Image.alpha_composite(image, shade.filter(ImageFilter.GaussianBlur(22)))
+        rounded_paste(image, crop, (left, top), 45)
+    image.convert('RGB').save(OUT / name, optimize=True)
 
-render('home.png','01-access.png','KNOCKER', ['Your server,', 'one tap away'], 'Keep access close at hand')
-render('tile.png','02-quick-settings.png','QUICK SETTINGS', ['Knock without', 'opening the app'], 'A shortcut right in your shade')
-render('renew.png','03-auto-renew.png','AUTO-RENEW', ['Stay connected', 'automatically'], 'Checks network changes and renews before expiry')
-render('notification.png','04-notifications.png','NOTIFICATIONS', ['See your latest', 'knock at a glance'], 'Get updates when a background knock finishes')
+render('home.png', '01-access.png', ['Your server.', 'Ready when you are.'])
+render('tile.png', '02-quick-settings.png', ['A knock is just', 'a swipe away.'], ((40, 1015, 535, 1210), 860, 1010))
+render('renew.png', '03-auto-renew.png', ['Access that follows', 'your network.'])
+render('notification.png', '04-notifications.png', ['Know when', 'your knock lands.'], ((40, 1120, 1040, 1425), 950, 990))
