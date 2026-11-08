@@ -112,8 +112,8 @@ object LaunchKnocker {
 
 object ProfileKnocker {
   /** Persists access separately from the HTTP result and schedules from current preferences. */
-  fun knock(context: Context, profile: StoredProfile): LaunchKnockResult {
-    return when (val outcome = KnockerHttp.knock(profile, context)) {
+  fun knock(context: Context, profile: StoredProfile, captured: KnockerNetwork.Connection = KnockerNetwork.capture(context)): LaunchKnockResult {
+    return when (val outcome = KnockerHttp.knock(profile, context, captured)) {
       is KnockOutcome.Success -> {
         // The HTTP result remains valid even if local persistence/scheduling fails.
         val updated = runCatching { KnockerStore.updateGrant(

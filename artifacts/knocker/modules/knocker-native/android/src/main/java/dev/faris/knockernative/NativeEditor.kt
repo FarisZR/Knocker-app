@@ -104,7 +104,7 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
         NativeSwitchRow("Knock when app opens", null, draft.onOpen, !saving) {
           feedback("tap"); change(draft.copy(onOpen = it))
         }
-        NativeSwitchRow("Auto-renew", null, draft.renew, !saving) {
+        NativeSwitchRow("Auto-renew", "Re-knock before expiry and after network changes", draft.renew, !saving) {
           feedback("tap"); change(draft.copy(renew = it))
           requestAlarmAccess = it
         }
@@ -160,7 +160,7 @@ private fun RenewalAlarmPermission(enabled: Boolean, showPrompt: Boolean, onProm
       onDismissRequest = { onPromptChange(false) },
       icon = { Icon(Icons.Default.Alarm, null) },
       title = { Text("Allow timely background renewal?") },
-      text = { Text("Allow alarms and reminders so Knocker can schedule background renewals before your access expires. Without access, Android may delay renewal and interrupt your connection.") },
+      text = { Text("Auto-renew renews access before expiry and checks your Knocker server after network changes, knocking again only if needed. Allow alarms and reminders for timely expiry renewal. Network-change recovery works without this permission, but Android may delay background work.") },
       confirmButton = { TextButton(enabled = enabled, onClick = {
         onPromptChange(false)
         context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,

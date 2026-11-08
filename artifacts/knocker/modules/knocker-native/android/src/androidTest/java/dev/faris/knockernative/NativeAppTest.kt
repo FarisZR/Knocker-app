@@ -23,7 +23,7 @@ class NativeAppTest {
   private fun loaded(): NativeUiState = NativeUiState(JSONObject("""{
     "loaded":true,"pending":[],"profiles":[{"id":"home","name":"Home server",
     "endpointUrl":"https://example.test","apiKey":"fake-key","autoRenew":false,
-    "knockOnOpen":true,"pinnedToHome":true}],"network":{"checksEnabled":false}
+    "knockOnOpen":true,"pinnedToHome":true}],"network":{}
   }"""))
 
   @Test fun backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch() {
@@ -37,11 +37,13 @@ class NativeAppTest {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
       !context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) {
       compose.onNodeWithText("Allow timely background renewal?").assertExists()
+      compose.onNodeWithText("Network-change recovery works without this permission", substring = true).assertExists()
       compose.onNodeWithText("Not now").performClick()
       compose.onNodeWithText("Allow timely background renewal?").assertDoesNotExist()
       compose.onNodeWithText("Allow precise renewal").performScrollTo().assertExists()
       compose.onNodeWithText("Allow precise renewal").performClick()
       compose.onNodeWithText("Allow timely background renewal?").assertExists()
+      compose.onNodeWithText("Network-change recovery works without this permission", substring = true).assertExists()
       compose.onNodeWithText("Not now").performClick()
     }
     compose.onNodeWithText("Auto-renew").performScrollTo().performClick()
@@ -177,10 +179,11 @@ class NativeAppTest {
     val profile = json.getJSONArray("profiles").getJSONObject(0)
     val now = System.currentTimeMillis()
     profile.put("expiresAt", now + 60000).put("whitelistedAt", now).put("whitelistedEntry", "203.0.113.42")
-      .put("grantNetworkId", "previous").put("autoRenew", true)
+      .put("grantNetworkId", "previous").put("statusChecked", true).put("autoRenew", true)
       .put("lastKnockStatus", "error").put("lastError", JSONObject.NULL)
     json.getJSONObject("network").put("connection", JSONObject().put("id", "current").put("type", "Wi-Fi").put("isConnected", true))
-    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    val actions = mutableListOf<String>()
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { type, _ -> actions.add(type) }, {}) } }
     compose.onNodeWithContentDescription("Knocker").assertExists()
     compose.onNodeWithText("IP · 203.0.113.42").assertExists()
     compose.onNodeWithText("Failed").assertExists()
@@ -191,39 +194,46 @@ class NativeAppTest {
     compose.onNodeWithText("Wi-Fi").assertDoesNotExist()
     compose.onNodeWithText("IP checks: off").assertDoesNotExist()
     compose.onNodeWithText("1 profile", substring = true).assertDoesNotExist()
-    compose.onNodeWithText("Network changed. IP may differ.")
+    compose.onNodeWithText("Network changed · status unverified")
       .assert(hasAnyAncestor(hasContentDescription("Edit Home server")).not())
       .assert(hasAnyAncestor(hasContentDescription("Profile Home server")))
     compose.onNodeWithContentDescription("Settings").performClick()
-    compose.onNodeWithText("Public-IP checks").assertIsOff()
+    compose.onNodeWithText("Connection checks use only your configured Knocker servers.").assertExists()
+    compose.onNodeWithText("Check now").performClick()
+    compose.runOnIdle { assertEquals("refreshStatus", actions.last()) }
   }
 
-  @Test fun publicIpSwitchUsesBridgeStateAndKeepsSettingsOpen() {
-    val state = mutableStateOf(loaded())
-    val actions = mutableListOf<Pair<String, Map<String, Any?>>>()
-    compose.setContent { KnockerTheme { NativeApp(state.value, { type, payload -> actions.add(type to payload) }, {}) } }
-    compose.onNodeWithContentDescription("Settings").performClick()
-    compose.onNodeWithText("Public-IP checks").assertIsOff().performClick()
-    compose.runOnIdle {
-      assertEquals("toggleIp", actions.last().first)
-      assertEquals(true, actions.last().second["enabled"])
-      val json = loaded().json
-      json.getJSONObject("network").put("checksEnabled", true)
-      state.value = NativeUiState(json)
-    }
-    compose.onNodeWithText("Public-IP checks").assertIsOn()
-    compose.onNodeWithText("Check now").assertExists()
-    compose.onNodeWithText("Close").assertExists()
-    compose.onNodeWithText("Public-IP checks").performClick()
-    compose.runOnIdle {
-      assertEquals("toggleIp", actions.last().first)
-      assertEquals(false, actions.last().second["enabled"])
-      state.value = loaded()
-    }
-    compose.onNodeWithText("Public-IP checks").assertIsOff()
-    compose.onNodeWithText("Check now").assertDoesNotExist()
-    compose.onNodeWithText("Close").performClick()
-    compose.onNodeWithContentDescription("Knocker").assertExists()
+  @Test fun serverCoverageSuppressesWarningEvenWhenAddressAndNetworkChanged() {
+    val json = loaded().json
+    json.getJSONArray("profiles").getJSONObject(0)
+      .put("expiresAt", System.currentTimeMillis() + 60000).put("grantNetworkId", "previous")
+      .put("statusChecked", true).put("addressMatch", "changed").put("connectionStatus", JSONObject()
+        .put("ipAddress", "198.51.100.7").put("whitelisted", true).put("expiresAt", System.currentTimeMillis() + 60000))
+    json.getJSONObject("network").put("connection", JSONObject().put("id", "current").put("isConnected", true))
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.onNodeWithContentDescription("Connection notice for Home server").assertDoesNotExist()
+  }
+
+  @Test fun expiredObservationDoesNotReviveTheOlderSavedExpiry() {
+    val json = loaded().json
+    json.getJSONArray("profiles").getJSONObject(0)
+      .put("expiresAt", System.currentTimeMillis() + 60000)
+      .put("connectionStatus", JSONObject().put("whitelisted", true).put("expiresAt", System.currentTimeMillis() - 1000))
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.onNodeWithText("Expired").assertExists()
+    compose.onNodeWithText("Whitelisted", substring = true).assertDoesNotExist()
+  }
+
+  @Test fun uncoveredConnectionShowsBothLastKnockAndCurrentIp() {
+    val json = loaded().json
+    json.getJSONArray("profiles").getJSONObject(0)
+      .put("expiresAt", System.currentTimeMillis() + 60000).put("whitelistedEntry", "203.0.113.42")
+      .put("statusChecked", true).put("addressMatch", "changed").put("connectionStatus", JSONObject()
+        .put("ipAddress", "198.51.100.7").put("whitelisted", false))
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.onNodeWithText("IP · 203.0.113.42").assertExists()
+    compose.onNodeWithText("Current IP · 198.51.100.7").assertExists()
+    compose.onNodeWithText("IP changed · not whitelisted").assertExists()
   }
 
   @Test fun successfulFeedbackAutoDismissesEvenIfAnOldSnapshotMarksItPersistent() {
@@ -303,7 +313,7 @@ class NativeAppTest {
     val json = loaded().json
     val now = System.currentTimeMillis()
     json.getJSONArray("profiles").getJSONObject(0).put("expiresAt", now + 60000)
-      .put("whitelistedAt", now).put("grantNetworkId", "wifi")
+      .put("whitelistedAt", now).put("grantNetworkId", "wifi").put("statusChecked", true)
     json.getJSONObject("network").put("connection", JSONObject().put("id", "wifi").put("isConnected", true))
     val state = mutableStateOf(NativeUiState(json))
     val knocks = mutableListOf<String>()
@@ -348,7 +358,7 @@ class NativeAppTest {
       val json = loaded().json
       val now = System.currentTimeMillis()
       json.getJSONArray("profiles").getJSONObject(0).put("expiresAt", now + 60000)
-        .put("whitelistedAt", now).put("grantNetworkId", "wifi")
+        .put("whitelistedAt", now).put("grantNetworkId", "wifi").put("statusChecked", true)
       json.getJSONObject("network").put("connection", JSONObject().put("id", "cellular").put("isConnected", true))
       state.value = NativeUiState(json)
     }

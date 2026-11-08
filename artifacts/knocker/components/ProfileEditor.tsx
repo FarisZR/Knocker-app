@@ -325,8 +325,8 @@ export function ProfileEditor({
             colors={colors}
           />
           <ToggleRow
-            label="Auto-renew before expiry"
-            sub={`Re-knock ${draft.autoRenewSafetyWindowSec / 60} min before expiry`}
+            label="Auto-renew"
+            sub={`Re-knock ${draft.autoRenewSafetyWindowSec / 60} min before expiry and after network changes`}
             value={draft.autoRenew}
             onChange={(v) => patch({ autoRenew: v })}
             colors={colors}

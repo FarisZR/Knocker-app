@@ -125,7 +125,10 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val id = profile.optString("id"); val name = profile.optString("name").ifBlank { "Untitled profile" }
   val hasIdentity = !profile.textOrNull("id").isNullOrBlank()
   val pending = id in state.pending
-  val expiry = profile.optLong("expiresAt"); val start = profile.optLong("whitelistedAt")
+  val observation = profile.optJSONObject("connectionStatus")
+  val covered = observation?.optBoolean("whitelisted") == true && observation.optLong("expiresAt") > now
+  val expiry = if (observation?.optBoolean("whitelisted") == true) observation.optLong("expiresAt") else profile.optLong("expiresAt")
+  val start = profile.optLong("whitelistedAt")
   val active = expiry > now
   val failed = profile.optString("lastKnockStatus") == "error"
   val green = if (dark) Color(0xFF153B28) else Color(0xFFC9F2D8)
@@ -141,8 +144,8 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val connectionChanged = profile.textOrNull("grantNetworkId")?.let { it != connection?.textOrNull("id") && connection?.textOrNull("id") != null } == true
   val ipChanged = match == "changed"
   val custom = !profile.textOrNull("ipOverride").isNullOrBlank()
-  val warning = !custom && (ipChanged || (connectionChanged && match != "same"))
-  val showNotice = active && !custom && (warning || connection?.optBoolean("isConnected") == false)
+  val warning = !custom && !covered && (observation?.optBoolean("whitelisted") == false || (profile.optBoolean("statusChecked") && (connectionChanged || ipChanged)))
+  val showNotice = !custom && (warning || (active && connection?.optBoolean("isConnected") == false))
   // A warning may already be present when this row is first hydrated. Start
   // hidden explicitly so that first appearance receives the same entrance.
   val noticeVisibility = remember(id) { MutableTransitionState(false) }
@@ -219,8 +222,17 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
           horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
           Icon(Icons.Default.WarningAmber, null, Modifier.size(20.dp))
-          Text(if (connection?.optBoolean("isConnected") == false) "Offline" else if (ipChanged) "Your IP changed" else "Network changed. IP may differ.",
-            style = MaterialTheme.typography.bodyMedium)
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(when {
+              connection?.optBoolean("isConnected") == false -> "Offline"
+              ipChanged -> "IP changed · not whitelisted"
+              observation != null -> "Current IP is not whitelisted"
+              else -> "Network changed · status unverified"
+            }, style = MaterialTheme.typography.bodyMedium)
+            observation?.textOrNull("ipAddress")?.let { ip ->
+              Text("Current IP · $ip", style = MaterialTheme.typography.bodySmall)
+            }
+          }
         }
       }
     }

@@ -1,6 +1,7 @@
 package dev.faris.knockernative
 
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadFactory
@@ -26,4 +27,8 @@ object KnockerExecutors {
   )
 
   val io: Executor = executor
+  /** Disconnects status requests at their total deadline, including streaming responses. */
+  val deadlines = Executors.newSingleThreadScheduledExecutor { task ->
+    Thread(task, "knocker-http-deadline").apply { isDaemon = true }
+  }
 }

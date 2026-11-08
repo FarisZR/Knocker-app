@@ -112,23 +112,23 @@ request timestamps. The [controlled fixture](../../scripts/ui-test-server.mjs)
 checks client behavior but does not establish live Caddy compatibility.
 
 - [x] With alarms-and-reminders access denied, save an auto-renew profile;
-  confirm no crash, an inexact scheduled alarm and an honest delay warning.
+      confirm no crash, an inexact scheduled alarm and an honest delay warning.
 - [x] Grant access from the editor, return and confirm the permission action
-  disappears and the pending alarm upgrades without another save or knock.
+      disappears and the pending alarm upgrades without another save or knock.
 - [x] Revoke access with an exact renewal pending; confirm its independent
-  inexact backup remains and delivers while the app is closed.
+      inexact backup remains and delivers while the app is closed.
 - [x] Invoke an assigned Quick Settings tile with Knocker backgrounded,
-  Auto-renew off and exact-alarm access denied. Confirm HTTP success, an active
-  tile and no scheduled renewal alarms.
+      Auto-renew off and exact-alarm access denied. Confirm HTTP success, an active
+      tile and no scheduled renewal alarms.
 - [ ] Repeat tile invocation after ordinary process death, and with a denied
-  response followed by retry.
+      response followed by retry.
 - [ ] Observe renewal with the screen off and in Doze. Record actual dispatch
-  and expiry times rather than treating alarm registration as HTTP delivery.
+      and expiry times rather than treating alarm registration as HTTP delivery.
 - [ ] Change Wi-Fi/cellular connectivity and confirm recovery. Check reboot
-  separately: AlarmManager alarms are
-  cleared on reboot, and this module has no boot-time rescheduling receiver.
+      separately: AlarmManager alarms are
+      cleared on reboot; the boot receiver restores enabled renewal alarms and the network subscription.
 - [ ] Against live Caddy, verify successful/denied knocks, server-capped TTL,
-  tile invocation and background renewal. Check physical haptic feel on hardware.
+      tile invocation and background renewal. Check physical haptic feel on hardware.
 
 Release-build checks above passed on the Android 16 emulator on 2026-11-07,
 using the HTTPS fixture, fake credentials, TTL 180 seconds and a 120-second
@@ -152,6 +152,44 @@ action when access is missing, and disabling it removes the action. The test
 the explanation dialog, dismissal and reopening. This extended test passed
 after the emulator was restarted. Manual checks in the optimized release also
 confirmed the popup appears on enabling Auto-renew and **Open settings** opens
-Android's alarms-and-reminders screen. Screen-off/Doze, network changes,
+Android's alarms-and-reminders screen. Screen-off/Doze,
 reboot, remaining tile cases,
 live Caddy and physical haptic feel remain pending.
+
+## Network changes and server status
+
+Auto-renew also checks the current connection after Wi-Fi/cellular/default-network
+changes. A native default-network callback handles a running process; a system-owned
+PendingIntent watches for availability of the next Wi-Fi/cellular transport.
+Delivered subscriptions are rearmed after the connection settles.
+One unique WorkManager batch waits five seconds for handover, then checks authenticated
+`GET /status` on each enabled self-knock profile's server. It knocks only when the
+server explicitly reports no coverage. Checks are limited to one per profile per minute,
+with at most three backoff retries. No polling or persistent foreground service is used.
+Android battery restrictions can delay work, and availability notifications do not
+guarantee delivery for every default-route switch when the process is absent.
+
+Foreground status checks also run with Auto-renew disabled. An uncovered current
+address appears in the amber profile footer beside the retained last-knock IP;
+covered addresses suppress the warning, including coverage from another knock/CIDR.
+Failed or unsupported status requests remain unverified and never trigger a knock.
+Remote-IP overrides retain their existing expiry renewal and are excluded from
+current-source-IP checks.
+
+Installed debug QA on Android 16 verified a Wi-Fi-to-cellular warning with
+Auto-renew off, suppression when the new IP was already covered, and one
+status request followed by one knock after a cellular-to-Wi-Fi transition
+with Knocker on the launcher. These checks used fake credentials and an
+HTTPS fixture; they do not establish physical-device or Doze timing.
+
+The alarm-permission explanation describes both expiry renewal and network-change
+recovery, and makes clear that network recovery works without exact-alarm access.
+Foreground status requests use Expo Fetch with redirect rejection, while native
+status reads are capped at 16 KiB and a four-second total deadline. Unknown fallback
+status results have bounded retries; successful knocks cannot create a refresh loop.
+
+Same-transport reconnections after process death remain outside the requested
+Wi-Fi/cellular handover scope. An availability notification can also be consumed
+while the default transport stays unchanged. Automatically re-registering a request
+that is already satisfied would cause repeated wakeups; the live default-network
+callback and existing expiry renewal remain the recovery paths in that case.

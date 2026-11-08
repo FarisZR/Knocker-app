@@ -20,8 +20,8 @@ object KnockerRequests {
   }
 
   /** Shares the actual HTTP request across display edits while keeping distinct targets independent. */
-  fun knock(context: Context, profile: StoredProfile): CompletableFuture<LaunchKnockResult> =
-    requests.submit(Key(profile.id, profile.requestIdentity())) {
-      ProfileKnocker.knock(context.applicationContext, profile)
+  fun knock(context: Context, profile: StoredProfile, captured: KnockerNetwork.Connection = KnockerNetwork.capture(context)): CompletableFuture<LaunchKnockResult> =
+    requests.submit(Key(profile.id, "${profile.requestIdentity()}:${captured.identity.id}")) {
+      ProfileKnocker.knock(context.applicationContext, profile, captured)
     }
 }
