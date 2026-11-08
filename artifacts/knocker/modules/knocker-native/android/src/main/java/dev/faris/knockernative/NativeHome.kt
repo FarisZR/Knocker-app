@@ -127,7 +127,7 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val pending = id in state.pending
   val observation = profile.optJSONObject("connectionStatus")
   val covered = observation?.optBoolean("whitelisted") == true && observation.optLong("expiresAt") > now
-  val expiry = if (covered) observation!!.optLong("expiresAt") else profile.optLong("expiresAt")
+  val expiry = if (observation?.optBoolean("whitelisted") == true) observation.optLong("expiresAt") else profile.optLong("expiresAt")
   val start = profile.optLong("whitelistedAt")
   val active = expiry > now
   val failed = profile.optString("lastKnockStatus") == "error"

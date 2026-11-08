@@ -181,3 +181,15 @@ Auto-renew off, suppression when the new IP was already covered, and one
 status request followed by one knock after a cellular-to-Wi-Fi transition
 with Knocker on the launcher. These checks used fake credentials and an
 HTTPS fixture; they do not establish physical-device or Doze timing.
+
+The alarm-permission explanation describes both expiry renewal and network-change
+recovery, and makes clear that network recovery works without exact-alarm access.
+Foreground status requests use Expo Fetch with redirect rejection, while native
+status reads are capped at 16 KiB and a four-second total deadline. Unknown fallback
+status results have bounded retries; successful knocks cannot create a refresh loop.
+
+Same-transport reconnections after process death remain outside the requested
+Wi-Fi/cellular handover scope. An availability notification can also be consumed
+while the default transport stays unchanged. Automatically re-registering a request
+that is already satisfied would cause repeated wakeups; the live default-network
+callback and existing expiry renewal remain the recovery paths in that case.

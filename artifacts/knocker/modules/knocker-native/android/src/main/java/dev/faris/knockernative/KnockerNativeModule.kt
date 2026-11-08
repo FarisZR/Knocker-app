@@ -54,8 +54,14 @@ class KnockerNativeModule : Module() {
     AsyncFunction("getNetworkIdentity") { KnockerNetwork.snapshot(context).toMap() }
 
     AsyncFunction("syncProfiles") { profilesJson: String ->
+      val previous = KnockerStore.readProfiles(context).associateBy { it.id }
       KnockerStore.replaceProfiles(context, profilesJson)
       NetworkChangeMonitor.update(context)
+      if (KnockerStore.readProfiles(context).any { current ->
+        val old = previous[current.id]
+        current.autoRenew && current.canKnock() && current.ipOverride.isNullOrBlank() &&
+          (old?.autoRenew != true || old.requestIdentity() != current.requestIdentity())
+      }) NetworkChangeWorker.enqueue(context)
       KnockerTileService.refreshAll(context)
     }
 

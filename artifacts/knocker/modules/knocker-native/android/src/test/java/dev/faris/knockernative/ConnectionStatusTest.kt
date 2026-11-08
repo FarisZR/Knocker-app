@@ -14,8 +14,10 @@ class ConnectionStatusTest {
   @Test fun coverageUsesRemainingTimeInsteadOfTrustingTheDeviceClock() {
     val before = System.currentTimeMillis()
     val status = ConnectionStatus.parse(JSONObject("""{"ip_address":"2001:db8::1","whitelisted":true,"expires_at":12345,"expires_in_seconds":300}"""))
+    val after = System.currentTimeMillis()
     assertTrue(status.whitelisted)
     assertTrue(status.expiresAt!! >= before + 300000L)
+    assertTrue(status.expiresAt!! <= after + 300000L)
   }
 
   @Test fun malformedCoverageCannotTriggerAnAutomaticKnock() {

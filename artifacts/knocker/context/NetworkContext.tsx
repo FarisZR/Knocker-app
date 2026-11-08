@@ -15,6 +15,7 @@ import {
 } from "@/lib/networkIdentity";
 import { checkServerStatus, type ServerStatus } from "@/lib/serverStatus";
 import { grantConfigurationFingerprint } from "@/lib/profileConfiguration";
+import { RecoveryBudget } from "@/lib/recoveryBudget";
 import { useProfiles } from "./ProfilesContext";
 
 interface NetworkStatus {
@@ -33,6 +34,8 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [statuses, setStatuses] = useState<Record<string, ServerStatus | null>>(
     {},
   );
+  const statusRetries = useRef(new RecoveryBudget());
+  const automaticKnocks = useRef(new RecoveryBudget());
   const generation = useRef(0);
   const sampling = useRef(0);
   const controller = useRef<AbortController | null>(null);
@@ -57,41 +60,55 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     const changed = local?.id !== connectionRef.current?.id;
     connectionRef.current = local;
     setConnection(local);
-    if (!force && !changed) return;
+    const keyFor = (p: (typeof profiles)[number]) =>
+      `${p.id}:${grantConfigurationFingerprint(p)}:${local?.id}`;
+    const targetsToCheck = latest.current.profiles.filter(
+      (p) =>
+        !p.ipOverride &&
+        (force ||
+          changed ||
+          (!isNativeAvailable &&
+            p.autoRenew &&
+            statusRetries.current.ready(keyFor(p)))),
+    );
+    if (!targetsToCheck.length && !force && !changed) return;
     const version = ++generation.current;
     controller.current?.abort();
-    setStatuses({});
-    if (!local?.isConnected) return;
+    if (force || changed) setStatuses({});
+    if (!local?.isConnected || !targetsToCheck.length) return;
     const pending = new AbortController();
     controller.current = pending;
     const timer = setTimeout(() => pending.abort(), 4000);
     try {
       await Promise.all(
-        latest.current.profiles
-          .filter((p) => !p.ipOverride)
-          .map(async (profile) => {
-            const status = await checkServerStatus(profile, pending.signal);
-            const current = latest.current.profiles.find(
-              (p) => p.id === profile.id,
-            );
-            if (
-              (pending.signal.aborted && status !== null) ||
-              version !== generation.current ||
-              !current ||
-              grantConfigurationFingerprint(current) !==
-                grantConfigurationFingerprint(profile)
-            )
-              return;
-            setStatuses((previous) => ({ ...previous, [profile.id]: status }));
-            // Android handles automatic recovery natively, including when JS is suspended.
-            if (
-              !isNativeAvailable &&
-              current.autoRenew &&
-              status &&
-              !status.whitelisted
-            )
-              void latest.current.knockOne(profile.id);
-          }),
+        targetsToCheck.map(async (profile) => {
+          const status = await checkServerStatus(profile, pending.signal);
+          const current = latest.current.profiles.find(
+            (p) => p.id === profile.id,
+          );
+          if (
+            (pending.signal.aborted && status !== null) ||
+            version !== generation.current ||
+            !current ||
+            grantConfigurationFingerprint(current) !==
+              grantConfigurationFingerprint(profile)
+          )
+            return;
+          const key = keyFor(current);
+          if (status === null && current.autoRenew && !isNativeAvailable)
+            statusRetries.current.claim(key);
+          else statusRetries.current.forget(key);
+          setStatuses((previous) => ({ ...previous, [profile.id]: status }));
+          // Android handles automatic recovery natively, including when JS is suspended.
+          if (
+            !isNativeAvailable &&
+            current.autoRenew &&
+            status &&
+            !status.whitelisted &&
+            automaticKnocks.current.claim(key)
+          )
+            void latest.current.knockOne(profile.id);
+        }),
       );
     } finally {
       clearTimeout(timer);

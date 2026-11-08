@@ -32,16 +32,19 @@ export function ProfileCard({
   const { knockOne, pendingKnocks } = useProfiles();
   const network = useNetworkStatus();
   const observation = network.statuses[profile.id];
+  const expiresAt = observation?.whitelisted
+    ? observation.expiresAt
+    : profile.expiresAt;
   const [now, setNow] = useState(Date.now());
   const knocking = pendingKnocks.has(profile.id);
 
   useEffect(() => {
-    if (!profile.expiresAt) return;
+    if (!expiresAt) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [profile.expiresAt]);
+  }, [expiresAt]);
 
-  const isActive = isWhitelisted(profile, now);
+  const isActive = isWhitelisted({ expiresAt }, now);
   const isError = profile.lastKnockStatus === "error";
 
   const onKnock = async () => {
@@ -122,7 +125,7 @@ export function ProfileCard({
                     { color: colors.onSurfaceVariant },
                   ]}
                 >
-                  {formatCountdown(profile.expiresAt, now)}
+                  {formatCountdown(expiresAt, now)}
                 </Text>
               </>
             ) : isError ? (

@@ -84,8 +84,8 @@ Current home captures: `minimal-home-dark.png`, `minimal-warning-dark.png` and `
 
 ## Server status and network recovery validation
 
-The server-status change passes 55 JavaScript tests and 19 native JVM tests. The
-Android 16 emulator passes all 21 Compose/worker tests, exercising native HTTP
+The server-status change passes 59 JavaScript tests and 19 native JVM tests. The
+Android 16 emulator passes all 26 Compose/worker tests, exercising native HTTP
 status/knock handling, opt-out,
 remote-IP exclusion, duplicate events and cooldowns. The x86_64 debug APK builds
 successfully. Module lint retains five existing notification-permission and legacy
@@ -102,7 +102,8 @@ that the network-change path is independent of that permission. Screen-off/Doze,
 force-stop, reboot and physical-carrier behavior remain separate validation cases.
 
 Captures: `server-status-uncovered.png`, `server-status-covered.png` and
-`network-auto-renew.png`. Obsolete settings captures were removed with the old
+`network-auto-renew.png`. The expanded alarm explanation is captured in
+`network-renewal-permission.png`. Obsolete settings captures were removed with the old
 external IP lookup UI.
 
 ## References

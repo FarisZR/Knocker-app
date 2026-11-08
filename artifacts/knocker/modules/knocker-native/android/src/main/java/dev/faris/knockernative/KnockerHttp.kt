@@ -27,8 +27,7 @@ sealed interface KnockOutcome {
 
 object KnockerHttp {
   /** Sends one bounded request on the captured Android network and returns grant or failure metadata. */
-  fun knock(profile: StoredProfile, context: Context): KnockOutcome {
-    val captured = KnockerNetwork.capture(context)
+  fun knock(profile: StoredProfile, context: Context, captured: KnockerNetwork.Connection = KnockerNetwork.capture(context)): KnockOutcome {
     val network = captured.identity
     if (!profile.canKnock()) {
       return KnockOutcome.Failure(null, "Profile is not fully configured")

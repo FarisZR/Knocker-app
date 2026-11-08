@@ -1,3 +1,4 @@
+import { fetch as expoFetch } from "expo/fetch";
 import ipaddr from "ipaddr.js";
 import type { Profile } from "./profiles";
 
@@ -11,7 +12,7 @@ export interface ServerStatus {
 export async function checkServerStatus(
   profile: Pick<Profile, "endpointUrl" | "apiKey">,
   signal: AbortSignal,
-  request: typeof fetch = fetch,
+  request: typeof fetch = expoFetch,
 ): Promise<ServerStatus | null> {
   if (signal.aborted || !profile.endpointUrl || !profile.apiKey) return null;
   try {
@@ -21,6 +22,7 @@ export async function checkServerStatus(
         headers: { "X-Api-Key": profile.apiKey, Accept: "application/json" },
         credentials: "omit",
         cache: "no-store",
+        redirect: "error",
         signal,
       },
     );

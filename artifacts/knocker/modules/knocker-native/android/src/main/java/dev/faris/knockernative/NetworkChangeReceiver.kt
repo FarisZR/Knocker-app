@@ -32,7 +32,7 @@ internal object NetworkChangeMonitor {
   private var callback: ConnectivityManager.NetworkCallback? = null
   private var watchedTransport: Int? = null
 
-  @Synchronized fun update(context: Context) {
+  @Synchronized fun update(context: Context, enqueueInitial: Boolean = true) {
     val app = context.applicationContext
     val manager = app.getSystemService(ConnectivityManager::class.java) ?: return
     fun intent(transport: Int) = PendingIntent.getBroadcast(app, transport,
@@ -69,6 +69,6 @@ internal object NetworkChangeMonitor {
       override fun onAvailable(network: Network) { NetworkChangeWorker.enqueue(app) }
       override fun onLost(network: Network) { NetworkChangeWorker.enqueue(app) }
     }.also { manager.registerDefaultNetworkCallback(it) }
-    NetworkChangeWorker.enqueue(app)
+    if (enqueueInitial) NetworkChangeWorker.enqueue(app)
   }
 }

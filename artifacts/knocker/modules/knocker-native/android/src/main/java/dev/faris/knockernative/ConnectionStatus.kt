@@ -1,5 +1,9 @@
 package dev.faris.knockernative
 
+import android.os.SystemClock
+import java.io.ByteArrayOutputStream
+import java.net.SocketTimeoutException
+import java.util.concurrent.TimeUnit
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.InetAddress
@@ -8,6 +12,7 @@ import org.json.JSONObject
 /** Observation of this connection, deliberately separate from the last knock's grant. */
 internal data class ConnectionStatus(val ipAddress: String, val whitelisted: Boolean, val expiresAt: Long?) {
   companion object {
+    /** Validates explicit coverage and derives expiry from remaining server time. */
     fun parse(json: JSONObject): ConnectionStatus {
       val ip = json.getString("ip_address")
       // Restrict syntax before parsing so malformed payloads can never cause DNS lookups.
@@ -25,7 +30,9 @@ internal data class ConnectionStatus(val ipAddress: String, val whitelisted: Boo
 
 /** Reads status over the same captured network used to identify the observation. */
 internal fun checkConnectionStatus(profile: StoredProfile, captured: KnockerNetwork.Connection): ConnectionStatus? {
+  val deadline = SystemClock.elapsedRealtime() + 4000L
   var connection: HttpURLConnection? = null
+  var timeout: java.util.concurrent.ScheduledFuture<*>? = null
   return try {
     val url = URL(profile.endpointUrl.trimEnd('/') + "/status")
     connection = ((captured.network?.openConnection(url) ?: url.openConnection()) as HttpURLConnection).apply {
@@ -37,8 +44,24 @@ internal fun checkConnectionStatus(profile: StoredProfile, captured: KnockerNetw
       setRequestProperty("X-Api-Key", profile.apiKey)
       setRequestProperty("Accept", "application/json")
     }
-    if (connection.responseCode != 200) null
-    else connection.inputStream.bufferedReader().use { ConnectionStatus.parse(JSONObject(it.readText())) }
+    val active = connection
+    timeout = KnockerExecutors.deadlines.schedule({ active.disconnect() },
+      (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0L), TimeUnit.MILLISECONDS)
+    if (active.responseCode != 200) null
+    else active.inputStream.use { input ->
+      val bytes = ByteArrayOutputStream()
+      val buffer = ByteArray(1024)
+      while (true) {
+        val remaining = deadline - SystemClock.elapsedRealtime()
+        if (remaining <= 0) throw SocketTimeoutException("Status deadline exceeded")
+        active.readTimeout = remaining.toInt()
+        val count = input.read(buffer)
+        if (count < 0) break
+        require(bytes.size() + count <= 16384) { "Status response too large" }
+        bytes.write(buffer, 0, count)
+      }
+      ConnectionStatus.parse(JSONObject(bytes.toString("UTF-8")))
+    }
   } catch (_: Exception) { null }
-  finally { connection?.disconnect() }
+  finally { timeout?.cancel(false); connection?.disconnect() }
 }

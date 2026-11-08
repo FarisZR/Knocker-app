@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { loadTypeScript } from "./load-typescript.mjs";
 const { checkServerStatus } = loadTypeScript(
   new URL("../lib/serverStatus.ts", import.meta.url),
+  { "expo/fetch": { fetch: globalThis.fetch } },
 );
 const profile = {
   endpointUrl: "https://knocker.example/prefix/",
@@ -24,6 +25,7 @@ test("checks only the configured server with its key, preserving a URL prefix", 
       assert.equal(options.headers["X-Api-Key"], "demo-key");
       assert.equal(options.credentials, "omit");
       assert.equal(options.cache, "no-store");
+      assert.equal(options.redirect, "error");
       return { ok: true, json: async () => inactive };
     },
   );
@@ -98,4 +100,33 @@ test("errors, unsupported servers, malformed responses and cancellation are unkn
     }),
     null,
   );
+});
+
+test("a redirect destination never receives the API key", async () => {
+  const { createServer } = await import("node:http");
+  const { once } = await import("node:events");
+  let redirectedRequests = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/status") res.writeHead(302, { Location: "/trap" }).end();
+    else {
+      redirectedRequests++;
+      res.end(JSON.stringify(inactive));
+    }
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const status = await checkServerStatus(
+      {
+        endpointUrl: `http://127.0.0.1:${server.address().port}`,
+        apiKey: "demo-key",
+      },
+      new AbortController().signal,
+    );
+    assert.equal(status, null);
+    assert.equal(redirectedRequests, 0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
