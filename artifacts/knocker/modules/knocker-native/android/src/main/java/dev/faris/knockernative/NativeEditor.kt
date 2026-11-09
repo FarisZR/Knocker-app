@@ -2,7 +2,12 @@
 
 package dev.faris.knockernative
 
+import android.Manifest
 import android.app.AlarmManager
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -48,6 +53,9 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
   var attempted by remember(id) { mutableStateOf(false) }
   var confirmDelete by remember(id) { mutableStateOf(false) }
   var requestAlarmAccess by remember(id) { mutableStateOf(false) }
+  // Tile results are this app's only notifications, so ask when a tile is chosen.
+  val context = LocalContext.current
+  val notificationAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
   val dirty = draft != baseline
   val errors = draft.errors()
   LaunchedEffect(dirty) { onDirty(dirty) }
@@ -127,10 +135,17 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
           listOf(null, 1, 2, 3, 4, 5).forEach { slot ->
             val owner = state.profiles.firstOrNull { it.optString("id") != draft.id && slot != null && it.optInt("tileSlot", -1) == slot }
             FilterChip(selected = draft.slot == slot, enabled = !saving && owner == null,
-              onClick = { feedback("tap"); change(draft.copy(slot = if (draft.slot == slot) null else slot)) },
+              onClick = {
+                feedback("tap"); change(draft.copy(slot = if (draft.slot == slot) null else slot))
+                if (slot != null && draft.slot != slot && Build.VERSION.SDK_INT >= 33 &&
+                  ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) notificationAccess.launch(Manifest.permission.POST_NOTIFICATIONS)
+              },
               label = { Text(if (slot == null) "Off" else if (owner != null) "$slot · ${owner.optString("name")}" else "Slot $slot") })
           }
         }
+        Text("Tile knocks report their result in a notification.",
+          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
       }
     }

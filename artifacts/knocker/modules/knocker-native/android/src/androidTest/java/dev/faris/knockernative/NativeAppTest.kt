@@ -28,7 +28,7 @@ class NativeAppTest {
 
   @Test fun backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch() {
     compose.setContent { KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) } }
-    compose.onNodeWithText("New profile").performClick()
+    compose.onNodeWithContentDescription("New profile").performClick()
     compose.onNodeWithText("Auto-renew").performScrollTo().assertIsOff()
     compose.onNodeWithText("Allow precise renewal").assertDoesNotExist()
     compose.onNodeWithText("Allow timely background renewal?").assertDoesNotExist()
@@ -97,6 +97,7 @@ class NativeAppTest {
     val state = mutableStateOf(NativeUiState())
     compose.setContent { KnockerTheme { NativeApp(state.value, { _, _ -> }, {}) } }
     compose.onNodeWithContentDescription("Loading profiles").assertExists()
+    compose.onNodeWithText("No servers yet").assertDoesNotExist()
     compose.runOnIdle { state.value = loaded() }
     compose.onNodeWithText("Home server").assertExists()
     compose.onNodeWithText("Ready to connect").assertDoesNotExist()
@@ -199,8 +200,11 @@ class NativeAppTest {
       .assert(hasAnyAncestor(hasContentDescription("Profile Home server")))
     compose.onNodeWithContentDescription("Settings").performClick()
     compose.onNodeWithText("Connection checks use only your configured Knocker servers.").assertExists()
-    compose.onNodeWithText("Check now").performClick()
+    compose.onAllNodesWithText("Settings").assertCountEquals(1)
+    compose.onNodeWithText("Check connection status").performClick()
     compose.runOnIdle { assertEquals("refreshStatus", actions.last()) }
+    compose.onNodeWithContentDescription("Back").performClick()
+    compose.onNodeWithContentDescription("Knocker").assertExists()
   }
 
   @Test fun serverCoverageSuppressesWarningEvenWhenAddressAndNetworkChanged() {
@@ -256,6 +260,8 @@ class NativeAppTest {
     compose.onNodeWithContentDescription("Knocker").assertExists()
     compose.onNodeWithText("Name").assertDoesNotExist()
     compose.onNodeWithText("Discard unsaved changes?").assertDoesNotExist()
+    compose.onNodeWithText("No servers yet").assertExists()
+    compose.onNodeWithContentDescription("New profile").assertDoesNotExist()
     compose.onNodeWithText("New profile", useUnmergedTree = true).performClick()
     compose.onNodeWithText("Name").assertExists()
   }

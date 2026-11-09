@@ -13,7 +13,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as Sentry from "@sentry/react-native";
 import React, { useEffect } from "react";
-import { PermissionsAndroid, Platform } from "react-native";
+import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -115,29 +115,6 @@ function RootLayout() {
     Platform.OS === "android" ? React.Fragment : GestureHandlerRootView;
   const KeyboardContainer =
     Platform.OS === "android" ? React.Fragment : KeyboardProvider;
-
-  useEffect(() => {
-    if (Platform.OS !== "android") return;
-    if (Number(Platform.Version) < 33) return;
-
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-    const task = requestIdleCallback(() => {
-      timeout = setTimeout(() => {
-        void (async () => {
-          const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
-          const alreadyGranted = await PermissionsAndroid.check(permission);
-          if (alreadyGranted) return;
-
-          await PermissionsAndroid.request(permission);
-        })();
-      }, 750);
-    });
-
-    return () => {
-      cancelIdleCallback(task);
-      if (timeout) clearTimeout(timeout);
-    };
-  }, []);
 
   return (
     <SafeAreaProvider>

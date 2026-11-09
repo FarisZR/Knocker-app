@@ -23,8 +23,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -57,6 +59,8 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
   Scaffold(
     modifier = Modifier.fillMaxSize(),
     topBar = { TopAppBar(title = { KnockerWordmark() }, expandedHeight = 88.dp, actions = {
+      // An empty home offers the same action as its only floating button instead.
+      if (state.loaded && state.profiles.isNotEmpty()) IconButton(onClick = onNew) { Icon(Icons.Default.Add, "New profile") }
       IconButton(onClick = onPreferences) { Icon(Icons.Default.Settings, "Settings") }
     }) },
     snackbarHost = { SnackbarHost(snackbar) },
@@ -67,9 +71,6 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
         horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
         if (state.profiles.isNotEmpty()) {
-          FilledTonalButton(onClick = onNew, shapes = ButtonDefaults.shapes()) {
-            Icon(Icons.Default.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("New profile")
-          }
           state.profiles.filter { it.optBoolean("pinnedToHome") }.forEach { profile ->
             val id = profile.optString("id"); val pending = id in state.pending
             FilledTonalButton(onClick = { onKnock(id) }, enabled = !pending, shapes = ButtonDefaults.shapes(),
@@ -110,6 +111,15 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
         itemsIndexed(state.profiles, key = { index, _ -> state.profileRenderKeys[index] }) { _, profile ->
           NativeProfileCard(profile, state, now, onOpen, onKnock)
         }
+      }
+      if (state.loaded && state.profiles.isEmpty()) Column(
+        Modifier.align(Alignment.Center).widthIn(max = 360.dp).padding(horizontal = 32.dp).padding(bottom = clearance),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        Icon(Icons.Default.Dns, null, Modifier.size(48.dp), tint = colors.onSurfaceVariant)
+        Text("No servers yet", style = MaterialTheme.typography.titleLarge)
+        Text("Add a profile for your Knocker server to whitelist this device.", color = colors.onSurfaceVariant,
+          style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
       }
     }
   }
@@ -164,7 +174,9 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
     colors = CardDefaults.elevatedCardColors(containerColor = if (showNotice) noticeColor else fill, contentColor = content),
     elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (showNotice) 3.dp else 1.dp)) {
     Surface(onClick = { onOpen(id) }, enabled = hasIdentity, color = fill, contentColor = content,
-      modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Edit $name" },
+      // Draw above the footer, or its opaque background hides this panel's
+      // shadow along the straight edge and leaves it only at the corners.
+      modifier = Modifier.fillMaxWidth().zIndex(1f).semantics { contentDescription = "Edit $name" },
       shape = MaterialTheme.shapes.extraLarge, shadowElevation = if (showNotice) 2.dp else 0.dp
     ) {
       Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
