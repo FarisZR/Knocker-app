@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Knocker Play Store screenshots</title>
+<style>
+@font-face { font-family: Inter; src: url(fonts/Inter.ttf); font-weight: 100 900; }
+@font-face { font-family: Mono; src: url(fonts/JetBrainsMono.ttf); font-weight: 100 800; }
+
+:root {
+  --yl: #FDE562;
+  --ink: #F4F1E8;
+  --mut: #8E8873;
+  --bg: #0D0C09;
+  --grn: #8FD6AA;
+  --red: #EE8D7A;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #000; }
+
+/* One layout for every shot: headline, a short monospace block, the app. */
+.shot {
+  position: relative; width: 1080px; height: 1920px; overflow: hidden;
+  background: radial-gradient(900px 700px at 50% 74%, rgba(253,229,98,.09), transparent 70%), var(--bg);
+  color: var(--ink);
+}
+h1 {
+  position: absolute; left: 80px; top: 112px;
+  font: 700 98px/1.02 Inter; letter-spacing: -.042em;
+}
+h1 em { font-style: normal; color: var(--yl); }
+#s2 h1 { font-size: 92px; }
+pre {
+  position: absolute; left: 80px;
+  font: 400 31px/1.58 Mono; color: var(--mut);
+}
+pre b { font-weight: 500; color: var(--ink); }
+pre .y { color: var(--yl); }
+pre .g { color: var(--grn); }
+pre .r { color: var(--red); }
+
+/* Upright device around an unaltered emulator capture (1080 x 2400). */
+.phone {
+  position: absolute; left: calc((1080px - var(--w)) / 2 - 13px); padding: 13px;
+  background: #060605; border-radius: calc(var(--w) * .1 + 13px);
+  box-shadow: 0 0 0 2px #2b2719, 0 50px 120px rgba(0,0,0,.7);
+}
+.screen {
+  position: relative; width: var(--w); height: calc(var(--w) * 2400 / 1080);
+  border-radius: calc(var(--w) * .1); overflow: hidden;
+  background: var(--img) 0 0 / var(--w) auto no-repeat;
+}
+.screen::before {
+  content: ""; position: absolute; left: 50%; top: calc(var(--w) * .03);
+  width: calc(var(--w) * .04); height: calc(var(--w) * .04); margin-left: calc(var(--w) * -.02);
+  border-radius: 50%; background: #020202;
+}
+.note { position: absolute; font: 500 30px/1 Mono; color: var(--yl); white-space: pre; }
+.card {
+  position: absolute; border-radius: 30px; overflow: hidden;
+  box-shadow: 0 0 0 2px #3a3525, 0 40px 100px rgba(0,0,0,.85);
+}
+.crop {
+  width: calc(var(--cw) * var(--s) * 1px); height: calc(var(--ch) * var(--s) * 1px);
+  background: var(--img) calc(var(--cx) * var(--s) * -1px) calc(var(--cy) * var(--s) * -1px) / calc(1080px * var(--s)) auto no-repeat;
+}
+</style>
+</head>
+<body>
+
+<!-- 1. What Knocker is, and the three steps of a knock -->
+<section class="shot" id="s1">
+  <h1>Your homelab,<br>locked until<br><em>you knock.</em></h1>
+<pre style="top:468px">
+<b>01  knock  </b>   the app calls your Knocker server
+<b>02  allowed</b>   your IP gets in, nobody else's
+<b>03  expires</b>   access ends by itself</pre>
+  <div class="phone" style="--w:520px;top:688px"><div class="screen" style="--img:url(source/home.png)"></div></div>
+</section>
+
+<!-- 2. Auto-renew: recovering access after a network change -->
+<section class="shot" id="s2">
+  <h1>New network?<br><em>Knocker knocks again.</em></h1>
+<pre style="top:366px">
+<b>wifi   203.0.113.42</b>   <span class="g">✓ allowed</span>
+  │    you leave the house
+<b>5g     198.51.100.7</b>   <span class="r">✗ new IP, locked out</span>
+  │    <span class="y">auto-renew knocks again, no taps</span>
+<b>5g     198.51.100.7</b>   <span class="g">✓ allowed</span>
+<b>also</b>   renews just before a knock expires</pre>
+  <div class="phone" style="--w:700px;top:748px"><div class="screen" style="--img:url(source/renew.png)"></div></div>
+</section>
+
+<!-- 3. Quick Settings tile and the result notification -->
+<section class="shot" id="s3">
+  <h1>Knock without<br><em>opening the app.</em></h1>
+<pre style="top:366px">
+<b>tile  </b>   one per server, in Quick Settings
+<b>tap   </b>   knocks in the background
+<b>notice</b>   tells you when you're in</pre>
+  <div class="phone" style="--w:700px;top:600px"><div class="screen" style="--img:url(source/tile.png)">
+    <div class="note" style="left:368px;top:707px">◀── one tap</div>
+  </div></div>
+  <div class="card" style="left:72px;top:1500px"><div class="crop" style="--img:url(source/notification.png);--cx:42;--cy:1122;--cw:996;--ch:304;--s:.94"></div></div>
+</section>
+
+</body>
+</html>

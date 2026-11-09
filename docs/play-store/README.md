@@ -1,28 +1,26 @@
 # Google Play phone screenshots
 
-The four 1080 × 1920 PNGs in `screenshots/` are ordered for the listing. They use dark-mode captures from the Pixel 7 Android 16 emulator and a simplified Pixel 7 front frame. The example profile used a temporary demo server and the documentation address `203.0.113.42`; the server and key were disposable. The notification capture was produced by a Quick Settings knock against that server. Background renewals use the same notification presentation.
+The three 1080 × 1920 PNGs in `screenshots/` are ordered for the listing and written for someone who has never heard of Knocker:
+
+1. `01-what-it-is.png`: the pitch and the three steps of a knock, over the home screen.
+2. `02-auto-renew.png`: how auto-renew recovers access after a network change (new network, new IP, Knocker knocks again), over the profile editor with the Auto-renew switch on.
+3. `03-quick-settings.png`: knocking from the Quick Settings tile, with the result notification.
 
 ## Artwork
 
-Each image is composed in `render.py` from the matching emulator capture in `source/`:
+Everything is laid out in `shots.html`, one `<section class="shot">` per image, and screenshotted by `render.py` with headless Chromium. Every shot uses the same three parts and nothing else:
 
-- Warm near-black gradient backdrop with a soft Knocker-yellow glow, a faint secondary green glow (echoing the active-grant state), and concentric "knock ripple" rings fading outward from the device: the project's knock-knock motif.
-- Headlines are set in Nimbus Sans Bold with one Knocker-yellow phrase per shot, followed by a one-sentence explainer in muted prose. Shots 1 and 2 lead with the yellow phrase, shots 3 and 4 close with it.
-- No brand block is drawn: the app's own top bar already carries the Knocker wordmark in the home capture.
-- Shots 1 and 3 show the app itself, so the entire device is framed and nothing is cropped. The device is tilted a few degrees, alternating direction between shots.
-- Shots 2 and 4 show the system shade, where the bottom of the capture does not matter: the screen content is zoomed in about 1.3 to 1.4 times and the frame may bleed off the bottom edge.
-- Shots 2, 3 and 4 add an enlarged callout card with a yellow keyline and a caption chip over a gently dimmed, blurred screen. The crop inside the card is an unaltered enlargement from the same capture. The card tilts in the same direction as the phone and hovers where the highlighted element actually sits: on the left for the Quick Settings tile, centered for the Auto-renew row and the notification. Shot 3's caption marks the toggle the editor actually shows ("Auto-renew", with its explanatory subtitle, switched on in the capture).
-- A subtle vignette and film grain keep the dark gradient from banding.
+- A headline in Inter Bold with one Knocker-yellow phrase.
+- A short monospace block (JetBrains Mono) that explains the feature in a few aligned lines.
+- An upright device frame around an unaltered Pixel 7 Android 16 emulator capture from `source/` (dark mode, yellow Material You palette). Shot 3 adds one unaltered crop of the notification capture and a "one tap" pointer.
+
+Both fonts are vendored in `fonts/` under the SIL OFL 1.1. Addresses come from the documentation ranges (`203.0.113.42`, `198.51.100.7`). The capture profile used a temporary demo server, so its hostname is not a production endpoint.
 
 ## Regenerating
 
-On Linux, install the dependencies and run from the repository root:
-
 ```sh
-python3 -m pip install pillow
-python3 docs/play-store/render.py
+uv run --with playwright python -m playwright install chromium   # first time only
+uv run --with playwright python docs/play-store/render.py
 ```
 
-Requirements: Pillow and the URW Base 35 fonts (Nimbus Sans Regular + Bold, e.g. Debian's `fonts-urw-base35` package).
-
-Android's yellow Material You palette was selected on the emulator for the captures. The source capture includes the temporary demo hostname; it is not a production endpoint.
+Open `shots.html` in a browser to iterate on layout before rendering.
