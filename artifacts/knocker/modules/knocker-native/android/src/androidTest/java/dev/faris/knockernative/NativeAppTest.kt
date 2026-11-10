@@ -95,6 +95,27 @@ class NativeAppTest {
     }
   }
 
+  @Test fun settingsOffersTheCrashReportChoiceAndAboutLinks() {
+    val state = mutableStateOf(loaded())
+    val actions = mutableListOf<Pair<String, Map<String, Any?>>>()
+    compose.setContent { KnockerTheme { NativeApp(state.value, { type, payload -> actions += type to payload }, {}) } }
+    compose.onNodeWithContentDescription("Settings").performClick()
+    // Reporting is opt-out: it starts on, and the switch follows the bridge snapshot, not a local guess.
+    compose.onNodeWithText("Crash reports").performScrollTo().assertIsOn().performClick()
+    compose.runOnIdle { assertEquals(listOf("setDiagnostics" to mapOf<String, Any?>("enabled" to false)), actions.filter { it.first == "setDiagnostics" }) }
+    compose.onNodeWithText("Crash reports").assertIsOn()
+    compose.runOnIdle { state.value = NativeUiState(JSONObject(state.value.json.toString()).put("diagnosticsEnabled", false)) }
+    compose.onNodeWithText("Crash reports").assertIsOff().performClick()
+    compose.runOnIdle { assertEquals("setDiagnostics" to mapOf<String, Any?>("enabled" to true), actions.last { it.first == "setDiagnostics" }) }
+
+    compose.onNodeWithText("Author").performScrollTo().assertExists()
+    compose.onNodeWithText(AUTHOR).assertExists()
+    compose.onNodeWithText("Source code").assertExists()
+    compose.onNodeWithText(displayUrl(SOURCE_CODE_URL)).assertExists()
+    compose.onNodeWithText("Privacy policy").assertExists().assertHasClickAction()
+    compose.onNodeWithText(displayUrl(PRIVACY_POLICY_URL)).assertExists()
+  }
+
   @Test fun hydrationUpdatesAnExistingNavigationEntryAndEditorHasOneTitle() {
     val state = mutableStateOf(NativeUiState())
     compose.setContent { KnockerTheme { NativeApp(state.value, { _, _ -> }, {}) } }

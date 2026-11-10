@@ -53,6 +53,10 @@ class KnockerNativeModule : Module() {
 
     AsyncFunction("getNetworkIdentity") { KnockerNetwork.snapshot(context).toMap() }
 
+    // Synchronous on purpose: JavaScript reads it before deciding whether Sentry may start at all.
+    Function("isDiagnosticsEnabled") { diagnosticsEnabled(context) }
+    AsyncFunction("setDiagnosticsEnabled") { enabled: Boolean -> setDiagnosticsEnabled(context, enabled) }
+
     AsyncFunction("syncProfiles") { profilesJson: String ->
       val previous = KnockerStore.readProfiles(context).associateBy { it.id }
       KnockerStore.replaceProfiles(context, profilesJson)

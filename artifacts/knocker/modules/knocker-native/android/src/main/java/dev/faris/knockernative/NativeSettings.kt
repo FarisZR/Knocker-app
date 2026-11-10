@@ -10,6 +10,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -27,10 +29,21 @@ import kotlinx.coroutines.launch
 
 /** Settings is a full destination with standard list rows, not a dialog over home. */
 @Composable
-internal fun NativeSettings(snackbar: SnackbarHostState, onBack: () -> Unit, onRefreshStatus: () -> Unit, feedback: (String) -> Unit) {
+internal fun NativeSettings(snackbar: SnackbarHostState, onBack: () -> Unit, onRefreshStatus: () -> Unit,
+  diagnosticsEnabled: Boolean, onDiagnosticsChange: (Boolean) -> Unit, feedback: (String) -> Unit) {
   val appearance = LocalAppearance.current
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
+  val uriHandler = LocalUriHandler.current
+  /** Links open in the system browser; a device without one gets a message instead of a crash. */
+  fun openLink(url: String) {
+    runCatching { uriHandler.openUri(url) }.onFailure {
+      scope.launch {
+        snackbar.currentSnackbarData?.dismiss()
+        snackbar.showSnackbar("No browser available to open this link", duration = SnackbarDuration.Short)
+      }
+    }
+  }
   val version = remember(context) {
     runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
   }
@@ -61,8 +74,21 @@ internal fun NativeSettings(snackbar: SnackbarHostState, onBack: () -> Unit, onR
               snackbar.showSnackbar("Checking your servers", duration = SnackbarDuration.Short)
             }
           })
+        SettingsSection("Privacy")
+        SettingsRow(Icons.Default.BugReport, "Crash reports",
+          "Share crash and error reports with the developer through Sentry. Turning this off stops reporting now; turning it on applies after you restart Knocker.",
+          Modifier.toggleable(value = diagnosticsEnabled, role = Role.Switch,
+            onValueChange = { onDiagnosticsChange(it) })
+        ) { Switch(checked = diagnosticsEnabled, onCheckedChange = null, colors = knockerSwitchColors()) }
         SettingsSection("About")
         SettingsRow(Icons.Default.Info, "Version", version ?: "Unknown")
+        SettingsRow(Icons.Default.Person, "Author", AUTHOR)
+        SettingsRow(Icons.Default.Code, "Source code", displayUrl(SOURCE_CODE_URL),
+          Modifier.clickable(onClickLabel = "Open source code in browser", role = Role.Button) { openLink(SOURCE_CODE_URL) }
+        ) { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) }
+        SettingsRow(Icons.Default.PrivacyTip, "Privacy policy", displayUrl(PRIVACY_POLICY_URL),
+          Modifier.clickable(onClickLabel = "Open privacy policy in browser", role = Role.Button) { openLink(PRIVACY_POLICY_URL) }
+        ) { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) }
       }
     }
   }

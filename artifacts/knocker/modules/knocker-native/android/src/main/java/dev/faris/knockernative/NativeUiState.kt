@@ -26,6 +26,8 @@ internal data class NativeUiState(val json: JSONObject = JSONObject()) {
   val network = json.optJSONObject("network") ?: JSONObject()
   val feedback = json.optJSONObject("feedback")
   val operation = json.optJSONObject("operation")
+  /** Crash reporting is opt-out, so a snapshot that omits the field keeps it on. */
+  val diagnosticsEnabled = json.optBoolean("diagnosticsEnabled", true)
   val requestedProfile = json.textOrNull("requestedProfile")
   val fatal = json.textOrNull("fatal")
 

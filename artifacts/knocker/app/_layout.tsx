@@ -1,4 +1,4 @@
-import { startLaunchKnocks } from "knocker-native";
+import { isDiagnosticsEnabled, startLaunchKnocks } from "knocker-native";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -23,21 +23,28 @@ import { ProfilesProvider } from "@/context/ProfilesContext";
 import { NetworkProvider } from "@/context/NetworkContext";
 import { useColors } from "@/hooks/useColors";
 
-Sentry.init({
-  dsn: "https://e7a4df6605d189adfbee103c2dcba868@o4511192693014528.ingest.de.sentry.io/4511882460069969",
+// Crash reporting honors the in-app choice before anything starts. The native
+// SDK does not auto-initialize (io.sentry.auto-init is false), so skipping init
+// means no Sentry code runs and nothing is sent. Settings changes persist the
+// choice; turning reporting on applies on the next launch.
+if (isDiagnosticsEnabled()) {
+  Sentry.init({
+    dsn: "https://e7a4df6605d189adfbee103c2dcba868@o4511192693014528.ingest.de.sentry.io/4511882460069969",
 
-  // Keep request and user context opt-in because the app handles profile data.
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  sendDefaultPii: false,
-  environment: process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT || (__DEV__ ? "development" : "production"),
+    // Keep request and user context opt-in because the app handles profile data.
+    // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+    sendDefaultPii: false,
+    environment: process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT || (__DEV__ ? "development" : "production"),
 
-  // Keep log collection disabled because console output may contain user data.
-  enableLogs: false,
-  integrations: [Sentry.expoRouterIntegration(), Sentry.feedbackIntegration()],
+    // Keep log collection disabled because console output may contain user data.
+    enableLogs: false,
+    // No user feedback widget: the app has no UI that collects free-text reports.
+    integrations: [Sentry.expoRouterIntegration()],
 
-  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
-  // spotlight: __DEV__,
-});
+    // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+    // spotlight: __DEV__,
+  });
+}
 
 // Navigation uses useRouter() within mounted screens. SDK 58 resets its global
 // imperative router during activity recreation, so do not wrap that singleton.

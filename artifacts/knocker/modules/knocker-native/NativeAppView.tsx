@@ -7,6 +7,7 @@ export interface NativeAction {
   id?: string;
   token?: string;
   profileJson?: string;
+  enabled?: boolean;
 }
 
 /** A single native surface owns every Android screen and interaction. */

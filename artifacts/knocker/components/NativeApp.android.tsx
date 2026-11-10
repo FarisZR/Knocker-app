@@ -3,6 +3,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useProfiles } from "@/context/ProfilesContext";
 import { useNetworkStatus } from "@/context/NetworkContext";
 import { compareGrantAddress } from "@/lib/addresses";
+import { applyDiagnosticsChoice } from "@/lib/diagnostics";
+import { isDiagnosticsEnabled } from "knocker-native";
 import { newProfile, type Profile } from "@/lib/profiles";
 import {
   NativeAppView,
@@ -15,6 +17,8 @@ export function NativeApp() {
   const network = useNetworkStatus();
   const router = useRouter();
   const { profile } = useLocalSearchParams<{ profile?: string }>();
+  const [diagnosticsEnabled, setDiagnosticsEnabledState] =
+    useState(isDiagnosticsEnabled);
   const [operation, setOperation] = useState<{
     token?: string;
     ok: boolean;
@@ -40,6 +44,7 @@ export function NativeApp() {
       };
     }),
     pending: [...store.pendingKnocks],
+    diagnosticsEnabled,
     requestedProfile: profile ?? null,
     network: {
       connection: network.connection,
@@ -86,6 +91,12 @@ export function NativeApp() {
           break;
         case "refreshStatus":
           network.refresh();
+          break;
+        case "setDiagnostics":
+          // Show the new value only once it is saved, so the switch never
+          // claims a choice that would not survive a restart.
+          await applyDiagnosticsChoice(action.enabled === true);
+          setDiagnosticsEnabledState(action.enabled === true);
           break;
         case "dismiss":
           store.dismissSnackbar();

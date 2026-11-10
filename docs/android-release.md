@@ -25,6 +25,12 @@ Version names come from `v1.0.0`/`v1.0.0-beta.1` release tags, the manual versio
 
 Signed builds fail if signing or Sentry upload credentials are missing, or source-map uploads fail. Sentry's public DSN is already configured in the app; `sendDefaultPii` and log collection remain disabled. The auth token is only a build credential, never an app runtime variable. CI builds use Sentry environment `ci`, published releases and dispatch submissions use `production`.
 
+## Privacy policy and crash reports
+
+The public privacy policy lives in [`remal-net/terms.remal.org`](https://github.com/remal-net/terms.remal.org) (`content/knocker/privacy-policy.md`) and is served at **https://terms.remal.org/knocker/privacy-policy/**. Use that URL for the Play listing; the app links to the same address under **Settings → About** (`PRIVACY_POLICY_URL` in `AboutInfo.kt`). Change the policy and the app together: it states what Sentry receives, the 30-day retention of the current Sentry plan, and that the app opts out of Android backup.
+
+**Settings → Crash reports** turns Sentry off. Reporting is on by default. `Sentry.init` runs only when the stored choice allows it (`isDiagnosticsEnabled()` in `app/_layout.tsx`); the native SDK has `io.sentry.auto-init=false`, so no Sentry code starts otherwise. Turning it off also calls `Sentry.close()`; turning it on applies after a restart. Server-side, keep **Prevent Storing of IP Addresses** and data scrubbing enabled for the organization, since the policy says they are.
+
 ## First Play upload (one time)
 
 1. Create/finish the Play Console app for `com.fariszr.knocker`; enable Play App Signing using this upload certificate. Download the signed AAB artifact from a successful Actions run and perform the **first upload manually**. Google requires this before API submissions. See [Expo's first-upload guide](https://docs.expo.dev/submit/android-manual/).
