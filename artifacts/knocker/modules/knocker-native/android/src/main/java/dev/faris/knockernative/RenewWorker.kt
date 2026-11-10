@@ -19,6 +19,20 @@ class RenewWorker(
     val profile = KnockerStore.findProfileById(applicationContext, profileId) ?: return Result.failure()
 
     if (!profile.autoRenew) return Result.success()
+    // This alarm may be timed from a grant on another network. When /status shows
+    // this network is covered for longer, move the alarm instead of knocking.
+    if (profile.ipOverride.isNullOrBlank()) {
+      val captured = KnockerNetwork.capture(applicationContext)
+      val networkId = captured.identity.id
+      val status = if (networkId == null) null else checkConnectionStatus(profile, captured)
+      val renewAt = status?.expiresAt?.minus(profile.autoRenewSafetyWindowSec.toLong() * 1000L)
+      if (networkId != null && status?.whitelisted == true && renewAt != null &&
+        renewAt > System.currentTimeMillis() + 60_000L && KnockerNetwork.snapshot(applicationContext).id == networkId) {
+        RenewalTiming.recordCoverage(applicationContext, profile, networkId, status.expiresAt)
+        KnockerRenewScheduler.schedule(applicationContext, profile.id, renewAt)
+        return Result.success()
+      }
+    }
     val result = runCatching { KnockerRequests.knock(applicationContext, profile).get() }.getOrNull()
     val current = KnockerStore.findProfileById(applicationContext, profileId) ?: profile
     if (result?.ok == true) {

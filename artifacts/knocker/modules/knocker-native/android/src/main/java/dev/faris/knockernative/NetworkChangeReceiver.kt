@@ -20,7 +20,7 @@ class NetworkChangeReceiver : BroadcastReceiver() {
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
           NetworkChangeMonitor.update(context)
           KnockerStore.readProfiles(context).forEach { profile ->
-            profile.renewalAtMillis()?.let { KnockerRenewScheduler.schedule(context, profile.id, it) }
+            RenewalTiming.renewalAt(context, profile)?.let { KnockerRenewScheduler.schedule(context, profile.id, it) }
           }
         }
       } finally { pending.finish() }

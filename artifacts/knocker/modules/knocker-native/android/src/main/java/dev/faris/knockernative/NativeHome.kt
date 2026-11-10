@@ -34,7 +34,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /** A foreground-only clock updates grant rings without gating first render or HTTP. */
@@ -60,10 +62,16 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
   val density = LocalDensity.current
   val clearance = with(density) { actionsHeight.toDp() } + 24.dp
   val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-  // A status check has no completion signal on this surface, so the indicator
-  // acknowledges the pull briefly while cards update as results arrive.
+  // A pull stays visible until its /status requests finish, bounded by their own timeout.
   var refreshing by remember { mutableStateOf(false) }
-  LaunchedEffect(refreshing) { if (refreshing) { delay(900); refreshing = false } }
+  val checking by rememberUpdatedState(state.network.optBoolean("checking"))
+  LaunchedEffect(refreshing) {
+    if (!refreshing) return@LaunchedEffect
+    // The request starts after a local network sample, so give it a moment to begin.
+    delay(400)
+    withTimeoutOrNull(6000) { snapshotFlow { checking }.first { !it } }
+    refreshing = false
+  }
   Scaffold(
     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
     topBar = { TopAppBar(title = { KnockerWordmark() }, expandedHeight = 88.dp, scrollBehavior = scrollBehavior, actions = {
@@ -231,7 +239,9 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
         }
         if (failed && !pending) Text(profile.textOrNull("lastError") ?: "Failed", color = if (active) content else colors.error, maxLines = 3, overflow = TextOverflow.Ellipsis,
           style = MaterialTheme.typography.bodySmall)
-        profile.textOrNull("whitelistedEntry")?.let { entry ->
+        // While /status confirms coverage, show the address it reports for this network.
+        val shownIp = (if (covered) observation?.textOrNull("ipAddress") else null) ?: profile.textOrNull("whitelistedEntry")
+        shownIp?.let { entry ->
           Text("IP · $entry",
             color = content, style = MaterialTheme.typography.bodyMedium)
         }
@@ -246,19 +256,21 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
         fadeOut(animationSpec = MaterialTheme.motionScheme.fastEffectsSpec())) {
       Surface(color = noticeColor, contentColor = noticeContent,
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Connection notice for $name" }) {
+        // One line: the current address sits under the card's IP line, the reason follows.
+        val currentIp = observation?.textOrNull("ipAddress")
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-          horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-          Icon(Icons.Default.WarningAmber, null, Modifier.size(20.dp))
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+          if (currentIp != null) Text("IP · $currentIp", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+          Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp, if (currentIp != null) Alignment.End else Alignment.Start)) {
+            Icon(Icons.Default.WarningAmber, null, Modifier.size(18.dp))
             Text(when {
               connection?.optBoolean("isConnected") == false -> "Offline"
               ipChanged -> "IP changed · not whitelisted"
-              observation != null -> "Current IP is not whitelisted"
+              observation != null -> "Not whitelisted"
               else -> "Network changed · status unverified"
-            }, style = MaterialTheme.typography.bodyMedium)
-            observation?.textOrNull("ipAddress")?.let { ip ->
-              Text("Current IP · $ip", style = MaterialTheme.typography.bodySmall)
-            }
+            }, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium,
+              maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         }
       }

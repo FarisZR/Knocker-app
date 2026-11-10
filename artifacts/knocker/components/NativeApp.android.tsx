@@ -43,6 +43,7 @@ export function NativeApp() {
     requestedProfile: profile ?? null,
     network: {
       connection: network.connection,
+      checking: network.checking,
     },
     feedback: store.snackbar
       ? { ...store.snackbar, retry: !!store.snackbar.retry }

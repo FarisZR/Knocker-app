@@ -13,6 +13,7 @@ object KnockerRenewScheduler {
   private const val EXTRA_PROFILE_ID = "profileId"
   private const val EXTRA_TOKEN = "renewalToken"
   private const val TOKEN_PREFIX = "renewalToken."
+  private const val FIRE_AT_PREFIX = "renewalAt."
   private const val SCHEDULED_IDS_KEY = "scheduledProfileIds"
   private const val REQUEST_CODE_RENEWAL = 0
   private const val REQUEST_CODE_FALLBACK = 1
@@ -48,8 +49,13 @@ object KnockerRenewScheduler {
       }
 
       trackScheduledProfileId(context, profileId, token)
+      prefs(context).edit().putLong(FIRE_AT_PREFIX + profileId, triggerAtMillis).apply()
     }
   }
+
+  /** The pending trigger time, for diagnostics and tests. */
+  internal fun scheduledAt(context: Context, profileId: String): Long? =
+    if (profileId in trackedScheduledProfileIds(context)) prefs(context).getLong(FIRE_AT_PREFIX + profileId, 0L).takeIf { it > 0L } else null
 
   /** Cancels both delivery paths and removes the pending generation. */
   fun cancel(context: Context, profileId: String) {
@@ -92,7 +98,7 @@ object KnockerRenewScheduler {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !alarms.canScheduleExactAlarms()) return
     synchronized(scheduleLock) {
       for (profileId in trackedScheduledProfileIds(context)) {
-        val fireAt = KnockerStore.findProfileById(context, profileId)?.renewalAtMillis()
+        val fireAt = KnockerStore.findProfileById(context, profileId)?.let { RenewalTiming.renewalAt(context, it) }
         if (fireAt == null) cancel(context, profileId) else schedule(context, profileId, fireAt)
       }
     }
@@ -131,7 +137,7 @@ object KnockerRenewScheduler {
       val updated = trackedScheduledProfileIds(context).toMutableSet()
       if (updated.remove(profileId)) {
         prefs(context).edit().putStringSet(SCHEDULED_IDS_KEY, updated)
-          .remove(TOKEN_PREFIX + profileId).apply()
+          .remove(TOKEN_PREFIX + profileId).remove(FIRE_AT_PREFIX + profileId).apply()
       }
     }
   }

@@ -259,7 +259,7 @@ class NativeAppTest {
         .put("ipAddress", "198.51.100.7").put("whitelisted", false))
     compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
     compose.onNodeWithText("IP · 203.0.113.42").assertExists()
-    compose.onNodeWithText("Current IP · 198.51.100.7").assertExists()
+    compose.onNodeWithText("IP · 198.51.100.7").assertExists()
     compose.onNodeWithText("IP changed · not whitelisted").assertExists()
   }
 

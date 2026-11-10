@@ -21,6 +21,8 @@ import { useProfiles } from "./ProfilesContext";
 interface NetworkStatus {
   connection: NativeNetworkIdentity | null;
   statuses: Record<string, ServerStatus | null>;
+  /** True while a status request is in flight, so a pull can wait for real results. */
+  checking: boolean;
   refresh: () => void;
 }
 const NetworkContext = createContext<NetworkStatus | null>(null);
@@ -34,7 +36,12 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [statuses, setStatuses] = useState<Record<string, ServerStatus | null>>(
     {},
   );
-  const statusRetries = useRef(new RecoveryBudget());
+  // A check made while a new network is still coming up often fails. Retry it
+  // shortly on every platform instead of leaving the last knock on screen.
+  const statusRetries = useRef(new RecoveryBudget(4, 3000));
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const forcing = useRef(0);
+  const [checking, setChecking] = useState(false);
   const automaticKnocks = useRef(new RecoveryBudget());
   const generation = useRef(0);
   const sampling = useRef(0);
@@ -53,6 +60,17 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refresh = useCallback(async (force = true) => {
+    // Background sampling must not cancel a check the user asked for.
+    if (!force && forcing.current > 0) return;
+    if (force) forcing.current++;
+    try {
+      await sampleAndCheck(force);
+    } finally {
+      if (force) forcing.current--;
+    }
+  }, []);
+
+  const sampleAndCheck = useCallback(async (force: boolean) => {
     const sample = ++sampling.current;
     const local = await currentNetworkIdentity();
     if (sample !== sampling.current || AppState.currentState !== "active")
@@ -67,17 +85,21 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
         !p.ipOverride &&
         (force ||
           changed ||
-          (!isNativeAvailable &&
-            p.autoRenew &&
-            statusRetries.current.ready(keyFor(p)))),
+          statusRetries.current.ready(keyFor(p))),
     );
     if (!targetsToCheck.length && !force && !changed) return;
     const version = ++generation.current;
     controller.current?.abort();
     if (force || changed) setStatuses({});
-    if (!local?.isConnected || !targetsToCheck.length) return;
+    if (!local?.isConnected || !targetsToCheck.length) {
+      setChecking(false);
+      return;
+    }
     const pending = new AbortController();
     controller.current = pending;
+    clearTimeout(retryTimer.current);
+    setChecking(true);
+    let failed = false;
     const timer = setTimeout(() => pending.abort(), 4000);
     try {
       await Promise.all(
@@ -95,8 +117,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
           )
             return;
           const key = keyFor(current);
-          if (status === null && current.autoRenew && !isNativeAvailable)
-            statusRetries.current.claim(key);
+          if (status === null) failed = statusRetries.current.claim(key) || failed;
           else statusRetries.current.forget(key);
           setStatuses((previous) => ({ ...previous, [profile.id]: status }));
           // Android handles automatic recovery natively, including when JS is suspended.
@@ -112,6 +133,11 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       );
     } finally {
       clearTimeout(timer);
+      if (version === generation.current) {
+        setChecking(false);
+        if (failed)
+          retryTimer.current = setTimeout(() => void refresh(false), 3500);
+      }
     }
   }, []);
 
@@ -157,6 +183,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       controller.current?.abort();
       clearTimeout(debounce);
       clearInterval(timer);
+      clearTimeout(retryTimer.current);
       network.remove();
       app.remove();
     };
@@ -167,6 +194,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       value={{
         connection,
         statuses,
+        checking,
         refresh: () => {
           void refresh();
         },
