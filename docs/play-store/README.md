@@ -12,7 +12,9 @@ Everything is laid out in `shots.html`, one `<section class="shot">` per image, 
 
 - A headline in Inter Bold with one Knocker-yellow phrase.
 - A short monospace block (JetBrains Mono) that explains the feature in a few aligned lines.
-- An upright device frame around an unaltered Pixel 7 Android 16 emulator capture from `source/` (dark mode, yellow Material You palette). Shot 3 adds one unaltered crop of the notification capture and a "one tap" pointer.
+- An upright device frame around an unaltered Pixel 7 Android 16 emulator capture from `source/` (dark mode, Knocker's yellow brand palette). Shot 3 adds one unaltered crop of the notification capture and a "one tap" pointer.
+
+`home.png` and `renew.png` show the native Compose design (top-bar New profile action, list-row editor with the floating Save action). `tile.png` and `notification.png` are system UI and did not change with that redesign. Recapture `home.png` and `renew.png` whenever the home screen or profile editor changes.
 
 Both fonts are vendored in `fonts/` under the SIL OFL 1.1. Addresses come from the documentation ranges (`203.0.113.42`, `198.51.100.7`). The capture profile used a temporary demo server, so its hostname is not a production endpoint.
 

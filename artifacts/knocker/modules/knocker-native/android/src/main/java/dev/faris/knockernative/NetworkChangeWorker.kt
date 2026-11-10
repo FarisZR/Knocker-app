@@ -35,7 +35,17 @@ class NetworkChangeWorker(context: Context, params: WorkerParameters) : Worker(c
         val result = runCatching { KnockerRequests.knock(applicationContext, current, captured).get() }.getOrNull()
         if (result?.ok != true) { retry = true; continue }
       }
-      prefs.edit().putString(key, observation).putLong("$key.expires", status.expiresAt ?: 0L).apply()
+      RenewalTiming.recordCoverage(applicationContext, current, networkId, status.expiresAt)
+    }
+    // Time each renewal from the grant that covers this network, which is not
+    // necessarily the last knock when another network was knocked since.
+    if (KnockerNetwork.snapshot(applicationContext).id == networkId) {
+      for (profile in KnockerStore.readProfiles(applicationContext)) {
+        if (!profile.autoRenew || !profile.ipOverride.isNullOrBlank()) continue
+        RenewalTiming.renewalAt(applicationContext, profile, networkId)?.let {
+          KnockerRenewScheduler.schedule(applicationContext, profile.id, it)
+        }
+      }
     }
     NetworkChangeMonitor.update(applicationContext, enqueueInitial = false)
     KnockerTileService.refreshAll(applicationContext)

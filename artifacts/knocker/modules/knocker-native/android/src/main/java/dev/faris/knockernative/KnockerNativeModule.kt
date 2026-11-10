@@ -70,7 +70,8 @@ class KnockerNativeModule : Module() {
     }
 
     AsyncFunction("scheduleRenewal") { profileId: String, fireAtMs: Double ->
-      KnockerRenewScheduler.schedule(context, profileId, fireAtMs.toLong())
+      val stored = KnockerStore.findProfileById(context, profileId)
+      KnockerRenewScheduler.schedule(context, profileId, stored?.let { RenewalTiming.renewalAt(context, it) } ?: fireAtMs.toLong())
     }
 
     AsyncFunction("cancelRenewal") { profileId: String ->

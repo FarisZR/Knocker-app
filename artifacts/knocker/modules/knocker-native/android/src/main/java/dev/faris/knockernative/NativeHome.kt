@@ -5,6 +5,7 @@ package dev.faris.knockernative
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.*
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,6 +14,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,13 +26,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /** A foreground-only clock updates grant rings without gating first render or HTTP. */
@@ -47,16 +54,29 @@ private fun grantClock(): Long {
 /** The native scaffold measures its action stack and places standard feedback above it. */
 @Composable
 internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpen: (String) -> Unit,
-  onNew: () -> Unit, onKnock: (String) -> Unit, onKnockAll: () -> Unit, onPreferences: () -> Unit) {
+  onNew: () -> Unit, onKnock: (String) -> Unit, onKnockAll: () -> Unit, onPreferences: () -> Unit, onRefresh: () -> Unit) {
   val now = grantClock()
   val colors = MaterialTheme.colorScheme
   val actionColors = knockerActionColors()
   var actionsHeight by remember { mutableIntStateOf(0) }
   val density = LocalDensity.current
   val clearance = with(density) { actionsHeight.toDp() } + 24.dp
+  val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+  // A pull stays visible until its /status requests finish, bounded by their own timeout.
+  var refreshing by remember { mutableStateOf(false) }
+  val checking by rememberUpdatedState(state.network.optBoolean("checking"))
+  LaunchedEffect(refreshing) {
+    if (!refreshing) return@LaunchedEffect
+    // The request starts after a local network sample, so give it a moment to begin.
+    delay(400)
+    withTimeoutOrNull(6000) { snapshotFlow { checking }.first { !it } }
+    refreshing = false
+  }
   Scaffold(
-    modifier = Modifier.fillMaxSize(),
-    topBar = { TopAppBar(title = { KnockerWordmark() }, expandedHeight = 88.dp, actions = {
+    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = { TopAppBar(title = { KnockerWordmark() }, expandedHeight = 88.dp, scrollBehavior = scrollBehavior, actions = {
+      // An empty home offers the same action as its only floating button instead.
+      if (state.loaded && state.profiles.isNotEmpty()) IconButton(onClick = onNew) { Icon(Icons.Default.Add, "New profile") }
       IconButton(onClick = onPreferences) { Icon(Icons.Default.Settings, "Settings") }
     }) },
     snackbarHost = { SnackbarHost(snackbar) },
@@ -67,9 +87,6 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
         horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
         if (state.profiles.isNotEmpty()) {
-          FilledTonalButton(onClick = onNew, shapes = ButtonDefaults.shapes()) {
-            Icon(Icons.Default.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("New profile")
-          }
           state.profiles.filter { it.optBoolean("pinnedToHome") }.forEach { profile ->
             val id = profile.optString("id"); val pending = id in state.pending
             FilledTonalButton(onClick = { onKnock(id) }, enabled = !pending, shapes = ButtonDefaults.shapes(),
@@ -99,7 +116,8 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
       }
     }
   ) { padding ->
-    Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+    PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refreshing = true; onRefresh() },
+      modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
       LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = clearance),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -108,8 +126,17 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
           LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading profiles" })
         }
         itemsIndexed(state.profiles, key = { index, _ -> state.profileRenderKeys[index] }) { _, profile ->
-          NativeProfileCard(profile, state, now, onOpen, onKnock)
+          Box(Modifier.animateItem()) { NativeProfileCard(profile, state, now, onOpen, onKnock) }
         }
+      }
+      if (state.loaded && state.profiles.isEmpty()) Column(
+        Modifier.align(Alignment.Center).widthIn(max = 360.dp).padding(horizontal = 32.dp).padding(bottom = clearance),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        Icon(Icons.Default.Dns, null, Modifier.size(48.dp), tint = colors.onSurfaceVariant)
+        Text("No servers yet", style = MaterialTheme.typography.titleLarge)
+        Text("Add a profile for your Knocker server to whitelist this device.", color = colors.onSurfaceVariant,
+          style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
       }
     }
   }
@@ -127,8 +154,12 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val pending = id in state.pending
   val observation = profile.optJSONObject("connectionStatus")
   val covered = observation?.optBoolean("whitelisted") == true && observation.optLong("expiresAt") > now
-  val expiry = if (observation?.optBoolean("whitelisted") == true) observation.optLong("expiresAt") else profile.optLong("expiresAt")
-  val start = profile.optLong("whitelistedAt")
+  // An observation taken before the latest grant still describes the previous
+  // one. Mixing its expiry with the new grant made the ring dip during a renew.
+  val superseded = observation != null && observation.optLong("checkedAt", Long.MAX_VALUE) < profile.optLong("grantRecordedAt")
+  val expiry = if (observation?.optBoolean("whitelisted") == true && !superseded) observation.optLong("expiresAt") else profile.optLong("expiresAt")
+  // Measure against the grant's own length, which holds whichever clock supplied the expiry.
+  val grantLength = profile.optLong("expiresAt") - profile.optLong("whitelistedAt")
   val active = expiry > now
   val failed = profile.optString("lastKnockStatus") == "error"
   val green = if (dark) Color(0xFF153B28) else Color(0xFFC9F2D8)
@@ -164,7 +195,9 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
     colors = CardDefaults.elevatedCardColors(containerColor = if (showNotice) noticeColor else fill, contentColor = content),
     elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (showNotice) 3.dp else 1.dp)) {
     Surface(onClick = { onOpen(id) }, enabled = hasIdentity, color = fill, contentColor = content,
-      modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Edit $name" },
+      // Draw above the footer, or its opaque background hides this panel's
+      // shadow along the straight edge and leaves it only at the corners.
+      modifier = Modifier.fillMaxWidth().zIndex(1f).semantics { contentDescription = "Edit $name" },
       shape = MaterialTheme.shapes.extraLarge, shadowElevation = if (showNotice) 2.dp else 0.dp
     ) {
       Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -172,8 +205,10 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
           Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
             when {
               active -> {
-                val fraction = if (expiry > start && start > 0L) ((expiry - now).toFloat() / (expiry - start)).coerceIn(0f, 1f) else 1f
-                CircularProgressIndicator(progress = { fraction }, Modifier.size(52.dp).semantics { contentDescription = "$count of whitelist time remaining" },
+                val fraction = if (grantLength > 0L && profile.optLong("whitelistedAt") > 0L) ((expiry - now).toFloat() / grantLength).coerceIn(0f, 1f) else 1f
+                // A renewal sweeps the ring back up instead of jumping between values.
+                val shown by animateFloatAsState(fraction, MaterialTheme.motionScheme.slowEffectsSpec(), label = "grant")
+                CircularProgressIndicator(progress = { shown }, Modifier.size(52.dp).semantics { contentDescription = "$count of whitelist time remaining" },
                   color = success, trackColor = success.copy(alpha = .22f), strokeWidth = 4.dp)
                 if (pending) LoadingIndicator(Modifier.size(28.dp), color = content)
               }
@@ -204,7 +239,9 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
         }
         if (failed && !pending) Text(profile.textOrNull("lastError") ?: "Failed", color = if (active) content else colors.error, maxLines = 3, overflow = TextOverflow.Ellipsis,
           style = MaterialTheme.typography.bodySmall)
-        profile.textOrNull("whitelistedEntry")?.let { entry ->
+        // While /status confirms coverage, show the address it reports for this network.
+        val shownIp = (if (covered) observation?.textOrNull("ipAddress") else null) ?: profile.textOrNull("whitelistedEntry")
+        shownIp?.let { entry ->
           Text("IP · $entry",
             color = content, style = MaterialTheme.typography.bodyMedium)
         }
@@ -219,19 +256,21 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
         fadeOut(animationSpec = MaterialTheme.motionScheme.fastEffectsSpec())) {
       Surface(color = noticeColor, contentColor = noticeContent,
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Connection notice for $name" }) {
+        // One line: the current address sits under the card's IP line, the reason follows.
+        val currentIp = observation?.textOrNull("ipAddress")
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-          horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-          Icon(Icons.Default.WarningAmber, null, Modifier.size(20.dp))
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+          if (currentIp != null) Text("IP · $currentIp", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+          Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp, if (currentIp != null) Alignment.End else Alignment.Start)) {
+            Icon(Icons.Default.WarningAmber, null, Modifier.size(18.dp))
             Text(when {
               connection?.optBoolean("isConnected") == false -> "Offline"
               ipChanged -> "IP changed · not whitelisted"
-              observation != null -> "Current IP is not whitelisted"
+              observation != null -> "Not whitelisted"
               else -> "Network changed · status unverified"
-            }, style = MaterialTheme.typography.bodyMedium)
-            observation?.textOrNull("ipAddress")?.let { ip ->
-              Text("Current IP · $ip", style = MaterialTheme.typography.bodySmall)
-            }
+            }, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium,
+              maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         }
       }

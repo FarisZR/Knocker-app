@@ -27,8 +27,10 @@ class NativeAppTest {
   }"""))
 
   @Test fun backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch() {
-    compose.setContent { KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) } }
-    compose.onNodeWithText("New profile").performClick()
+    compose.setContent {
+      CompositionLocalProvider(LocalSystemPrompts provides false) { KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) } }
+    }
+    compose.onNodeWithContentDescription("New profile").performClick()
     compose.onNodeWithText("Auto-renew").performScrollTo().assertIsOff()
     compose.onNodeWithText("Allow precise renewal").assertDoesNotExist()
     compose.onNodeWithText("Allow timely background renewal?").assertDoesNotExist()
@@ -97,6 +99,7 @@ class NativeAppTest {
     val state = mutableStateOf(NativeUiState())
     compose.setContent { KnockerTheme { NativeApp(state.value, { _, _ -> }, {}) } }
     compose.onNodeWithContentDescription("Loading profiles").assertExists()
+    compose.onNodeWithText("No servers yet").assertDoesNotExist()
     compose.runOnIdle { state.value = loaded() }
     compose.onNodeWithText("Home server").assertExists()
     compose.onNodeWithText("Ready to connect").assertDoesNotExist()
@@ -123,6 +126,17 @@ class NativeAppTest {
     compose.onNodeWithText("Edit profile").assertExists()
     compose.onNodeWithContentDescription("Delete profile").assertExists()
     compose.onNodeWithText("Name").assertTextContains("Home server")
+  }
+
+  @Test fun saveWaitsForAChangeAndExamplesNeverReadAsValues() {
+    compose.setContent { KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) } }
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithText("Save").assertIsNotEnabled()
+    compose.onNodeWithText("https://knock.example.com").assertDoesNotExist()
+    compose.onNodeWithText("Leave empty to use the server default").assertExists()
+    compose.onNodeWithText("TTL (seconds)").performTextReplacement("600")
+    compose.onNodeWithText("Leave empty to use the server default").assertDoesNotExist()
+    compose.onNodeWithText("Save").assertIsEnabled()
   }
 
   @Test fun aFailedSaveKeepsItsDraftAndRequiresAMatchingAcknowledgement() {
@@ -199,8 +213,11 @@ class NativeAppTest {
       .assert(hasAnyAncestor(hasContentDescription("Profile Home server")))
     compose.onNodeWithContentDescription("Settings").performClick()
     compose.onNodeWithText("Connection checks use only your configured Knocker servers.").assertExists()
-    compose.onNodeWithText("Check now").performClick()
+    compose.onAllNodesWithText("Settings").assertCountEquals(1)
+    compose.onNodeWithText("Check connection status").performClick()
     compose.runOnIdle { assertEquals("refreshStatus", actions.last()) }
+    compose.onNodeWithContentDescription("Back").performClick()
+    compose.onNodeWithContentDescription("Knocker").assertExists()
   }
 
   @Test fun serverCoverageSuppressesWarningEvenWhenAddressAndNetworkChanged() {
@@ -212,6 +229,16 @@ class NativeAppTest {
     json.getJSONObject("network").put("connection", JSONObject().put("id", "current").put("isConnected", true))
     compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
     compose.onNodeWithContentDescription("Connection notice for Home server").assertDoesNotExist()
+  }
+
+  @Test fun aRenewedGrantSupersedesAnOlderStatusObservation() {
+    val now = System.currentTimeMillis()
+    val json = loaded().json
+    json.getJSONArray("profiles").getJSONObject(0)
+      .put("expiresAt", now + 3600000).put("whitelistedAt", now).put("grantRecordedAt", now)
+      .put("connectionStatus", JSONObject().put("whitelisted", true).put("expiresAt", now + 600000).put("checkedAt", now - 5000))
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.onNodeWithText("Whitelisted · 59m", substring = true).assertExists()
   }
 
   @Test fun expiredObservationDoesNotReviveTheOlderSavedExpiry() {
@@ -232,7 +259,7 @@ class NativeAppTest {
         .put("ipAddress", "198.51.100.7").put("whitelisted", false))
     compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
     compose.onNodeWithText("IP · 203.0.113.42").assertExists()
-    compose.onNodeWithText("Current IP · 198.51.100.7").assertExists()
+    compose.onNodeWithText("IP · 198.51.100.7").assertExists()
     compose.onNodeWithText("IP changed · not whitelisted").assertExists()
   }
 
@@ -256,6 +283,8 @@ class NativeAppTest {
     compose.onNodeWithContentDescription("Knocker").assertExists()
     compose.onNodeWithText("Name").assertDoesNotExist()
     compose.onNodeWithText("Discard unsaved changes?").assertDoesNotExist()
+    compose.onNodeWithText("No servers yet").assertExists()
+    compose.onNodeWithContentDescription("New profile").assertDoesNotExist()
     compose.onNodeWithText("New profile", useUnmergedTree = true).performClick()
     compose.onNodeWithText("Name").assertExists()
   }

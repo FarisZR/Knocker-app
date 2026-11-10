@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "com.fariszr.knocker",
+      "predictiveBackGestureEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "monochromeImage": "./assets/images/adaptive-icon.png",
@@ -62,7 +63,11 @@
         {
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0e0e10"
+          "backgroundColor": "#FDFBF5",
+          "dark": {
+            "image": "./assets/images/splash-icon.png",
+            "backgroundColor": "#17140C"
+          }
         }
       ]
     ],

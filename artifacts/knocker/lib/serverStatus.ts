@@ -6,6 +6,8 @@ export interface ServerStatus {
   ipAddress: string;
   whitelisted: boolean;
   expiresAt: number | null;
+  /** Device time of this observation, so a later grant can supersede it. */
+  checkedAt: number;
 }
 
 /** A failed, unsupported or malformed check is unknown, never an inactive grant. */
@@ -39,12 +41,14 @@ export async function checkServerStatus(
         : data.expires_at !== null || data.expires_in_seconds !== 0)
     )
       return null;
+    const checkedAt = Date.now();
     return {
+      checkedAt,
       ipAddress: ipaddr.process(data.ip_address).toString(),
       whitelisted: data.whitelisted,
       // Remaining TTL avoids depending on the device clock matching the server.
       expiresAt: data.whitelisted
-        ? Date.now() + data.expires_in_seconds * 1000
+        ? checkedAt + data.expires_in_seconds * 1000
         : null,
     };
   } catch {

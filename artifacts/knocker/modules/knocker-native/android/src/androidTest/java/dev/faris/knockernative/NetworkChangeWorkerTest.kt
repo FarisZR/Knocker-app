@@ -3,6 +3,7 @@ package dev.faris.knockernative
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.ListenableWorker.Result
 import androidx.work.testing.TestWorkerBuilder
+import androidx.work.workDataOf
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -17,7 +18,8 @@ class NetworkChangeWorkerTest {
   private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
   /** Real HTTP on the emulator, exercising saved settings and native grant reconciliation. */
-  private fun fixture(covered: Boolean? = false, enabled: Boolean = true, overrideIp: String? = null, oversized: Boolean = false, drip: Boolean = false, block: (MutableList<String>, (Int) -> Result) -> Unit) {
+  private fun fixture(covered: Boolean? = false, enabled: Boolean = true, overrideIp: String? = null, oversized: Boolean = false, drip: Boolean = false,
+    coveredSeconds: Long = 3600L, lastKnockSeconds: Long? = null, block: (MutableList<String>, (Int) -> Result) -> Unit) {
     val original = KnockerStore.readProfilesJson(context)
     val socket = ServerSocket(0)
     val calls = CopyOnWriteArrayList<String>()
@@ -40,7 +42,7 @@ class NetworkChangeWorkerTest {
           val expiry = System.currentTimeMillis() / 1000L + 3600L
           val json = if (oversized && !knock) "x".repeat(20000) else if (knock) """{"whitelisted_entry":"198.51.100.7","expires_at":$expiry,"expires_in_seconds":3600}"""
             else if (covered == null) "{}"
-            else """{"ip_address":"198.51.100.7","whitelisted":$covered,"expires_at":${if (covered) expiry else "null"},"expires_in_seconds":${if (covered) 3600 else 0}}"""
+            else """{"ip_address":"198.51.100.7","whitelisted":$covered,"expires_at":${if (covered) System.currentTimeMillis() / 1000L + coveredSeconds else "null"},"expires_in_seconds":${if (covered) coveredSeconds else 0}}"""
           val bytes = json.toByteArray()
           runCatching {
             val output = it.getOutputStream()
@@ -55,7 +57,8 @@ class NetworkChangeWorkerTest {
     try {
       KnockerStore.replaceProfiles(context, JSONArray().put(JSONObject()
         .put("id", id).put("endpointUrl", "http://127.0.0.1:${socket.localPort}").put("apiKey", "demo-key")
-        .put("autoRenew", enabled).put("ipOverride", overrideIp ?: JSONObject.NULL).put("grantNetworkId", "previous-network")).toString())
+        .put("autoRenew", enabled).put("ipOverride", overrideIp ?: JSONObject.NULL).put("grantNetworkId", "previous-network")
+        .put("expiresAt", lastKnockSeconds?.let { System.currentTimeMillis() + it * 1000L } ?: JSONObject.NULL)).toString())
       block(calls) { attempt -> TestWorkerBuilder<NetworkChangeWorker>(context, executor, runAttemptCount = attempt).build().doWork() }
     } finally {
       socket.close()
@@ -129,5 +132,37 @@ class NetworkChangeWorkerTest {
   @Test fun disabledAutoRenewSendsNoRequests() = fixture(enabled = false) { calls, run ->
     assertEquals(Result.success(), run(0))
     assertTrue(calls.isEmpty())
+  }
+
+  private fun renewNow(): Result {
+    val executor = Executors.newSingleThreadExecutor()
+    try {
+      return TestWorkerBuilder<RenewWorker>(context, executor,
+        workDataOf("profileId" to KnockerStore.readProfiles(context).single().id)).build().doWork()
+    } finally { executor.shutdownNow() }
+  }
+
+  private fun assertScheduledNear(expected: Long) {
+    val at = KnockerRenewScheduler.scheduledAt(context, KnockerStore.readProfiles(context).single().id)
+    assertNotNull(at)
+    assertTrue("scheduled ${at!! - expected}ms from expected", kotlin.math.abs(at - expected) < 10_000L)
+  }
+
+  // The last knock was on another network and lasts an hour; this network's grant ends in 15 minutes.
+  @Test fun coveredNetworkTimesRenewalFromItsOwnGrant() = fixture(covered = true, coveredSeconds = 900L, lastKnockSeconds = 3600L) { calls, run ->
+    assertEquals(Result.success(), run(0))
+    assertEquals(listOf("GET /status"), calls.toList())
+    assertScheduledNear(System.currentTimeMillis() + (900L - 300L) * 1000L)
+  }
+
+  @Test fun renewalAlarmMovesInsteadOfKnockingWhileThisNetworkIsCovered() = fixture(covered = true, coveredSeconds = 3600L, lastKnockSeconds = 600L) { calls, _ ->
+    assertEquals(Result.success(), renewNow())
+    assertEquals(listOf("GET /status"), calls.toList())
+    assertScheduledNear(System.currentTimeMillis() + (3600L - 300L) * 1000L)
+  }
+
+  @Test fun renewalAlarmKnocksWhenThisNetworksGrantIsDue() = fixture(covered = true, coveredSeconds = 200L, lastKnockSeconds = 600L) { calls, _ ->
+    assertEquals(Result.success(), renewNow())
+    assertEquals(listOf("GET /status", "POST /knock"), calls.toList())
   }
 }
