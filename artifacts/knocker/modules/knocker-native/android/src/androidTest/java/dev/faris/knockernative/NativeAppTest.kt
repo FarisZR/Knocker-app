@@ -27,7 +27,9 @@ class NativeAppTest {
   }"""))
 
   @Test fun backgroundRenewalIsOptInAndPermissionControlsFollowTheSwitch() {
-    compose.setContent { KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) } }
+    compose.setContent {
+      CompositionLocalProvider(LocalSystemPrompts provides false) { KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) } }
+    }
     compose.onNodeWithContentDescription("New profile").performClick()
     compose.onNodeWithText("Auto-renew").performScrollTo().assertIsOff()
     compose.onNodeWithText("Allow precise renewal").assertDoesNotExist()
@@ -227,6 +229,16 @@ class NativeAppTest {
     json.getJSONObject("network").put("connection", JSONObject().put("id", "current").put("isConnected", true))
     compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
     compose.onNodeWithContentDescription("Connection notice for Home server").assertDoesNotExist()
+  }
+
+  @Test fun aRenewedGrantSupersedesAnOlderStatusObservation() {
+    val now = System.currentTimeMillis()
+    val json = loaded().json
+    json.getJSONArray("profiles").getJSONObject(0)
+      .put("expiresAt", now + 3600000).put("whitelistedAt", now).put("grantRecordedAt", now)
+      .put("connectionStatus", JSONObject().put("whitelisted", true).put("expiresAt", now + 600000).put("checkedAt", now - 5000))
+    compose.setContent { KnockerTheme { NativeApp(NativeUiState(json), { _, _ -> }, {}) } }
+    compose.onNodeWithText("Whitelisted · 59m", substring = true).assertExists()
   }
 
   @Test fun expiredObservationDoesNotReviveTheOlderSavedExpiry() {

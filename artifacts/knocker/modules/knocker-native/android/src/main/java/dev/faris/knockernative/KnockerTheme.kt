@@ -57,8 +57,11 @@ internal fun knockerActionColors(): ActionColors {
 @Composable
 internal fun knockerSwitchColors(): SwitchColors {
   val action = knockerActionColors()
+  val brandLight = !isSystemInDarkTheme() && !LocalAppearance.current.wallpaperColors
   return SwitchDefaults.colors(checkedTrackColor = action.container, checkedThumbColor = action.content,
-    checkedIconColor = action.container)
+    checkedIconColor = action.container,
+    // Yellow on the light surface needs an outline to read as a control.
+    checkedBorderColor = if (brandLight) MaterialTheme.colorScheme.outline else Color.Transparent)
 }
 
 internal val KnockerDarkColors = darkColorScheme(

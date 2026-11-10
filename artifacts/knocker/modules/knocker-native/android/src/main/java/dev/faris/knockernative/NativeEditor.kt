@@ -34,6 +34,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 
+/** System permission prompts leave the app's window; tests of the editor itself turn them off. */
+internal val LocalSystemPrompts = staticCompositionLocalOf { true }
+
 /** A native editor has one app-bar title; drafts and IME interaction never round-trip through JS. */
 @Composable
 internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarHostState, saving: Boolean, error: String?,
@@ -55,9 +58,15 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
   var attempted by remember(id) { mutableStateOf(false) }
   var confirmDelete by remember(id) { mutableStateOf(false) }
   var requestAlarmAccess by remember(id) { mutableStateOf(false) }
-  // Tile results are this app's only notifications, so ask when a tile is chosen.
+  // Notifications only report tile and background renewal results, so ask when either is turned on.
   val context = LocalContext.current
   val notificationAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+  val promptsAllowed = LocalSystemPrompts.current
+  fun requestNotifications() {
+    if (promptsAllowed && Build.VERSION.SDK_INT >= 33 &&
+      ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) notificationAccess.launch(Manifest.permission.POST_NOTIFICATIONS)
+  }
   val dirty = draft != baseline
   val errors = draft.errors()
   LaunchedEffect(dirty) { onDirty(dirty) }
@@ -136,6 +145,8 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
         NativeSwitchRow(Icons.Default.Autorenew, "Auto-renew", "Re-knock before expiry and after network changes", draft.renew, !saving) {
           feedback("tap"); change(draft.copy(renew = it))
           requestAlarmAccess = it
+          // A failed background renewal is reported in a notification too.
+          if (it) requestNotifications()
         }
         if (draft.renew) Column(inset.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
           RenewalAlarmPermission(enabled = !saving, showPrompt = requestAlarmAccess,
@@ -157,10 +168,9 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
             val owner = state.profiles.firstOrNull { it.optString("id") != draft.id && slot != null && it.optInt("tileSlot", -1) == slot }
             FilterChip(selected = draft.slot == slot, enabled = !saving && owner == null,
               onClick = {
-                change(draft.copy(slot = if (draft.slot == slot) null else slot))
-                if (slot != null && draft.slot != slot && Build.VERSION.SDK_INT >= 33 &&
-                  ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                ) notificationAccess.launch(Manifest.permission.POST_NOTIFICATIONS)
+                val next = if (draft.slot == slot) null else slot
+                change(draft.copy(slot = next))
+                if (next != null) requestNotifications()
               },
               label = { Text(if (slot == null) "Off" else if (owner != null) "$slot · ${owner.optString("name")}" else "Slot $slot") })
           }

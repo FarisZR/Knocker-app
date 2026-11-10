@@ -5,6 +5,7 @@ package dev.faris.knockernative
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.*
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -145,8 +146,12 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val pending = id in state.pending
   val observation = profile.optJSONObject("connectionStatus")
   val covered = observation?.optBoolean("whitelisted") == true && observation.optLong("expiresAt") > now
-  val expiry = if (observation?.optBoolean("whitelisted") == true) observation.optLong("expiresAt") else profile.optLong("expiresAt")
-  val start = profile.optLong("whitelistedAt")
+  // An observation taken before the latest grant still describes the previous
+  // one. Mixing its expiry with the new grant made the ring dip during a renew.
+  val superseded = observation != null && observation.optLong("checkedAt", Long.MAX_VALUE) < profile.optLong("grantRecordedAt")
+  val expiry = if (observation?.optBoolean("whitelisted") == true && !superseded) observation.optLong("expiresAt") else profile.optLong("expiresAt")
+  // Measure against the grant's own length, which holds whichever clock supplied the expiry.
+  val grantLength = profile.optLong("expiresAt") - profile.optLong("whitelistedAt")
   val active = expiry > now
   val failed = profile.optString("lastKnockStatus") == "error"
   val green = if (dark) Color(0xFF153B28) else Color(0xFFC9F2D8)
@@ -192,8 +197,10 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
           Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
             when {
               active -> {
-                val fraction = if (expiry > start && start > 0L) ((expiry - now).toFloat() / (expiry - start)).coerceIn(0f, 1f) else 1f
-                CircularProgressIndicator(progress = { fraction }, Modifier.size(52.dp).semantics { contentDescription = "$count of whitelist time remaining" },
+                val fraction = if (grantLength > 0L && profile.optLong("whitelistedAt") > 0L) ((expiry - now).toFloat() / grantLength).coerceIn(0f, 1f) else 1f
+                // A renewal sweeps the ring back up instead of jumping between values.
+                val shown by animateFloatAsState(fraction, MaterialTheme.motionScheme.slowEffectsSpec(), label = "grant")
+                CircularProgressIndicator(progress = { shown }, Modifier.size(52.dp).semantics { contentDescription = "$count of whitelist time remaining" },
                   color = success, trackColor = success.copy(alpha = .22f), strokeWidth = 4.dp)
                 if (pending) LoadingIndicator(Modifier.size(28.dp), color = content)
               }

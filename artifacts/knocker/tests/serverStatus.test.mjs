@@ -29,11 +29,16 @@ test("checks only the configured server with its key, preserving a URL prefix", 
       return { ok: true, json: async () => inactive };
     },
   );
-  assert.deepEqual(status, {
-    ipAddress: "198.51.100.7",
-    whitelisted: false,
-    expiresAt: null,
-  });
+  assert.equal(typeof status.checkedAt, "number");
+  assert.deepEqual(
+    { ...status, checkedAt: undefined },
+    {
+      ipAddress: "198.51.100.7",
+      whitelisted: false,
+      expiresAt: null,
+      checkedAt: undefined,
+    },
+  );
 });
 
 test("uses server coverage, including a different address, with a clock-independent TTL", async () => {
