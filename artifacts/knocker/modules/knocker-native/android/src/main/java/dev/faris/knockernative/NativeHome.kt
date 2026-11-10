@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,16 +51,21 @@ private fun grantClock(): Long {
 /** The native scaffold measures its action stack and places standard feedback above it. */
 @Composable
 internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpen: (String) -> Unit,
-  onNew: () -> Unit, onKnock: (String) -> Unit, onKnockAll: () -> Unit, onPreferences: () -> Unit) {
+  onNew: () -> Unit, onKnock: (String) -> Unit, onKnockAll: () -> Unit, onPreferences: () -> Unit, onRefresh: () -> Unit) {
   val now = grantClock()
   val colors = MaterialTheme.colorScheme
   val actionColors = knockerActionColors()
   var actionsHeight by remember { mutableIntStateOf(0) }
   val density = LocalDensity.current
   val clearance = with(density) { actionsHeight.toDp() } + 24.dp
+  val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+  // A status check has no completion signal on this surface, so the indicator
+  // acknowledges the pull briefly while cards update as results arrive.
+  var refreshing by remember { mutableStateOf(false) }
+  LaunchedEffect(refreshing) { if (refreshing) { delay(900); refreshing = false } }
   Scaffold(
-    modifier = Modifier.fillMaxSize(),
-    topBar = { TopAppBar(title = { KnockerWordmark() }, expandedHeight = 88.dp, actions = {
+    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = { TopAppBar(title = { KnockerWordmark() }, expandedHeight = 88.dp, scrollBehavior = scrollBehavior, actions = {
       // An empty home offers the same action as its only floating button instead.
       if (state.loaded && state.profiles.isNotEmpty()) IconButton(onClick = onNew) { Icon(Icons.Default.Add, "New profile") }
       IconButton(onClick = onPreferences) { Icon(Icons.Default.Settings, "Settings") }
@@ -100,7 +107,8 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
       }
     }
   ) { padding ->
-    Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+    PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refreshing = true; onRefresh() },
+      modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
       LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = clearance),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -109,7 +117,7 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
           LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading profiles" })
         }
         itemsIndexed(state.profiles, key = { index, _ -> state.profileRenderKeys[index] }) { _, profile ->
-          NativeProfileCard(profile, state, now, onOpen, onKnock)
+          Box(Modifier.animateItem()) { NativeProfileCard(profile, state, now, onOpen, onKnock) }
         }
       }
       if (state.loaded && state.profiles.isEmpty()) Column(

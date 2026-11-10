@@ -2,12 +2,22 @@
 
 package dev.faris.knockernative
 
+import android.app.StatusBarManager
+import android.content.ComponentName
 import android.content.Context
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigationevent.NavigationEvent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -85,6 +95,18 @@ class KnockerAppView(context: Context, appContext: AppContext) : ExpoView(contex
   }
 }
 
+private const val PAGE_MILLIS = 320
+
+/** Offers the system "Add tile" prompt; Android reports an already added tile without asking again. */
+private fun requestAddTile(context: Context, slot: Int) {
+  if (Build.VERSION.SDK_INT < 33) return
+  runCatching {
+    context.getSystemService(StatusBarManager::class.java)?.requestAddTileService(
+      ComponentName(context, "dev.faris.knockernative.KnockerTileService$slot"), "Knock $slot",
+      Icon.createWithResource(context, R.drawable.ic_tile_knocker), context.mainExecutor) { }
+  }
+}
+
 /** Jetpack Navigation owns screen transitions and back; Material Scaffold owns screen chrome. */
 @Composable
 internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -> Unit, haptic: (String) -> Unit) {
@@ -97,6 +119,8 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
   var discardDestination by remember { mutableStateOf<String?>(null) }
   var pendingOperation by remember { mutableStateOf<String?>(null) }
   var editorError by remember { mutableStateOf<String?>(null) }
+  var pendingTile by remember { mutableStateOf<Int?>(null) }
+  val context = LocalContext.current
 
   fun navigate(next: String) {
     if (pendingOperation != null) return
@@ -107,12 +131,14 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
     editorError = null
     route = next
   }
-  fun dispatch(type: String, payload: Map<String, Any?> = emptyMap()) {
-    haptic("tap"); emit(type, payload)
+  // Haptics mark knocks, toggles and results; plain navigation stays silent like system apps.
+  fun dispatch(type: String, payload: Map<String, Any?> = emptyMap(), feedback: Boolean = false) {
+    if (feedback) haptic("tap")
+    emit(type, payload)
   }
-  fun operation(type: String, profile: ProfileForm? = null, id: String? = null) {
+  fun operation(type: String, profile: ProfileForm? = null, id: String? = null, tile: Int? = null) {
     val token = java.util.UUID.randomUUID().toString()
-    pendingOperation = token; editorError = null
+    pendingOperation = token; editorError = null; pendingTile = tile
     dispatch(type, mapOf("token" to token, "profileJson" to profile?.toJson(), "id" to id))
   }
 
@@ -129,6 +155,7 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
     pendingOperation = null
     if (result.optBoolean("ok")) {
       dirty = false; navigate("home"); haptic("success")
+      pendingTile?.let { requestAddTile(context, it) }; pendingTile = null
       snackbar.currentSnackbarData?.dismiss()
       snackbar.showSnackbar(result.optString("message", "Profile saved"), withDismissAction = true)
     } else {
@@ -165,6 +192,20 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
     backStack = if (route == "home") listOf("home") else listOf("home", route),
     modifier = Modifier.fillMaxSize(),
     onBack = { navigate("home") },
+    // Screens slide like pages. During a back swipe the page follows the finger
+    // toward the far edge and only leaves once the gesture is confirmed.
+    transitionSpec = {
+      ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { it }, slideOutHorizontally(tween(PAGE_MILLIS)) { -it / 4 })
+    },
+    popTransitionSpec = {
+      ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { -it / 4 }, slideOutHorizontally(tween(PAGE_MILLIS)) { it },
+        targetContentZIndex = -1f)
+    },
+    predictivePopTransitionSpec = { edge ->
+      val direction = if (edge == NavigationEvent.EDGE_RIGHT) -1 else 1
+      ContentTransform(slideInHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { -direction * it / 4 },
+        slideOutHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { direction * it }, targetContentZIndex = -1f)
+    },
     entryProvider = { destination ->
       NavEntry(destination) {
         val sceneState = latestState.value
@@ -179,18 +220,19 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
             }
           }
         } else if (destination == "home") {
-          NativeHome(sceneState, snackbar, onOpen = { haptic("tap"); navigate("profile:$it") },
-            onNew = { haptic("tap"); navigate("new") },
-            onKnock = { dispatch("knock", mapOf("id" to it)) },
-            onKnockAll = { dispatch("knockAll") },
-            onPreferences = { haptic("tap"); navigate("settings") })
+          NativeHome(sceneState, snackbar, onOpen = { navigate("profile:$it") },
+            onNew = { navigate("new") },
+            onKnock = { dispatch("knock", mapOf("id" to it), feedback = true) },
+            onKnockAll = { dispatch("knockAll", feedback = true) },
+            onPreferences = { navigate("settings") },
+            onRefresh = { dispatch("refreshStatus") })
         } else if (destination == "settings") {
           NativeSettings(snackbar, onBack = { navigate("home") },
             onRefreshStatus = { dispatch("refreshStatus") }, feedback = haptic)
         } else {
           NativeEditor(if (destination == "new") null else destination.removePrefix("profile:"), sceneState, snackbar, pendingOperation != null, editorError,
             onDirty = { dirty = it }, onBack = { navigate("home") },
-            onSave = { operation("save", profile = it) },
+            onSave = { form, tile -> operation("save", profile = form, tile = tile) },
             onDelete = { operation("delete", id = it) }, feedback = haptic)
         }
       }
@@ -201,7 +243,6 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
     title = { Text("Discard unsaved changes?") },
     text = { Text("Your changes to this profile have not been saved.") },
     confirmButton = { TextButton(onClick = {
-      haptic("tap")
       dirty = false
       discardDestination?.let { navigate(it) }
       discardDestination = null

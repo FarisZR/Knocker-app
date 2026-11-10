@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package dev.faris.knockernative
 
@@ -23,6 +23,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -35,7 +37,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 /** A native editor has one app-bar title; drafts and IME interaction never round-trip through JS. */
 @Composable
 internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarHostState, saving: Boolean, error: String?,
-  onDirty: (Boolean) -> Unit, onBack: () -> Unit, onSave: (ProfileForm) -> Unit, onDelete: (String) -> Unit,
+  onDirty: (Boolean) -> Unit, onBack: () -> Unit, onSave: (ProfileForm, Int?) -> Unit, onDelete: (String) -> Unit,
   feedback: (String) -> Unit) {
   val current = state.profiles.firstOrNull { !it.textOrNull("id").isNullOrBlank() && it.optString("id") == id }?.let(ProfileForm::from)
   if (!state.loaded || (id != null && current == null)) {
@@ -66,57 +68,76 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
   fun change(next: ProfileForm) { if (!saving) draft = next }
   fun save() {
     attempted = true
-    if (errors.isEmpty()) onSave(draft) else feedback("error")
+    // A newly chosen tile slot is offered to Quick Settings once the save lands.
+    if (errors.isEmpty()) onSave(draft, draft.slot.takeIf { it != baseline.slot }) else feedback("error")
   }
+  val actionColors = knockerActionColors()
+  val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+  val inset = Modifier.padding(horizontal = 16.dp)
   Scaffold(
+    modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+    // Include the keyboard so the save action and messages stay above it.
+    contentWindowInsets = ScaffoldDefaults.contentWindowInsets.union(WindowInsets.ime),
     topBar = {
-      TopAppBar(title = { Text(if (id == null) "New profile" else "Edit profile") },
-        navigationIcon = { IconButton(onClick = { feedback("tap"); onBack() }, enabled = !saving) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+      TopAppBar(title = { Text(if (id == null) "New profile" else "Edit profile") }, scrollBehavior = scrollBehavior,
+        navigationIcon = { IconButton(onClick = onBack, enabled = !saving) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
         actions = {
-          if (id != null) IconButton(onClick = { feedback("tap"); confirmDelete = true }, enabled = !saving) { Icon(Icons.Default.DeleteOutline, "Delete profile") }
-          TextButton(onClick = ::save, enabled = !saving) {
-            if (saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Save")
-          }
+          if (id != null) IconButton(onClick = { confirmDelete = true }, enabled = !saving) { Icon(Icons.Default.DeleteOutline, "Delete profile") }
         })
     },
-    snackbarHost = { SnackbarHost(snackbar) }
+    snackbarHost = { SnackbarHost(snackbar) },
+    // The primary action sits where home keeps Knock all: bottom right, under the thumb.
+    floatingActionButton = {
+      Button(onClick = ::save, enabled = dirty && !saving, shapes = ButtonDefaults.shapes(),
+        modifier = Modifier.heightIn(min = 64.dp),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = actionColors.container, contentColor = actionColors.content,
+          disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+          disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+      ) {
+        if (saving) LoadingIndicator(Modifier.size(28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        else Icon(Icons.Default.Check, null)
+        Spacer(Modifier.width(10.dp))
+        Text(if (saving) "Saving…" else "Save", style = MaterialTheme.typography.titleLarge)
+      }
+    }
   ) { padding ->
-    Box(Modifier.fillMaxSize().padding(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
-      Column(Modifier.widthIn(max = 840.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
-        FormSection("Server")
-        NativeField("Name", draft.name, { change(draft.copy(name = it)) }, saving, if (attempted) errors["name"] else null, KeyboardType.Text)
-        NativeField("Endpoint URL", draft.endpoint, { change(draft.copy(endpoint = it)) }, saving,
-          if (attempted) errors["endpoint"] else null, KeyboardType.Uri, "https://knock.example.com")
-        OutlinedTextField(value = draft.key, onValueChange = { change(draft.copy(key = it)) }, enabled = !saving,
-          modifier = Modifier.fillMaxWidth(), label = { Text("API key") }, singleLine = true,
-          visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-          isError = attempted && "key" in errors,
-          supportingText = if (attempted && "key" in errors) ({ Text(errors.getValue("key")) }) else null,
-          trailingIcon = { IconButton(onClick = { showKey = !showKey; feedback("tap") }) {
-            Icon(if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility, if (showKey) "Hide API key" else "Show API key")
-          } })
-        NativeField("TTL (seconds)", draft.ttl, { change(draft.copy(ttl = it.filter(Char::isDigit))) }, saving,
-          if (attempted) errors["ttl"] else null, KeyboardType.Number, "Default")
-        HorizontalDivider()
-        FormSection("Whitelist target")
-        NativeSwitchRow("Whitelist a different IP/CIDR", "Requires allow_remote_whitelist on the API key", draft.remote, !saving) {
+    Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+      Column(Modifier.widthIn(max = 840.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+        if (error != null) Text(error, inset.padding(top = 16.dp), color = MaterialTheme.colorScheme.error)
+        SettingsSection("Server")
+        Column(inset, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          NativeField("Name", draft.name, { change(draft.copy(name = it)) }, saving, if (attempted) errors["name"] else null, KeyboardType.Text)
+          NativeField("Endpoint URL", draft.endpoint, { change(draft.copy(endpoint = it)) }, saving,
+            if (attempted) errors["endpoint"] else null, KeyboardType.Uri, placeholder = "https://knock.example.com")
+          OutlinedTextField(value = draft.key, onValueChange = { change(draft.copy(key = it)) }, enabled = !saving,
+            modifier = Modifier.fillMaxWidth(), label = { Text("API key") }, singleLine = true,
+            visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+            isError = attempted && "key" in errors,
+            supportingText = if (attempted && "key" in errors) ({ Text(errors.getValue("key")) }) else null,
+            trailingIcon = { IconButton(onClick = { showKey = !showKey }) {
+              Icon(if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility, if (showKey) "Hide API key" else "Show API key")
+            } })
+          NativeField("TTL (seconds)", draft.ttl, { change(draft.copy(ttl = it.filter(Char::isDigit))) }, saving,
+            if (attempted) errors["ttl"] else null, KeyboardType.Number, emptyHint = "Leave empty to use the server default")
+        }
+        SettingsSection("Whitelist target")
+        NativeSwitchRow(Icons.Default.Public, "Whitelist a different IP/CIDR", "Requires allow_remote_whitelist on the API key", draft.remote, !saving) {
           feedback("tap"); change(draft.copy(remote = it))
         }
         if (draft.remote) NativeField("IP address or CIDR", draft.ip, { change(draft.copy(ip = it)) }, saving,
-          if (attempted) errors["ip"] else null, KeyboardType.Ascii, "203.0.113.42 or 2001:db8::/64")
-        HorizontalDivider()
-        FormSection("Automation")
-        NativeSwitchRow("Knock when app opens", null, draft.onOpen, !saving) {
+          if (attempted) errors["ip"] else null, KeyboardType.Ascii, placeholder = "203.0.113.42 or 2001:db8::/64",
+          modifier = inset.padding(top = 4.dp))
+        SettingsSection("Automation")
+        NativeSwitchRow(Icons.Default.RocketLaunch, "Knock when app opens", null, draft.onOpen, !saving) {
           feedback("tap"); change(draft.copy(onOpen = it))
         }
-        NativeSwitchRow("Auto-renew", "Re-knock before expiry and after network changes", draft.renew, !saving) {
+        NativeSwitchRow(Icons.Default.Autorenew, "Auto-renew", "Re-knock before expiry and after network changes", draft.renew, !saving) {
           feedback("tap"); change(draft.copy(renew = it))
           requestAlarmAccess = it
         }
-        if (draft.renew) {
+        if (draft.renew) Column(inset.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
           RenewalAlarmPermission(enabled = !saving, showPrompt = requestAlarmAccess,
             onPromptChange = { requestAlarmAccess = it })
           NativeField("Renewal safety window (seconds)", draft.safety,
@@ -125,18 +146,18 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
           if ((draft.ttl.toIntOrNull() ?: Int.MAX_VALUE) < 120) Text("Android may delay renewal with short TTLs.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        HorizontalDivider()
-        FormSection("Shortcuts")
-        NativeSwitchRow("Pin to home", null, draft.pinned, !saving) {
+        SettingsSection("Shortcuts")
+        NativeSwitchRow(Icons.Default.PushPin, "Pin to home", "Adds a knock button for this profile above Knock all", draft.pinned, !saving) {
           feedback("tap"); change(draft.copy(pinned = it))
         }
-        Text("Quick Settings tile", style = MaterialTheme.typography.titleSmall)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SettingsRow(Icons.Default.Dashboard, "Quick Settings tile", "Knock from the notification shade. Results arrive as a notification.")
+        FlowRow(Modifier.padding(start = 56.dp, end = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp)) {
           listOf(null, 1, 2, 3, 4, 5).forEach { slot ->
             val owner = state.profiles.firstOrNull { it.optString("id") != draft.id && slot != null && it.optInt("tileSlot", -1) == slot }
             FilterChip(selected = draft.slot == slot, enabled = !saving && owner == null,
               onClick = {
-                feedback("tap"); change(draft.copy(slot = if (draft.slot == slot) null else slot))
+                change(draft.copy(slot = if (draft.slot == slot) null else slot))
                 if (slot != null && draft.slot != slot && Build.VERSION.SDK_INT >= 33 &&
                   ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                 ) notificationAccess.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -144,9 +165,8 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
               label = { Text(if (slot == null) "Off" else if (owner != null) "$slot · ${owner.optString("name")}" else "Slot $slot") })
           }
         }
-        Text("Tile knocks report their result in a notification.",
-          style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(24.dp))
+        // Clear the floating save action at the end of the scroll.
+        Spacer(Modifier.height(112.dp))
       }
     }
   }
@@ -185,28 +205,23 @@ private fun RenewalAlarmPermission(enabled: Boolean, showPrompt: Boolean, onProm
   }
 }
 
-@Composable
-private fun FormSection(title: String) { Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary) }
-
 /** Compose owns text, selection, keyboard actions and validation without controlled RN reconciliation. */
 @Composable
 private fun NativeField(label: String, value: String, onChange: (String) -> Unit, saving: Boolean, error: String?,
-  keyboard: KeyboardType, help: String? = null) {
+  keyboard: KeyboardType, placeholder: String? = null, emptyHint: String? = null, modifier: Modifier = Modifier) {
+  // Examples are placeholders and hints only describe an empty field, so neither reads as a second value.
+  val hint = emptyHint.takeIf { value.isEmpty() }
   OutlinedTextField(value = value, onValueChange = onChange, enabled = !saving, label = { Text(label) },
-    modifier = Modifier.fillMaxWidth(), singleLine = true, isError = error != null,
+    modifier = modifier.fillMaxWidth(), singleLine = true, isError = error != null,
+    placeholder = placeholder?.let { { Text(it) } },
     keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Next),
-    supportingText = if (error != null || help != null) ({ Text(error ?: help.orEmpty()) }) else null)
+    supportingText = if (error != null || hint != null) ({ Text(error ?: hint.orEmpty()) }) else null)
 }
 
-/** Native switch semantics merge the label and supporting description with its toggle action. */
+/** The same full-width list row as Settings; label and description merge with the toggle action. */
 @Composable
-private fun NativeSwitchRow(title: String, detail: String?, value: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
-  Row(Modifier.fillMaxWidth().toggleable(value = value, enabled = enabled, role = Role.Switch, onValueChange = onChange),
-    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-      Text(title, style = MaterialTheme.typography.bodyLarge)
-      if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    Switch(checked = value, onCheckedChange = null, enabled = enabled)
-  }
+private fun NativeSwitchRow(icon: ImageVector, title: String, detail: String?, value: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+  SettingsRow(icon, title, detail,
+    Modifier.toggleable(value = value, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+  ) { Switch(checked = value, onCheckedChange = null, enabled = enabled, colors = knockerSwitchColors()) }
 }

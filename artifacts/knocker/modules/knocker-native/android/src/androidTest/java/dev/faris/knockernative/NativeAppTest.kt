@@ -126,6 +126,17 @@ class NativeAppTest {
     compose.onNodeWithText("Name").assertTextContains("Home server")
   }
 
+  @Test fun saveWaitsForAChangeAndExamplesNeverReadAsValues() {
+    compose.setContent { KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) } }
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithText("Save").assertIsNotEnabled()
+    compose.onNodeWithText("https://knock.example.com").assertDoesNotExist()
+    compose.onNodeWithText("Leave empty to use the server default").assertExists()
+    compose.onNodeWithText("TTL (seconds)").performTextReplacement("600")
+    compose.onNodeWithText("Leave empty to use the server default").assertDoesNotExist()
+    compose.onNodeWithText("Save").assertIsEnabled()
+  }
+
   @Test fun aFailedSaveKeepsItsDraftAndRequiresAMatchingAcknowledgement() {
     val state = mutableStateOf(loaded())
     val actions = mutableListOf<Pair<String, Map<String, Any?>>>()

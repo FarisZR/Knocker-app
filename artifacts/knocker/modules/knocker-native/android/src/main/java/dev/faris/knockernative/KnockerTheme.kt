@@ -19,26 +19,27 @@ internal fun themePreferences(context: Context): SharedPreferences =
 internal data class Appearance(val wallpaperColors: Boolean = false, val setWallpaperColors: (Boolean) -> Unit = {})
 internal val LocalAppearance = staticCompositionLocalOf { Appearance() }
 
-// Keep light surfaces neutral and use the actual wordmark yellow for filled
-// actions. Primary text/focus indicators stay dark instead of becoming olive.
+// Light surfaces carry a little of the wordmark's warmth instead of flat grey,
+// and filled actions use the actual wordmark yellow. Primary text and focus
+// indicators stay dark instead of becoming olive.
 internal val KnockerLightColors = lightColorScheme(
   primary = Color(0xFF282820), onPrimary = Color.White,
   primaryContainer = KnockerYellow, onPrimaryContainer = Color(0xFF221F10),
   inversePrimary = KnockerYellow,
-  secondary = Color(0xFF52524A), onSecondary = Color.White,
+  secondary = Color(0xFF55523F), onSecondary = Color.White,
   secondaryContainer = Color(0xFFFFF2AC), onSecondaryContainer = Color(0xFF282410),
   tertiary = Color(0xFF45664C), onTertiary = Color.White,
   tertiaryContainer = Color(0xFFC7ECCB), onTertiaryContainer = Color(0xFF082010),
-  background = Color(0xFFFAFAFA), onBackground = Color(0xFF1C1C1C),
-  surface = Color(0xFFFAFAFA), onSurface = Color(0xFF1C1C1C),
-  surfaceVariant = Color(0xFFE8E8E8), onSurfaceVariant = Color(0xFF484848),
+  background = Color(0xFFFDFBF5), onBackground = Color(0xFF1D1C16),
+  surface = Color(0xFFFDFBF5), onSurface = Color(0xFF1D1C16),
+  surfaceVariant = Color(0xFFE9E4D4), onSurfaceVariant = Color(0xFF4A4739),
   surfaceTint = Color.Transparent,
-  inverseSurface = Color(0xFF303030), inverseOnSurface = Color(0xFFF5F5F5),
-  outline = Color(0xFF777777), outlineVariant = Color(0xFFCCCCCC),
-  surfaceDim = Color(0xFFDDDDDD), surfaceBright = Color(0xFFFAFAFA),
-  surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF5F5F5),
-  surfaceContainer = Color(0xFFF0F0F0), surfaceContainerHigh = Color(0xFFEBEBEB),
-  surfaceContainerHighest = Color(0xFFE5E5E5)
+  inverseSurface = Color(0xFF32302A), inverseOnSurface = Color(0xFFF6F1E6),
+  outline = Color(0xFF7B7767), outlineVariant = Color(0xFFCDC8B7),
+  surfaceDim = Color(0xFFDFDBD0), surfaceBright = Color(0xFFFDFBF5),
+  surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF8F5EC),
+  surfaceContainer = Color(0xFFF3EFE5), surfaceContainerHigh = Color(0xFFEDE9DF),
+  surfaceContainerHighest = Color(0xFFE7E3D9)
 )
 
 internal data class ActionColors(val container: Color, val content: Color)
@@ -50,6 +51,14 @@ internal fun knockerActionColors(): ActionColors {
   return if (!isSystemInDarkTheme() && !LocalAppearance.current.wallpaperColors) {
     ActionColors(KnockerYellow, KnockerLightColors.onPrimaryContainer)
   } else ActionColors(colors.primary, colors.onPrimary)
+}
+
+/** Checked switches follow the filled actions, so light mode shows brand yellow rather than black. */
+@Composable
+internal fun knockerSwitchColors(): SwitchColors {
+  val action = knockerActionColors()
+  return SwitchDefaults.colors(checkedTrackColor = action.container, checkedThumbColor = action.content,
+    checkedIconColor = action.container)
 }
 
 internal val KnockerDarkColors = darkColorScheme(

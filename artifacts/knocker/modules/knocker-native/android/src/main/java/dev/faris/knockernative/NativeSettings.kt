@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -33,10 +34,12 @@ internal fun NativeSettings(snackbar: SnackbarHostState, onBack: () -> Unit, onR
   val version = remember(context) {
     runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
   }
+  val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
   Scaffold(
+    modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     topBar = {
-      TopAppBar(title = { Text("Settings") },
-        navigationIcon = { IconButton(onClick = { feedback("tap"); onBack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
+      TopAppBar(title = { Text("Settings") }, scrollBehavior = scrollBehavior,
+        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
     },
     snackbarHost = { SnackbarHost(snackbar) }
   ) { padding ->
@@ -47,7 +50,7 @@ internal fun NativeSettings(snackbar: SnackbarHostState, onBack: () -> Unit, onR
           SettingsRow(Icons.Default.Palette, "Use wallpaper colors", "Material You · off uses Knocker yellow",
             Modifier.toggleable(value = appearance.wallpaperColors, role = Role.Switch,
               onValueChange = { feedback("tap"); appearance.setWallpaperColors(it) })
-          ) { Switch(checked = appearance.wallpaperColors, onCheckedChange = null) }
+          ) { Switch(checked = appearance.wallpaperColors, onCheckedChange = null, colors = knockerSwitchColors()) }
         }
         SettingsSection("Connection")
         SettingsRow(Icons.Default.Sync, "Check connection status", "Connection checks use only your configured Knocker servers.",
@@ -66,16 +69,16 @@ internal fun NativeSettings(snackbar: SnackbarHostState, onBack: () -> Unit, onR
 }
 
 @Composable
-private fun SettingsSection(title: String) {
+internal fun SettingsSection(title: String) {
   Text(title, Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp).semantics { heading() },
     style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
 }
 
 /** Full-width rows keep ripples edge to edge and merge their text with the row action. */
 @Composable
-private fun SettingsRow(icon: ImageVector, title: String, detail: String, modifier: Modifier = Modifier,
+internal fun SettingsRow(icon: ImageVector, title: String, detail: String?, modifier: Modifier = Modifier,
   trailing: (@Composable () -> Unit)? = null) {
-  ListItem(headlineContent = { Text(title) }, supportingContent = { Text(detail) },
+  ListItem(headlineContent = { Text(title) }, supportingContent = detail?.let { { Text(it) } },
     leadingContent = { Icon(icon, null) }, trailingContent = trailing,
     colors = ListItemDefaults.colors(containerColor = Color.Transparent), modifier = modifier.fillMaxWidth())
 }

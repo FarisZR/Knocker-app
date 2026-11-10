@@ -90,14 +90,20 @@ object KnockerHttp {
         ttlCapped = requestedTtl != null && seconds != null && seconds > 0 && seconds < requestedTtl.toLong() - 5L
       )
     } catch (error: Exception) {
-      val message = when (error) {
-        is java.net.SocketTimeoutException -> "Network timeout"
-        else -> error.message ?: "Network error"
-      }
-      KnockOutcome.Failure(null, message)
+      KnockOutcome.Failure(null, describeFailure(error))
     } finally {
       connection?.disconnect()
     }
+  }
+
+  /** Exception messages name hosts and errno text; cards and notifications need a plain reason. */
+  internal fun describeFailure(error: Throwable): String = when (error) {
+    is java.net.SocketTimeoutException -> "Network timeout"
+    is java.net.UnknownHostException -> "Can't reach server. Check the address and your connection."
+    is java.net.ConnectException, is java.net.NoRouteToHostException -> "Can't connect to server"
+    is javax.net.ssl.SSLException -> "Secure connection failed"
+    is java.io.IOException -> "Connection problem. Try again."
+    else -> "Network error"
   }
 
   /** Consumes and closes a response stream, treating empty payloads as absent. */
