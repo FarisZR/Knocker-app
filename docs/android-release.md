@@ -27,7 +27,7 @@ Signed builds fail if signing or Sentry upload credentials are missing, or sourc
 
 ## Privacy policy and crash reports
 
-The public privacy policy lives in [`remal-net/terms.remal.org`](https://github.com/remal-net/terms.remal.org) (`content/knocker/privacy-policy.md`) and is served at **https://terms.remal.org/knocker/privacy-policy/**. Use that URL for the Play listing; the app links to the same address under **Settings → About** (`PRIVACY_POLICY_URL` in `AboutInfo.kt`). Change the policy and the app together: it states what Sentry receives, and the 30-day retention of the current Sentry plan. The app leaves Android's default backup on, which the policy discloses.
+The public privacy policy lives in [`remal-net/terms.remal.org`](https://github.com/remal-net/terms.remal.org) (`content/knocker/privacy-policy.md`) and is served at **https://terms.remal.org/knocker/privacy-policy/**. Use that URL for the Play listing; the app links to the same address under **Settings → About** (`PRIVACY_POLICY_URL` in `AboutInfo.kt`). Change the policy and the app together: it states what Sentry receives, the 30-day retention of the current Sentry plan, and that the app opts out of Android backup.
 
 **Settings → Crash reports** turns Sentry off. Reporting is on by default. `Sentry.init` runs only when the stored choice allows it (`isDiagnosticsEnabled()` in `app/_layout.tsx`); the native SDK has `io.sentry.auto-init=false`, so no Sentry code starts otherwise. Turning it off also calls `Sentry.close()`; turning it on applies after a restart. Server-side, keep **Prevent Storing of IP Addresses** and data scrubbing enabled for the organization, since the policy says they are.
 
