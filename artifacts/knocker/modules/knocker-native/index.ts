@@ -54,6 +54,8 @@ interface KnockerNativeAndroid {
   getPendingKnockIdsJson?(): Promise<string>;
   knockProfileJson?(id: string, configuration: string): Promise<string | null>;
   getNetworkIdentity(): Promise<NativeNetworkIdentity>;
+  isDiagnosticsEnabled?(): boolean;
+  setDiagnosticsEnabled?(enabled: boolean): Promise<void>;
   syncProfiles(profilesJson: string): Promise<void>;
   getProfilesJson(): Promise<string>;
   startLaunchKnocks(): Promise<void>;
@@ -196,6 +198,27 @@ export async function openExactAlarmSettings(): Promise<void> {
 }
 
 export const TILE_SLOT_COUNT = 5;
+
+/**
+ * Whether crash reporting may start. It reads a local flag synchronously so the
+ * choice is known before Sentry initializes. Without the Android module there is
+ * no setting to honor, so reporting stays on; if the module exists but cannot
+ * answer, the user's choice is unknown and reporting stays off.
+ */
+export function isDiagnosticsEnabled(): boolean {
+  if (!native?.isDiagnosticsEnabled) return true;
+  try {
+    return native.isDiagnosticsEnabled() !== false;
+  } catch {
+    return false;
+  }
+}
+
+/** Stores the crash-report choice; rejects if it could not be saved. */
+export async function setDiagnosticsEnabled(enabled: boolean): Promise<void> {
+  if (!native?.setDiagnosticsEnabled) return;
+  await native.setDiagnosticsEnabled(enabled);
+}
 
 /** Local connection identity only: no SSID, location, public IP or network request. */
 export async function getNetworkIdentity(): Promise<NativeNetworkIdentity | null> {

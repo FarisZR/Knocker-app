@@ -28,4 +28,10 @@ class NativeUiStateTest {
     assertEquals(before, json.toString())
     assertEquals(state.profileRenderKeys, NativeUiState(JSONObject(before)).profileRenderKeys)
   }
+
+  @Test fun crashReportsStayOnUnlessTheSnapshotTurnsThemOff() {
+    assertTrue(NativeUiState().diagnosticsEnabled)
+    assertTrue(NativeUiState(JSONObject("""{"diagnosticsEnabled":true}""")).diagnosticsEnabled)
+    assertFalse(NativeUiState(JSONObject("""{"diagnosticsEnabled":false}""")).diagnosticsEnabled)
+  }
 }

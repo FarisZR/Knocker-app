@@ -228,7 +228,10 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
             onRefresh = { dispatch("refreshStatus") })
         } else if (destination == "settings") {
           NativeSettings(snackbar, onBack = { navigate("home") },
-            onRefreshStatus = { dispatch("refreshStatus") }, feedback = haptic)
+            onRefreshStatus = { dispatch("refreshStatus") },
+            diagnosticsEnabled = sceneState.diagnosticsEnabled,
+            onDiagnosticsChange = { dispatch("setDiagnostics", mapOf("enabled" to it), feedback = true) },
+            feedback = haptic)
         } else {
           NativeEditor(if (destination == "new") null else destination.removePrefix("profile:"), sceneState, snackbar, pendingOperation != null, editorError,
             onDirty = { dirty = it }, onBack = { navigate("home") },
