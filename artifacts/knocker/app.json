@@ -12,7 +12,6 @@
     },
     "android": {
       "package": "com.fariszr.knocker",
-      "allowBackup": false,
       "predictiveBackGestureEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
