@@ -21,6 +21,8 @@ SHOTS = {
     's1': '01-what-it-is.png',
     's2': '02-auto-renew.png',
     's3': '03-quick-settings.png',
+    's4': '04-notifications.png',
+    'fg': '../feature-graphic.png',
 }
 
 TABLET_OUT = OUT / 'tablet'
@@ -28,6 +30,7 @@ TABLET_SHOTS = {
     't1': '01-what-it-is.png',
     't2': '02-auto-renew.png',
     't3': '03-quick-settings.png',
+    't4': '04-notifications.png',
 }
 
 
@@ -39,7 +42,7 @@ def render(browser, shots, out, viewport, scale):
     page.wait_for_load_state('networkidle')
     for section, name in shots.items():
         page.locator(f'#{section}').screenshot(path=str(out / name))
-        print(f'rendered {out.relative_to(ROOT)}/{name}')
+        print(f'rendered {(out / name).resolve().relative_to(ROOT)}')
     page.close()
 
 

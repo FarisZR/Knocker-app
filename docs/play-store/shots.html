@@ -96,6 +96,18 @@ pre .r { color: var(--red); }
   box-shadow: 0 0 0 2400px rgba(6,6,5,.62);
 }
 .spot + .note { background: #060605; padding: 6px 10px; border-radius: 8px; }
+
+/* A tablet that continues from one shot into the next; it also runs off the bottom. */
+.tablet.pano { right: auto; top: 130px; }
+.tablet.pano .note { font-size: 30px; }
+#t4 { background: radial-gradient(1100px 820px at 30% 54%, rgba(253,229,98,.09), transparent 70%), var(--bg); }
+#t4 h1, #t4 pre { left: 1010px; }
+
+/* Feature graphic, 1024 x 500. */
+#fg { width: 1024px; height: 500px; background: radial-gradient(520px 420px at 78% 70%, rgba(253,229,98,.1), transparent 70%), var(--bg); }
+#fg h1 { left: 72px; top: 92px; font-size: 68px; }
+#fg pre { left: 72px; top: 342px; font-size: 22px; }
+#fg .phone { left: 618px; }
 </style>
 </head>
 <body>
@@ -123,17 +135,36 @@ pre .r { color: var(--red); }
   <div class="phone" style="--w:700px;top:748px"><div class="screen" style="--img:url(source/renew.png)"></div></div>
 </section>
 
-<!-- 3. Quick Settings tile and the result notification -->
+<!-- 3. Quick Settings tile -->
 <section class="shot" id="s3">
   <h1>Knock without<br><em>opening the app.</em></h1>
 <pre style="top:366px">
 <b>tile  </b>   one per server, in Quick Settings
 <b>tap   </b>   knocks in the background
-<b>notice</b>   tells you when you're in</pre>
+<b>label </b>   shows the time you have left</pre>
   <div class="phone" style="--w:700px;top:600px"><div class="screen" style="--img:url(source/tile.png)">
     <div class="note" style="left:368px;top:707px">◀── one tap</div>
   </div></div>
-  <div class="card" style="left:72px;top:1500px"><div class="crop" style="--img:url(source/notification.png);--cx:42;--cy:1122;--cw:996;--ch:304;--s:.94"></div></div>
+</section>
+
+<!-- 4. Result notifications -->
+<section class="shot" id="s4">
+  <h1>Every knock<br><em>reports back.</em></h1>
+<pre style="top:366px">
+<b>manual   </b>   knocks from the tile
+<b>automatic</b>   renewals and network changes
+<b>silent   </b>   no sound, no pop-up</pre>
+  <div class="phone" style="--w:700px;top:600px"><div class="screen" style="--img:url(source/notification.png)">
+    <div style="position:absolute;left:22px;top:722px;width:656px;height:206px;border-radius:26px 26px 6px 6px;box-shadow:0 0 0 3px var(--yl)"></div>
+  </div></div>
+</section>
+
+<!-- Feature graphic -->
+<section class="shot" id="fg">
+  <h1>Your homelab,<br>locked until<br><em>you knock.</em></h1>
+<pre>
+<b>knock</b> → <b>allowed</b> → <b>expires</b></pre>
+  <div class="phone" style="--w:330px;top:64px"><div class="screen" style="--img:url(source/home.png)"></div></div>
 </section>
 
 <!-- Tablet 1. What Knocker is: home across the whole window, actions in the corner -->
@@ -162,16 +193,26 @@ pre .r { color: var(--red); }
   </div></div>
 </section>
 
-<!-- Tablet 3. Quick Settings tile with its result notification beside it -->
+<!-- Tablet 3 and 4 are one panorama: a large tablet runs across the seam, so 3 shows the
+     Quick Settings half of the shade and 4 continues with the notification half. -->
 <section class="tshot" id="t3">
   <h1>Knock without<br><em>opening<br>the app.</em></h1>
 <pre style="top:476px">
 <b>tile  </b>   one per server, in Quick Settings
 <b>tap   </b>   knocks in the background
-<b>notice</b>   tells you when you're in</pre>
-  <div class="tablet" style="--w:1036px"><div class="screen" style="--img:url(source/tablet-tile.png)">
-    <div class="note" style="left:398px;top:372px">▲ one tap</div>
+<b>label </b>   shows the time you have left</pre>
+  <div class="tablet pano" style="--w:1700px;left:1058px"><div class="screen" style="--img:url(source/tablet-tile.png)">
+    <div class="note" style="left:553px;top:552px">▲ one tap</div>
   </div></div>
+</section>
+
+<section class="tshot" id="t4">
+  <h1>Every knock<br><em>reports back.</em></h1>
+<pre style="top:476px">
+<b>manual   </b>   knocks from the tile
+<b>automatic</b>   renewals and network changes
+<b>silent   </b>   no sound, no pop-up</pre>
+  <div class="tablet pano" style="--w:1700px;left:-862px"><div class="screen" style="--img:url(source/tablet-tile.png)"></div></div>
 </section>
 
 </body>

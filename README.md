@@ -18,11 +18,13 @@ The Android client for [Knocker](https://github.com/FarisZR/knocker).
 <br>
 
 <p align="center">
-  <img src="docs/play-store/screenshots/01-what-it-is.png" alt="Home screen: a whitelisted server with a Renew button and a Knock all action" width="30%">
+  <img src="docs/play-store/screenshots/01-what-it-is.png" alt="Home screen: a whitelisted server with a Renew button and a Knock all action" width="23%">
   &nbsp;
-  <img src="docs/play-store/screenshots/02-auto-renew.png" alt="Profile editor with Auto-renew switched on" width="30%">
+  <img src="docs/play-store/screenshots/02-auto-renew.png" alt="Profile editor with Auto-renew switched on" width="23%">
   &nbsp;
-  <img src="docs/play-store/screenshots/03-quick-settings.png" alt="Knocker tile in Quick Settings with a result notification" width="30%">
+  <img src="docs/play-store/screenshots/03-quick-settings.png" alt="Knocker tile in Quick Settings" width="23%">
+  &nbsp;
+  <img src="docs/play-store/screenshots/04-notifications.png" alt="Knock result notification in the notification shade" width="23%">
 </p>
 
 ## Features
@@ -51,7 +53,7 @@ Knocker only talks to the servers you add. Crash reporting is on by default and 
 
 <img src="docs/play-store/screenshots/tablet/01-what-it-is.png" alt="Tablet home screen showing five whitelisted servers in columns">
 <img src="docs/play-store/screenshots/tablet/02-auto-renew.png" alt="Tablet profile list beside an open profile with Auto-renew highlighted">
-<img src="docs/play-store/screenshots/tablet/03-quick-settings.png" alt="Tablet split shade with the Knocker tile and a result notification">
+<img src="docs/play-store/screenshots/tablet/03-quick-settings.png" alt="Left half of the tablet shade with the Knocker tile in Quick Settings" width="49.5%"><img src="docs/play-store/screenshots/tablet/04-notifications.png" alt="Right half of the tablet shade with the knock result notification" width="49.5%">
 
 </details>
 
