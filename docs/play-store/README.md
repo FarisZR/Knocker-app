@@ -12,12 +12,11 @@ The three 1080 × 1920 PNGs in `screenshots/`:
 
 ## 10-inch tablet
 
-The four 2560 × 1440 PNGs in `screenshots/tablet/`. Play asks for 16:9 landscape or 9:16 portrait with every side between 1,080 and 7,680 px, and recommends at least four tablet screenshots. Upload the same set for 7-inch tablets if that slot is used. The set shows both tablet layouts: home across the whole window when nothing is open, and the profile list beside an open profile or Settings.
+The three 2560 × 1440 PNGs in `screenshots/tablet/`, matching the three phone shots. Play asks for 16:9 landscape or 9:16 portrait with every side between 1,080 and 7,680 px. It recommends at least four tablet screenshots, so add a fourth here if large-screen promotion matters. Upload the same set for 7-inch tablets if that slot is used. The set shows both tablet layouts: home across the whole window when nothing is open, and the profile list beside an open profile.
 
 1. `01-what-it-is.png`: the pitch and the three steps of a knock, over the full-window home: five whitelisted servers in columns, with Knock all and the pinned knock in the bottom-right corner.
 2. `02-auto-renew.png`: the auto-renew story, with the Auto-renew switch spotlit in Home server's open profile. Home server (auto-renew on) has knocked again from the new address `198.51.100.7`. In the dimmed list, NAS (auto-renew off) still holds its old grant and shows the amber "IP changed · not whitelisted" footer.
 3. `03-quick-settings.png`: the tablet's split shade. The Knocker tile is in Quick Settings and its result notification sits beside it.
-4. `04-your-rules.png`: light theme with Settings open: Android light/dark, Knocker yellow or wallpaper colors, opt-in crash reports and the source link.
 
 ## Artwork
 
@@ -29,9 +28,9 @@ Everything is laid out in `shots.html` and screenshotted by `render.py` with hea
 
 Phone sources: `home.png` and `renew.png` show the native Compose design (top-bar New profile action, list-row editor with the floating Save action). `tile.png` and `notification.png` are system UI and did not change with that redesign. Recapture `home.png` and `renew.png` whenever the home screen or profile editor changes.
 
-Tablet sources: `tablet-home.png`, `tablet-renew.png`, `tablet-tile.png` and `tablet-settings-light.png`. Recapture them whenever the list, editor or Settings changes. They were captured with:
+Tablet sources: `tablet-home.png`, `tablet-renew.png` and `tablet-tile.png`. Recapture them whenever the home screen or profile editor changes. They were captured with:
 
-- the `Knocker_Tablet_API36` AVD (`pixel_tablet`, Android 16), in dark mode except the Settings capture;
+- the `Knocker_Tablet_API36` AVD (`pixel_tablet`, Android 16), in dark mode;
 - SystemUI demo mode with the clock at 9:05, a full battery, Wi-Fi only and status icons hidden;
 - the system palette seeded with Knocker yellow (`FDE562`), so the Quick Settings shade matches the listing;
 - the Knocker tile resized to its large, labelled form, and the emulator's "Serial console enabled" notice snoozed;
