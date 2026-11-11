@@ -2,6 +2,8 @@ name: Android CI and release
 
 on:
   push:
+    # PRs already validate feature branches; keep signed builds on main.
+    branches: [main]
   pull_request:
   release:
     types: [published]
@@ -34,7 +36,8 @@ permissions:
 concurrency:
   # Serialize build + submission across release and dispatch triggers.
   group: ${{ (github.event_name == 'release' || inputs.publish == true) && 'android-play-publishing' || format('android-{0}-{1}', github.event_name, github.ref) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Superseded CI builds can stop; publishing must always finish.
+  cancel-in-progress: ${{ github.event_name != 'release' && inputs.publish != true }}
 
 jobs:
   build:
@@ -46,6 +49,8 @@ jobs:
     env:
       CI: 'true'
       EXPO_NO_TELEMETRY: '1'
+      # Exercise release packaging on PRs without compiling C++ for every ABI.
+      ANDROID_ARCHITECTURES: ${{ github.event_name == 'pull_request' && 'arm64-v8a' || 'arm64-v8a,armeabi-v7a,x86_64' }}
       KNOCKER_SIGN_RELEASE: ${{ github.event_name != 'pull_request' }}
       KNOCKER_ALLOW_DEBUG_SIGNING: ${{ github.event_name == 'pull_request' }}
       STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -92,10 +97,12 @@ jobs:
         run: pnpm --filter @workspace/knocker android:prebuild
       - name: Native tests and UI test compilation
         working-directory: artifacts/knocker/android
-        run: ./gradlew :knocker-native:testDebugUnitTest :knocker-native:compileDebugAndroidTestKotlin --console=plain --max-workers=2
+        run: ./gradlew :knocker-native:testDebugUnitTest :knocker-native:compileDebugAndroidTestKotlin -PreactNativeArchitectures="$ANDROID_ARCHITECTURES" --build-cache --console=plain --max-workers=2
       - name: Build APK and AAB with embedded JavaScript and Sentry source maps
         working-directory: artifacts/knocker/android
-        run: ./gradlew :app:assembleRelease :app:bundleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64 --console=plain --max-workers=2
+        run: ./gradlew :app:assembleRelease :app:bundleRelease -PreactNativeArchitectures="$ANDROID_ARCHITECTURES" --build-cache --console=plain --max-workers=2
+      - name: Native compiler cache statistics
+        run: ccache --show-stats
       - name: Verify signed artifacts
         run: bash scripts/verify-android.sh
       - uses: actions/upload-artifact@v4

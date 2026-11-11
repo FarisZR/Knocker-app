@@ -19,5 +19,31 @@ runs:
         packages: platform-tools build-tools;37.0.0
         log-accepted-android-sdk-licenses: false
     - uses: gradle/actions/setup-gradle@v4
+      with:
+        # GitHub scopes PR writes to refs/pull/<number>/merge, so updates on the
+        # same PR can reuse task outputs without changing the main branch cache.
+        cache-read-only: false
+    - name: Install native compiler cache
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install --yes --no-install-recommends ccache
+        # React Native's CMake project automatically uses ccache from PATH.
+        # Hash the compiler contents because SDK timestamps change on fresh runners.
+        echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+        echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+        echo "CCACHE_COMPILERCHECK=content" >> "$GITHUB_ENV"
+        echo "CCACHE_MAXSIZE=1G" >> "$GITHUB_ENV"
+    - uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/ccache
+        # Ccache validates source, flags, headers and target ABI itself. A fresh
+        # key lets each successful run contribute newly compiled objects.
+        key: ${{ runner.os }}-${{ runner.arch }}-android-ccache-v1-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-android-ccache-v1-${{ hashFiles('pnpm-lock.yaml') }}-
+    - name: Reset native compiler cache statistics
+      shell: bash
+      run: ccache --zero-stats
     - shell: bash
       run: pnpm install --frozen-lockfile
