@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -8,8 +8,7 @@ const script = resolve('scripts/android-metadata.mjs');
 /** Exercise metadata generation in an isolated workspace and remove generated files. */
 function run(overrides) {
   const cwd = mkdtempSync(join(tmpdir(), 'knocker-version-'));
-  mkdirSync(join(cwd, 'artifacts/knocker'), { recursive: true });
-  writeFileSync(join(cwd, 'artifacts/knocker/app.json'), JSON.stringify({ expo: { version: '1.0.0' } }));
+  writeFileSync(join(cwd, 'app.json'), JSON.stringify({ expo: { version: '1.0.0' } }));
   const output = join(cwd, 'output');
   const envFile = join(cwd, 'env');
   const result = spawnSync(process.execPath, [script], {

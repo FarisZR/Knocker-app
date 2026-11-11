@@ -36,7 +36,7 @@ Tablet sources: `tablet-home.png`, `tablet-renew.png` and `tablet-tile.png`. Rec
 - the Knocker tile resized to its large, labelled form, and the emulator's "Serial console enabled" notice snoozed;
 - exact-alarm access allowed, so the editor does not show the "Allow precise renewal" prompt.
 
-Both fonts are vendored in `fonts/` under the SIL OFL 1.1. Addresses come from the documentation ranges (`203.0.113.42`, `198.51.100.7`). The capture profiles used a temporary demo server, so its hostname is not a production endpoint. For the tablet set, `artifacts/knocker/scripts/network-test-server.mjs` was adapted to keep one grant per endpoint path, which gives each profile an independent state. Only these two documentation addresses appear in the captures; the fixture reports them in place of the caller's real address.
+Both fonts are vendored in `fonts/` under the SIL OFL 1.1. Addresses come from the documentation ranges (`203.0.113.42`, `198.51.100.7`). The capture profiles used a temporary demo server, so its hostname is not a production endpoint. For the tablet set, `scripts/network-test-server.mjs` was adapted to keep one grant per endpoint path, which gives each profile an independent state. Only these two documentation addresses appear in the captures; the fixture reports them in place of the caller's real address.
 
 ## Regenerating
 

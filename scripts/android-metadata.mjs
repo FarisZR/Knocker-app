@@ -1,7 +1,7 @@
 import { readFileSync, appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const env = process.env;
-const base = JSON.parse(readFileSync('artifacts/knocker/app.json')).expo;
+const base = JSON.parse(readFileSync('app.json')).expo;
 const version = env.RELEASE_TAG ? env.RELEASE_TAG.replace(/^v/, '') : env.INPUT_VERSION || base.version;
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error('Use a release tag like v1.0.0 or v1.0.0-beta.1');
 // This workflow owns the sequence. Re-running the same run rebuilds the same version.
