@@ -9,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -50,11 +49,12 @@ internal fun NativeSettings(snackbar: SnackbarHostState, onBack: () -> Unit, onR
   val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
   Scaffold(
     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+    containerColor = detailContainerColor(),
     topBar = {
-      TopAppBar(title = { Text("Settings") }, scrollBehavior = scrollBehavior,
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
+      TopAppBar(title = { Text("Settings") }, scrollBehavior = scrollBehavior, colors = detailBarColors(),
+        navigationIcon = { DetailNavigationIcon(onBack) })
     },
-    snackbarHost = { SnackbarHost(snackbar) }
+    snackbarHost = { DetailSnackbarHost(snackbar) }
   ) { padding ->
     Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
       Column(Modifier.widthIn(max = 840.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
