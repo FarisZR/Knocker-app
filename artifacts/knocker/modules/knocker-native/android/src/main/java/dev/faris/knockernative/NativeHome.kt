@@ -12,16 +12,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -127,10 +130,15 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, openD
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refreshing = true; onRefresh() },
       modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
       val contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = clearance)
+      // Opening or closing a profile swaps the grid and the list. Both start from the
+      // first card on screen, so a scrolled-to profile does not jump out of view.
+      var firstShown by rememberSaveable { mutableIntStateOf(0) }
       if (grid) {
+        val gridState = rememberLazyStaggeredGridState(initialFirstVisibleItemIndex = firstShown)
+        LaunchedEffect(gridState) { snapshotFlow { gridState.firstVisibleItemIndex }.collect { firstShown = it } }
         // A tablet's whole window lays cards out in columns instead of one stretched list.
         LazyVerticalStaggeredGrid(StaggeredGridCells.Adaptive(GRID_CARD_MIN_WIDTH),
-          Modifier.widthIn(max = GRID_MAX_WIDTH).fillMaxSize(), contentPadding = contentPadding,
+          Modifier.widthIn(max = GRID_MAX_WIDTH).fillMaxSize(), gridState, contentPadding = contentPadding,
           verticalItemSpacing = 12.dp, horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
           if (!state.loaded) item(span = StaggeredGridItemSpan.FullLine) {
@@ -140,15 +148,29 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, openD
             Box(Modifier.animateItem()) { NativeProfileCard(profile, state, now, false, onOpen, onKnock) }
           }
         }
-      } else LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize(), contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-      ) {
-        if (!state.loaded) item {
-          LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading profiles" })
+      } else {
+        val listState = rememberLazyListState(initialFirstVisibleItemIndex = firstShown)
+        LaunchedEffect(listState) { snapshotFlow { listState.firstVisibleItemIndex }.collect { firstShown = it } }
+        // The profile open beside the list scrolls fully into view, above the floating actions.
+        val openIndex = state.profiles.indexOfFirst { openDetail == "profile:${it.optString("id")}" }
+        LaunchedEffect(openIndex) {
+          if (openIndex < 0) return@LaunchedEffect
+          val info = snapshotFlow { listState.layoutInfo }.first { it.totalItemsCount > openIndex }
+          val card = info.visibleItemsInfo.firstOrNull { it.index == openIndex }
+          val bottom = info.viewportEndOffset - info.afterContentPadding
+          if (card == null || card.offset < info.viewportStartOffset || card.offset + card.size > bottom)
+            listState.animateScrollToItem(openIndex)
         }
-        itemsIndexed(state.profiles, key = { index, _ -> state.profileRenderKeys[index] }) { _, profile ->
-          Box(Modifier.animateItem()) {
-            NativeProfileCard(profile, state, now, openDetail == "profile:${profile.optString("id")}", onOpen, onKnock)
+        LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize(), listState, contentPadding = contentPadding,
+          verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+          if (!state.loaded) item {
+            LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading profiles" })
+          }
+          itemsIndexed(state.profiles, key = { index, _ -> state.profileRenderKeys[index] }) { _, profile ->
+            Box(Modifier.animateItem()) {
+              NativeProfileCard(profile, state, now, openDetail == "profile:${profile.optString("id")}", onOpen, onKnock)
+            }
           }
         }
       }

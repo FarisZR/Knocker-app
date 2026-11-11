@@ -468,6 +468,22 @@ class NativeAppTest {
     assertTrue("Knock all must return to the window's corner", knockAllInset() < 40f)
   }
 
+  @Test fun aProfileOpenedFromAScrolledGridStaysInViewBesideIt() {
+    tablet(mutableStateOf(NativeUiState(loaded().json.apply {
+      val profiles = getJSONArray("profiles")
+      for (n in 1..12) profiles.put(JSONObject("""{"id":"p$n","name":"Server $n","endpointUrl":"https://s$n.example.test",
+        "apiKey":"fake-key","autoRenew":false,"knockOnOpen":false,"pinnedToHome":false}"""))
+    })))
+    compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription("Profile Server 12"))
+    compose.onNodeWithContentDescription("Edit Server 12").performClick()
+    compose.onNodeWithText("Name").assertTextContains("Server 12")
+    // The narrower list beside the editor scrolls to the open profile.
+    compose.onNodeWithContentDescription("Profile Server 12").assertIsDisplayed().assertIsSelected()
+    // Closing it returns to the grid near the same profiles, not to the top.
+    compose.onNodeWithContentDescription("Close").performClick()
+    compose.onNodeWithContentDescription("Profile Server 12").assertIsDisplayed()
+  }
+
   @Test fun switchingProfilesBesideAnUnsavedDraftAsksFirst() {
     tablet(mutableStateOf(twoProfiles()))
     compose.onNodeWithContentDescription("Edit Home server").performClick()
