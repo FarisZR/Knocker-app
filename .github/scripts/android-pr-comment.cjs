@@ -19,8 +19,11 @@ module.exports = async function commentAndroidApk({ github, context, core }) {
   const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
     ...repo, run_id: run.id, per_page: 100,
   });
-  const artifact = artifacts.find((item) =>
-    item.name === `knocker-apk-${run.run_number}` && !item.expired);
+  // Reruns can retain multiple artifacts with the same name. API ordering must
+  // not determine which attempt reviewers download.
+  const artifact = artifacts
+    .filter((item) => item.name === `knocker-apk-${run.run_number}` && !item.expired)
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id - a.id)[0];
   if (!artifact) {
     core.info('No downloadable APK artifact found.');
     return;

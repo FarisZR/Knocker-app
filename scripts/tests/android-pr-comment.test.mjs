@@ -8,7 +8,7 @@ import commentAndroidApk from '../../.github/scripts/android-pr-comment.cjs';
 function fixture() {
   const state = {
     run: { id: 100, run_number: 44, run_attempt: 1, event: 'pull_request', status: 'completed', conclusion: 'success', head_sha: 'abc123', pull_requests: [{ number: 23 }] },
-    artifacts: [{ id: 42, name: 'knocker-apk-44', expired: false, expires_at: '2026-11-25T12:00:00Z' }],
+    artifacts: [{ id: 42, name: 'knocker-apk-44', expired: false, created_at: '2026-11-11T12:00:00Z', expires_at: '2026-11-25T12:00:00Z' }],
     pr: { number: 23, state: 'open', head: { sha: 'abc123' }, base: { repo: { id: 7 } } },
     associated: [{ number: 23 }], comments: [], writes: [], lookups: [],
   };
@@ -107,4 +107,21 @@ test('a successful newer rerun refreshes the same comment', async () => {
   await f.run();
   assert.equal(f.state.writes[0].action, 'update');
   assert.match(f.state.writes[0].body, /knocker-apk-run:100:2/);
+});
+
+test('reruns link the newest matching unexpired artifact regardless of API ordering', async () => {
+  for (const newestFirst of [false, true]) {
+    const f = fixture();
+    const original = f.state.artifacts[0];
+    const latest = { ...original, id: 43, created_at: '2026-11-11T13:00:00Z' };
+    f.state.artifacts = [original, latest];
+    if (newestFirst) f.state.artifacts.reverse();
+    f.state.artifacts.push(
+      { ...original, id: 44, created_at: '2026-11-11T14:00:00Z', expired: true },
+      { ...original, id: 45, created_at: '2026-11-11T15:00:00Z', name: 'knocker-apk-43' },
+    );
+    await f.run();
+    assert.equal(f.state.writes.length, 1);
+    assert.match(f.state.writes[0].body, /\/artifacts\/43\)/);
+  }
 });
