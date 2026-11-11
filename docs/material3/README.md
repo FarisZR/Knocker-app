@@ -106,11 +106,30 @@ Captures: `server-status-uncovered.png`, `server-status-covered.png` and
 `network-renewal-permission.png`. Obsolete settings captures were removed with the old
 external IP lookup UI.
 
+## Tablets, foldables and large windows
+
+Windows at least 720 dp wide and 480 dp tall use the Material list-detail layout. That covers tablets in both orientations, unfolded foldables, desktop windows and wide split-screen. Home is the list pane; a profile, New profile and Settings open in the detail pane beside it. Before anything is open, the detail pane shows a short placeholder with a New profile action. Phones, including landscape (under 480 dp tall), keep the single full-width page and its slide transitions unchanged.
+
+The layout is `ListDetailSceneStrategy` from `androidx.compose.material3.adaptive:adaptive-navigation3` 1.3.0, inside the existing Navigation 3 `NavDisplay`. `AdaptiveLayout.kt` derives the pane directive from the window size. The list is a phone-width pane: 360 dp, or 412 dp on windows at least 1000 dp wide. Panes sit side by side only, never stacked, and avoid a separating hinge.
+
+- **Panes.** The detail pane is a rounded `surfaceContainerLow` container with 24 dp spacing from the list. The container consumes the window insets it touches, so the app bar and form inside it do not pad for the status bar twice. The keyboard inset still applies.
+- **Selection.** The list outlines the open profile in the primary color: yellow in dark mode, near-black in light. The New profile and Settings actions turn tonal while their destination is open. Each also reports its selected state to accessibility services.
+- **Detail chrome.** A detail closes in place with a Close icon instead of Back. Snackbars appear once, in the list pane above Knock all, instead of once per pane.
+- **Back.** System Back closes the detail pane through the same `navigate()` path as before, which still asks before discarding an unsaved draft. The adaptive library's default back policy would have skipped the detail pane and left the app.
+- **Editor columns.** When the editor has at least 720 dp, as in a landscape tablet's detail pane or a landscape phone, it sets the server fields beside target, automation and shortcuts. Narrower windows keep one column.
+- **Drafts across layout changes.** Folding, unfolding or resizing between one and two panes moves the editor into another navigation scene, which discards state remembered inside it. Unsaved drafts now live in `EditorDrafts` above navigation, in memory only, because a draft can hold an API key. Navigating to another route clears them.
+
+Validation: five new Compose tests in `NativeAppTest.kt` force a 1280 × 800 dp window. They cover the list beside an open profile, switching profiles beside an unsaved draft, Settings and New profile as details, a single snackbar, and a draft surviving fold and unfold. The fold test fails with the draft fix removed. All 37 device tests (25 Compose/navigation and 12 worker) pass on the Android 16 phone emulator, as do 24 JVM tests and 66 JavaScript tests. Module lint reports the same five errors as before, in unchanged notification and tile files.
+
+The optimized release APK was also checked on a Pixel Tablet AVD in landscape and portrait, and on a Pixel 9 Pro Fold AVD. On the foldable, an unsaved draft survived folding to the outer screen and unfolding again. Captures: `adaptive-tablet-portrait.png`, `adaptive-foldable-unfolded.png`; the landscape tablet captures are the Play listing sources in `docs/play-store/source/`.
+
 ## References
 
 - [Native Material cards and elevation](https://developer.android.com/develop/ui/compose/components/card)
 - [Material 3 Expressive guide](https://m3.material.io/blog/building-with-m3-expressive)
 - [Navigation 3 setup](https://developer.android.com/guide/navigation/navigation-3/get-started)
+- [Material list-detail with Navigation 3](https://developer.android.com/guide/navigation/navigation-3/recipes/material-listdetail)
+- [Adaptive app quality guidelines](https://developer.android.com/docs/quality-guidelines/adaptive-app-quality)
 - [Navigation 3 releases](https://developer.android.com/jetpack/androidx/releases/navigation3)
 - [Material 3 releases](https://developer.android.com/jetpack/androidx/releases/compose-material3)
 - [Android action-oriented haptic feedback](https://developer.android.com/develop/ui/views/haptics/haptic-feedback)

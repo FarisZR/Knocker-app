@@ -17,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +33,28 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 
+/**
+ * Unsaved editor state. Folding, unfolding or resizing between one and two panes moves
+ * the editor into another navigation scene, which discards state remembered inside it,
+ * so NativeApp holds drafts above navigation instead. They stay in memory only: a draft
+ * can hold an API key, which must not be written into a saved-state Bundle.
+ */
+internal class EditorDraft(initial: ProfileForm) {
+  var baseline by mutableStateOf(initial)
+  var draft by mutableStateOf(initial)
+  var showKey by mutableStateOf(false)
+  var attempted by mutableStateOf(false)
+}
+
+/** Drafts for the open editor route; navigation to any other route clears them. */
+internal class EditorDrafts {
+  private val drafts = HashMap<String?, EditorDraft>()
+  fun get(id: String?, initial: () -> ProfileForm): EditorDraft = drafts.getOrPut(id) { EditorDraft(initial()) }
+  fun clear() = drafts.clear()
+}
+
+internal val LocalEditorDrafts = staticCompositionLocalOf<EditorDrafts?> { null }
+
 /** System permission prompts leave the app's window; tests of the editor itself turn them off. */
 internal val LocalSystemPrompts = staticCompositionLocalOf { true }
 
@@ -47,15 +68,18 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
     // Restored routes can outlive their profile. Never turn one into a new draft,
     // and let a deletion's acknowledgement arrive before leaving its route.
     if (state.loaded && !saving) LaunchedEffect(id) { onDirty(false); onBack() }
-    Scaffold(topBar = { TopAppBar(title = { Text(if (id == null) "New profile" else "Edit profile") }) }) { padding ->
+    Scaffold(containerColor = detailContainerColor(),
+      topBar = { TopAppBar(title = { Text(if (id == null) "New profile" else "Edit profile") }, colors = detailBarColors()) }) { padding ->
       Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     }
     return
   }
-  var baseline by remember(id) { mutableStateOf(current ?: ProfileForm()) }
-  var draft by remember(id) { mutableStateOf(baseline) }
-  var showKey by remember(id) { mutableStateOf(false) }
-  var attempted by remember(id) { mutableStateOf(false) }
+  val drafts = LocalEditorDrafts.current ?: remember { EditorDrafts() }
+  val editor = drafts.get(id) { current ?: ProfileForm() }
+  var baseline by editor::baseline
+  var draft by editor::draft
+  var showKey by editor::showKey
+  var attempted by editor::attempted
   var confirmDelete by remember(id) { mutableStateOf(false) }
   var requestAlarmAccess by remember(id) { mutableStateOf(false) }
   // Notifications only report tile and background renewal results, so ask when either is turned on.
@@ -85,16 +109,17 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
   val inset = Modifier.padding(horizontal = 16.dp)
   Scaffold(
     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+    containerColor = detailContainerColor(),
     // Include the keyboard so the save action and messages stay above it.
     contentWindowInsets = ScaffoldDefaults.contentWindowInsets.union(WindowInsets.ime),
     topBar = {
       TopAppBar(title = { Text(if (id == null) "New profile" else "Edit profile") }, scrollBehavior = scrollBehavior,
-        navigationIcon = { IconButton(onClick = onBack, enabled = !saving) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+        colors = detailBarColors(), navigationIcon = { DetailNavigationIcon(onBack, enabled = !saving) },
         actions = {
           if (id != null) IconButton(onClick = { confirmDelete = true }, enabled = !saving) { Icon(Icons.Default.DeleteOutline, "Delete profile") }
         })
     },
-    snackbarHost = { SnackbarHost(snackbar) },
+    snackbarHost = { DetailSnackbarHost(snackbar) },
     // The primary action sits where home keeps Knock all: bottom right, under the thumb.
     floatingActionButton = {
       Button(onClick = ::save, enabled = dirty && !saving, shapes = ButtonDefaults.shapes(),
@@ -111,8 +136,11 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
       }
     }
   ) { padding ->
-    Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
-      Column(Modifier.widthIn(max = 840.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+    // Wide panes and landscape windows set the server fields beside its options instead of
+    // stretching one column across the window. Narrow windows keep a single column.
+    BoxWithConstraints(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+      val columns = maxWidth >= EDITOR_COLUMNS_MIN_WIDTH
+      val server: @Composable ColumnScope.() -> Unit = {
         if (error != null) Text(error, inset.padding(top = 16.dp), color = MaterialTheme.colorScheme.error)
         SettingsSection("Server")
         Column(inset, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -131,6 +159,8 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
           NativeField("TTL (seconds)", draft.ttl, { change(draft.copy(ttl = it.filter(Char::isDigit))) }, saving,
             if (attempted) errors["ttl"] else null, KeyboardType.Number, emptyHint = "Leave empty to use the server default")
         }
+      }
+      val options: @Composable ColumnScope.() -> Unit = {
         SettingsSection("Whitelist target")
         NativeSwitchRow(Icons.Default.Public, "Whitelist a different IP/CIDR", "Requires allow_remote_whitelist on the API key", draft.remote, !saving) {
           feedback("tap"); change(draft.copy(remote = it))
@@ -175,6 +205,12 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
               label = { Text(if (slot == null) "Off" else if (owner != null) "$slot · ${owner.optString("name")}" else "Slot $slot") })
           }
         }
+      }
+      Column(Modifier.widthIn(max = if (columns) 1040.dp else 840.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+        if (columns) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          Column(Modifier.weight(1f), content = server)
+          Column(Modifier.weight(1f), content = options)
+        } else { server(); options() }
         // Clear the floating save action at the end of the scroll.
         Spacer(Modifier.height(112.dp))
       }
@@ -185,6 +221,8 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
     confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete(draft.id) }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
     dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } })
 }
+
+private val EDITOR_COLUMNS_MIN_WIDTH = 720.dp
 
 /** Exact alarms require an explicit user grant; renewal can still use the inexact fallback. */
 @Composable

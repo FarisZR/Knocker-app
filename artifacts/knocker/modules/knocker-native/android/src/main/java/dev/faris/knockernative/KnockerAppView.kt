@@ -1,4 +1,5 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class,
+  androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi::class)
 
 package dev.faris.knockernative
 
@@ -13,14 +14,20 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigationevent.NavigationEvent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.adaptive.navigation.BackNavigationBehavior
+import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -28,6 +35,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import com.facebook.react.uimanager.events.NativeGestureUtil
 import expo.modules.kotlin.AppContext
@@ -120,6 +128,7 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
   var pendingOperation by remember { mutableStateOf<String?>(null) }
   var editorError by remember { mutableStateOf<String?>(null) }
   var pendingTile by remember { mutableStateOf<Int?>(null) }
+  val drafts = remember { EditorDrafts() }
   val context = LocalContext.current
 
   fun navigate(next: String) {
@@ -129,6 +138,7 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
       return
     }
     editorError = null
+    if (next != route) drafts.clear()
     route = next
   }
   // Haptics mark knocks, toggles and results; plain navigation stays silent like system apps.
@@ -188,59 +198,82 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
   }
   BackHandler(enabled = route != "home" && (dirty || pendingOperation != null)) { navigate("home") }
 
-  NavDisplay(
-    backStack = if (route == "home") listOf("home") else listOf("home", route),
-    modifier = Modifier.fillMaxSize(),
-    onBack = { navigate("home") },
-    // Screens slide like pages. During a back swipe the page follows the finger
-    // toward the far edge and only leaves once the gesture is confirmed.
-    transitionSpec = {
-      ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { it }, slideOutHorizontally(tween(PAGE_MILLIS)) { -it / 4 })
-    },
-    popTransitionSpec = {
-      ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { -it / 4 }, slideOutHorizontally(tween(PAGE_MILLIS)) { it },
-        targetContentZIndex = -1f)
-    },
-    predictivePopTransitionSpec = { edge ->
-      val direction = if (edge == NavigationEvent.EDGE_RIGHT) -1 else 1
-      ContentTransform(slideInHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { -direction * it / 4 },
-        slideOutHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { direction * it }, targetContentZIndex = -1f)
-    },
-    entryProvider = { destination ->
-      NavEntry(destination) {
-        val sceneState = latestState.value
-        if (sceneState.fatal != null) {
-          Scaffold(topBar = { TopAppBar(title = { Text("Knocker") }) }) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-              Text("Unable to open Knocker", style = MaterialTheme.typography.headlineSmall)
-              Text(sceneState.fatal)
-              Button(onClick = { dispatch("restart") }, colors = knockerActionColors().let {
-                ButtonDefaults.buttonColors(containerColor = it.container, contentColor = it.content)
-              }) { Text("Try again") }
+  val directive = knockerPaneDirective()
+  // Retained entries read the current layout, which changes on fold, unfold or resize.
+  val twoPane by rememberUpdatedState(directive.maxHorizontalPartitions > 1)
+  // Back from a detail pane closes it through navigate(), which guards unsaved drafts.
+  // The default policy would skip it, since the list stays on screen either way, and leave the app.
+  val listDetail = rememberListDetailSceneStrategy<String>(backNavigationBehavior = BackNavigationBehavior.PopLatest,
+    directive = directive)
+  CompositionLocalProvider(LocalEditorDrafts provides drafts) {
+    NavDisplay(
+      backStack = if (route == "home") listOf("home") else listOf("home", route),
+      // Panes leave gaps between and around them; fill those with the app's own background.
+      modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+      onBack = { navigate("home") },
+      sceneStrategies = listOf(listDetail, SinglePaneSceneStrategy()),
+      // Screens slide like pages. During a back swipe the page follows the finger
+      // toward the far edge and only leaves once the gesture is confirmed. Folding,
+      // unfolding or resizing keeps the same destination and only swaps layouts.
+      transitionSpec = {
+        if (initialState.entries.last().contentKey == targetState.entries.last().contentKey)
+          ContentTransform(fadeIn(tween(PAGE_MILLIS)), fadeOut(tween(PAGE_MILLIS)))
+        else ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { it }, slideOutHorizontally(tween(PAGE_MILLIS)) { -it / 4 })
+      },
+      popTransitionSpec = {
+        ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { -it / 4 }, slideOutHorizontally(tween(PAGE_MILLIS)) { it },
+          targetContentZIndex = -1f)
+      },
+      predictivePopTransitionSpec = { edge ->
+        val direction = if (edge == NavigationEvent.EDGE_RIGHT) -1 else 1
+        ContentTransform(slideInHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { -direction * it / 4 },
+          slideOutHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { direction * it }, targetContentZIndex = -1f)
+      },
+      entryProvider = { destination ->
+        // In two panes, home is the list and every other destination opens beside it.
+        val panes = if (destination == "home") ListDetailSceneStrategy.listPane(detailPlaceholder = {
+          DetailPane(true) { NativeDetailPlaceholder(latestState.value, onNew = { navigate("new") }) }
+        }) else ListDetailSceneStrategy.detailPane()
+        NavEntry(destination, metadata = panes) {
+          DetailPane(twoPane && destination != "home") {
+            val sceneState = latestState.value
+            if (sceneState.fatal != null) {
+              Scaffold(topBar = { TopAppBar(title = { Text("Knocker") }) }) { padding ->
+                Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                  Text("Unable to open Knocker", style = MaterialTheme.typography.headlineSmall)
+                  Text(sceneState.fatal)
+                  Button(onClick = { dispatch("restart") }, colors = knockerActionColors().let {
+                    ButtonDefaults.buttonColors(containerColor = it.container, contentColor = it.content)
+                  }) { Text("Try again") }
+                }
+              }
+            } else if (destination == "home") {
+              // The list marks whatever is open beside it.
+              NativeHome(sceneState, snackbar, openDetail = route.takeIf { twoPane && it != "home" },
+                onOpen = { navigate("profile:$it") },
+                onNew = { navigate("new") },
+                onKnock = { dispatch("knock", mapOf("id" to it), feedback = true) },
+                onKnockAll = { dispatch("knockAll", feedback = true) },
+                onPreferences = { navigate("settings") },
+                onRefresh = { dispatch("refreshStatus") })
+            } else if (destination == "settings") {
+              NativeSettings(snackbar, onBack = { navigate("home") },
+                onRefreshStatus = { dispatch("refreshStatus") },
+                diagnosticsEnabled = sceneState.diagnosticsEnabled,
+                onDiagnosticsChange = { dispatch("setDiagnostics", mapOf("enabled" to it), feedback = true) },
+                feedback = haptic)
+            } else {
+              NativeEditor(if (destination == "new") null else destination.removePrefix("profile:"), sceneState, snackbar,
+                pendingOperation != null, editorError,
+                onDirty = { dirty = it }, onBack = { navigate("home") },
+                onSave = { form, tile -> operation("save", profile = form, tile = tile) },
+                onDelete = { operation("delete", id = it) }, feedback = haptic)
             }
           }
-        } else if (destination == "home") {
-          NativeHome(sceneState, snackbar, onOpen = { navigate("profile:$it") },
-            onNew = { navigate("new") },
-            onKnock = { dispatch("knock", mapOf("id" to it), feedback = true) },
-            onKnockAll = { dispatch("knockAll", feedback = true) },
-            onPreferences = { navigate("settings") },
-            onRefresh = { dispatch("refreshStatus") })
-        } else if (destination == "settings") {
-          NativeSettings(snackbar, onBack = { navigate("home") },
-            onRefreshStatus = { dispatch("refreshStatus") },
-            diagnosticsEnabled = sceneState.diagnosticsEnabled,
-            onDiagnosticsChange = { dispatch("setDiagnostics", mapOf("enabled" to it), feedback = true) },
-            feedback = haptic)
-        } else {
-          NativeEditor(if (destination == "new") null else destination.removePrefix("profile:"), sceneState, snackbar, pendingOperation != null, editorError,
-            onDirty = { dirty = it }, onBack = { navigate("home") },
-            onSave = { form, tile -> operation("save", profile = form, tile = tile) },
-            onDelete = { operation("delete", id = it) }, feedback = haptic)
         }
       }
-    }
-  )
+    )
+  }
   if (discardDestination != null) AlertDialog(
     onDismissRequest = { discardDestination = null },
     title = { Text("Discard unsaved changes?") },

@@ -2,6 +2,7 @@
 
 package dev.faris.knockernative
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.*
 import androidx.compose.animation.core.MutableTransitionState
@@ -20,10 +21,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,7 +56,7 @@ private fun grantClock(): Long {
 
 /** The native scaffold measures its action stack and places standard feedback above it. */
 @Composable
-internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpen: (String) -> Unit,
+internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, openDetail: String? = null, onOpen: (String) -> Unit,
   onNew: () -> Unit, onKnock: (String) -> Unit, onKnockAll: () -> Unit, onPreferences: () -> Unit, onRefresh: () -> Unit) {
   val now = grantClock()
   val colors = MaterialTheme.colorScheme
@@ -76,8 +79,8 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
     topBar = { TopAppBar(title = { KnockerWordmark() }, expandedHeight = 88.dp, scrollBehavior = scrollBehavior, actions = {
       // An empty home offers the same action as its only floating button instead.
-      if (state.loaded && state.profiles.isNotEmpty()) IconButton(onClick = onNew) { Icon(Icons.Default.Add, "New profile") }
-      IconButton(onClick = onPreferences) { Icon(Icons.Default.Settings, "Settings") }
+      if (state.loaded && state.profiles.isNotEmpty()) BarAction(Icons.Default.Add, "New profile", openDetail == "new", onNew)
+      BarAction(Icons.Default.Settings, "Settings", openDetail == "settings", onPreferences)
     }) },
     snackbarHost = { SnackbarHost(snackbar) },
     floatingActionButton = {
@@ -126,7 +129,9 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
           LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading profiles" })
         }
         itemsIndexed(state.profiles, key = { index, _ -> state.profileRenderKeys[index] }) { _, profile ->
-          Box(Modifier.animateItem()) { NativeProfileCard(profile, state, now, onOpen, onKnock) }
+          Box(Modifier.animateItem()) {
+            NativeProfileCard(profile, state, now, openDetail == "profile:${profile.optString("id")}", onOpen, onKnock)
+          }
         }
       }
       if (state.loaded && state.profiles.isEmpty()) Column(
@@ -144,7 +149,7 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, onOpe
 
 /** Permission color is retained during renewal; every pending foreground matches its container. */
 @Composable
-private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Long,
+private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Long, open: Boolean,
   onOpen: (String) -> Unit, onKnock: (String) -> Unit) {
   val colors = MaterialTheme.colorScheme
   val actionColors = knockerActionColors()
@@ -190,7 +195,10 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   val noticeContent = if (dark) Color(0xFFFFE2A4) else Color(0xFF5B4300)
   // One elevated card owns the server and its warning. The amber footer stays
   // outside the clickable green status area, but shares the panel's outline.
-  ElevatedCard(modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Profile $name" },
+  // Beside an open editor, its profile carries an outline; status colors keep their meaning.
+  ElevatedCard(modifier = Modifier.fillMaxWidth()
+      .then(if (open) Modifier.border(3.dp, colors.primary, MaterialTheme.shapes.extraLarge) else Modifier)
+      .semantics { contentDescription = "Profile $name"; selected = open },
     shape = MaterialTheme.shapes.extraLarge,
     colors = CardDefaults.elevatedCardColors(containerColor = if (showNotice) noticeColor else fill, contentColor = content),
     elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (showNotice) 3.dp else 1.dp)) {
@@ -273,6 +281,44 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
               maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         }
+      }
+    }
+  }
+}
+
+/** Top-bar actions stay tonal while their destination is open in the other pane. */
+@Composable
+private fun BarAction(icon: ImageVector, label: String, open: Boolean, onClick: () -> Unit) {
+  val modifier = Modifier.semantics { selected = open }
+  if (open) FilledTonalIconButton(onClick = onClick, modifier = modifier) { Icon(icon, label) }
+  else IconButton(onClick = onClick, modifier = modifier) { Icon(icon, label) }
+}
+
+/** The detail pane before a profile is chosen: what the pane is for, and a way to add a server. */
+@Composable
+internal fun NativeDetailPlaceholder(state: NativeUiState, onNew: () -> Unit) {
+  if (!state.loaded || state.fatal != null) return
+  val colors = MaterialTheme.colorScheme
+  val empty = state.profiles.isEmpty()
+  Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+    Column(Modifier.widthIn(max = 420.dp), horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      Surface(shape = MaterialShapes.Cookie9Sided.toShape(), color = colors.primaryContainer,
+        contentColor = colors.onPrimaryContainer, modifier = Modifier.size(112.dp)) {
+        Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Dns, null, Modifier.size(48.dp)) }
+      }
+      Spacer(Modifier.height(4.dp))
+      // An empty list explains itself; this pane only says what will open here.
+      Text(if (empty) "Profiles open here" else "Choose a server", style = MaterialTheme.typography.headlineSmall,
+        textAlign = TextAlign.Center)
+      Text(if (empty) "Add a profile to edit its server, renewal and shortcut settings beside your list."
+        else "Open a profile to edit its server, renewal and shortcut settings.",
+        color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+      // An empty list already offers New profile as its floating action.
+      if (!empty) FilledTonalButton(onClick = onNew, shapes = ButtonDefaults.shapes(), modifier = Modifier.padding(top = 8.dp)) {
+        Icon(Icons.Default.Add, null, Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("New profile")
       }
     }
   }

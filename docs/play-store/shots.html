@@ -64,6 +64,32 @@ pre .r { color: var(--red); }
   width: calc(var(--cw) * var(--s) * 1px); height: calc(var(--ch) * var(--s) * 1px);
   background: var(--img) calc(var(--cx) * var(--s) * -1px) calc(var(--cy) * var(--s) * -1px) / calc(1080px * var(--s)) auto no-repeat;
 }
+/* 10-inch tablet shots: a 1920 x 1080 canvas rendered at 4/3 to 2560 x 1440 (16:9). */
+.tshot {
+  position: relative; width: 1920px; height: 1080px; overflow: hidden;
+  background: radial-gradient(1100px 820px at 70% 54%, rgba(253,229,98,.09), transparent 70%), var(--bg);
+  color: var(--ink);
+}
+.tshot h1 { left: 96px; top: 150px; font-size: 84px; }
+.tshot pre { left: 96px; font-size: 23px; }
+/* Upright landscape tablet around an unaltered emulator capture (2560 x 1600). */
+.tablet {
+  position: absolute; right: 88px; top: calc((1080px - var(--w) * 1600 / 2560) / 2 - 18px); padding: 18px;
+  background: #060605; border-radius: calc(var(--w) * .035 + 18px);
+  box-shadow: 0 0 0 2px #2b2719, 0 50px 120px rgba(0,0,0,.7);
+}
+.tablet::before {
+  content: ""; position: absolute; left: 50%; top: 6px; width: 7px; height: 7px; margin-left: -3.5px;
+  border-radius: 50%; background: #1b1a16;
+}
+.tablet .screen {
+  position: relative; width: var(--w); height: calc(var(--w) * 1600 / 2560);
+  border-radius: calc(var(--w) * .035); overflow: hidden;
+  background: var(--img) 0 0 / var(--w) auto no-repeat;
+}
+/* The camera sits in the bezel, not in the screen like the phone's punch hole. */
+.tablet .screen::before { display: none; }
+.tablet .note { font-size: 22px; }
 </style>
 </head>
 <body>
@@ -102,6 +128,52 @@ pre .r { color: var(--red); }
     <div class="note" style="left:368px;top:707px">◀── one tap</div>
   </div></div>
   <div class="card" style="left:72px;top:1500px"><div class="crop" style="--img:url(source/notification.png);--cx:42;--cy:1122;--cw:996;--ch:304;--s:.94"></div></div>
+</section>
+
+<!-- Tablet 1. What Knocker is, with the list beside the open profile -->
+<section class="tshot" id="t1">
+  <h1>Your homelab,<br>locked until<br><em>you knock.</em></h1>
+<pre style="top:476px">
+<b>01  knock  </b>   calls your Knocker server
+<b>02  allowed</b>   your IP gets in, nobody else's
+<b>03  expires</b>   access ends by itself</pre>
+  <div class="tablet" style="--w:1036px"><div class="screen" style="--img:url(source/tablet-home.png)"></div></div>
+</section>
+
+<!-- Tablet 2. Auto-renew: Home server recovered on the new network; NAS, without it, did not -->
+<section class="tshot" id="t2">
+  <h1>New network?<br><em>Knocker<br>knocks again.</em></h1>
+<pre style="top:476px">
+<b>wifi   203.0.113.42</b>   <span class="g">✓ allowed</span>
+  │    you leave the house
+<b>5g     198.51.100.7</b>   <span class="r">✗ new IP, locked out</span>
+  │    <span class="y">auto-renew knocks again</span>
+<b>5g     198.51.100.7</b>   <span class="g">✓ allowed</span>
+<b>also</b>   renews before a knock expires</pre>
+  <div class="tablet" style="--w:1036px"><div class="screen" style="--img:url(source/tablet-renew.png)"></div></div>
+</section>
+
+<!-- Tablet 3. Quick Settings tile with its result notification beside it -->
+<section class="tshot" id="t3">
+  <h1>Knock without<br><em>opening<br>the app.</em></h1>
+<pre style="top:476px">
+<b>tile  </b>   one per server, in Quick Settings
+<b>tap   </b>   knocks in the background
+<b>notice</b>   tells you when you're in</pre>
+  <div class="tablet" style="--w:1036px"><div class="screen" style="--img:url(source/tablet-tile.png)">
+    <div class="note" style="left:398px;top:372px">▲ one tap</div>
+  </div></div>
+</section>
+
+<!-- Tablet 4. Light theme, colors and privacy choices in Settings beside the list -->
+<section class="tshot" id="t4">
+  <h1>Your device,<br><em>your rules.</em></h1>
+<pre style="top:390px">
+<b>theme  </b>   follows Android light and dark
+<b>colors </b>   Knocker yellow or your wallpaper
+<b>reports</b>   crash reports only if you allow
+<b>source </b>   open on GitHub</pre>
+  <div class="tablet" style="--w:1036px"><div class="screen" style="--img:url(source/tablet-settings-light.png)"></div></div>
 </section>
 
 </body>

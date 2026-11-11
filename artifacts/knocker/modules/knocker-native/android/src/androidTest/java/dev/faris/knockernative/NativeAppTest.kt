@@ -9,6 +9,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -420,4 +422,105 @@ class NativeAppTest {
     compose.mainClock.autoAdvance = true
   }
 
+  /** A 10-inch tablet in landscape, drawn at a scaled density on the test device. */
+  private fun tablet(state: State<NativeUiState>, emit: (String, Map<String, Any?>) -> Unit = { _, _ -> }) {
+    compose.setContent {
+      DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(1280.dp, 800.dp))) {
+        KnockerTheme { NativeApp(state.value, emit, {}) }
+      }
+    }
+  }
+
+  private fun twoProfiles(): NativeUiState = NativeUiState(loaded().json.apply {
+    getJSONArray("profiles").put(JSONObject("""{"id":"nas","name":"NAS","endpointUrl":"https://nas.example.test",
+      "apiKey":"fake-key","autoRenew":false,"knockOnOpen":false,"pinnedToHome":false}"""))
+  })
+
+  @Test fun largeWindowsKeepTheListBesideTheOpenProfile() {
+    tablet(mutableStateOf(twoProfiles()))
+    compose.onNodeWithText("Choose a server").assertIsDisplayed()
+    compose.onNodeWithContentDescription("Profile Home server").assertIsNotSelected()
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onAllNodesWithText("Edit profile").assertCountEquals(1)
+    compose.onNodeWithText("Choose a server").assertDoesNotExist()
+    // The list stays on screen and marks the profile that is open beside it.
+    compose.onNodeWithContentDescription("Profile Home server").assertIsDisplayed().assertIsSelected()
+    compose.onNodeWithContentDescription("Profile NAS").assertIsDisplayed().assertIsNotSelected()
+    compose.onNodeWithContentDescription("Knock all servers").assertIsDisplayed()
+    compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+    // Choosing another profile replaces the editor rather than stacking a second one.
+    compose.onNodeWithContentDescription("Edit NAS").performClick()
+    compose.onNodeWithText("Name").assertTextContains("NAS")
+    compose.onAllNodesWithText("Edit profile").assertCountEquals(1)
+    compose.onNodeWithContentDescription("Profile NAS").assertIsSelected()
+    compose.onNodeWithContentDescription("Close").performClick()
+    compose.onNodeWithText("Choose a server").assertIsDisplayed()
+    compose.onNodeWithText("Edit profile").assertDoesNotExist()
+  }
+
+  @Test fun switchingProfilesBesideAnUnsavedDraftAsksFirst() {
+    tablet(mutableStateOf(twoProfiles()))
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithText("Name").performTextReplacement("Unsaved name")
+    compose.onNodeWithContentDescription("Edit NAS").performClick()
+    compose.onNodeWithText("Discard unsaved changes?").assertExists()
+    compose.onNodeWithText("Keep editing").performClick()
+    compose.onNodeWithText("Unsaved name").assertExists()
+    compose.onNodeWithContentDescription("Profile Home server").assertIsSelected()
+    compose.onNodeWithContentDescription("Edit NAS").performClick()
+    compose.onNodeWithText("Discard").performClick()
+    compose.onNodeWithText("Name").assertTextContains("NAS")
+  }
+
+  @Test fun settingsAndNewProfileOpenBesideTheList() {
+    tablet(mutableStateOf(loaded()))
+    compose.onNodeWithContentDescription("Settings").performClick()
+    compose.onNodeWithText("Crash reports").assertIsDisplayed()
+    compose.onNodeWithContentDescription("Settings").assertIsSelected()
+    compose.onNodeWithContentDescription("Profile Home server").assertIsDisplayed()
+    compose.onNodeWithContentDescription("New profile").performClick()
+    compose.onNodeWithContentDescription("New profile").assertIsSelected()
+    compose.onNodeWithContentDescription("Settings").assertIsNotSelected()
+    compose.onNodeWithText("Endpoint URL").assertIsDisplayed()
+  }
+
+  @Test fun feedbackBesideAnOpenEditorAppearsOnce() {
+    val state = mutableStateOf(loaded())
+    tablet(state)
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.runOnIdle { state.value = NativeUiState(loaded().json.put("feedback",
+      JSONObject().put("id", 11).put("text", "Unauthorized").put("outcome", "error").put("retry", true))) }
+    compose.onAllNodesWithText("Unauthorized").assertCountEquals(1)
+    compose.onAllNodesWithText("Retry").assertCountEquals(1)
+  }
+
+  @Test fun anUnsavedDraftSurvivesFoldingAndUnfolding() {
+    val size = mutableStateOf(DpSize(1280.dp, 800.dp))
+    compose.setContent {
+      DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(size.value)) {
+        KnockerTheme { NativeApp(loaded(), { _, _ -> }, {}) }
+      }
+    }
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithText("Name").performTextReplacement("Unsaved name")
+    compose.onNodeWithText("API key").performTextReplacement("unsaved-key")
+    // Folded: the editor becomes a full page and keeps the draft.
+    compose.runOnIdle { size.value = DpSize(380.dp, 800.dp) }
+    compose.onNodeWithContentDescription("Back").assertExists()
+    compose.onNodeWithContentDescription("Profile Home server").assertDoesNotExist()
+    compose.onNodeWithText("Unsaved name").assertExists()
+    compose.onNodeWithText("Save").assertIsEnabled()
+    // Unfolded again: the list returns beside the same draft.
+    compose.runOnIdle { size.value = DpSize(1280.dp, 800.dp) }
+    compose.onNodeWithContentDescription("Close").assertExists()
+    compose.onNodeWithContentDescription("Profile Home server").assertIsSelected()
+    compose.onNodeWithText("Unsaved name").assertExists()
+    compose.onNodeWithText("Save").assertIsEnabled()
+    // Leaving discards it; reopening starts from the saved profile.
+    compose.onNodeWithContentDescription("Close").performClick()
+    compose.onNodeWithText("Discard").performClick()
+    compose.onNodeWithContentDescription("Edit Home server").performClick()
+    compose.onNodeWithText("Name").assertTextContains("Home server")
+    compose.onNodeWithText("Save").assertIsNotEnabled()
+  }
 }
