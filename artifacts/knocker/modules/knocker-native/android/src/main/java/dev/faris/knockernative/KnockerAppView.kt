@@ -35,6 +35,9 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.scene.Scene
+import androidx.navigation3.scene.SceneStrategy
+import androidx.navigation3.scene.SceneStrategyScope
 import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import com.facebook.react.uimanager.events.NativeGestureUtil
@@ -205,36 +208,45 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
   // The default policy would skip it, since the list stays on screen either way, and leave the app.
   val listDetail = rememberListDetailSceneStrategy<String>(backNavigationBehavior = BackNavigationBehavior.PopLatest,
     directive = directive)
+  // Home alone keeps the whole window, with its actions in the corner; panes appear once something opens.
+  val panes = remember(listDetail) { object : SceneStrategy<String> {
+    override fun SceneStrategyScope<String>.calculateScene(entries: List<NavEntry<String>>): Scene<String>? =
+      if (entries.size < 2) null else with(listDetail) { calculateScene(entries) }
+  } }
   CompositionLocalProvider(LocalEditorDrafts provides drafts) {
     NavDisplay(
       backStack = if (route == "home") listOf("home") else listOf("home", route),
       // Panes leave gaps between and around them; fill those with the app's own background.
       modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
       onBack = { navigate("home") },
-      sceneStrategies = listOf(listDetail, SinglePaneSceneStrategy()),
+      sceneStrategies = listOf(panes, SinglePaneSceneStrategy()),
       // Screens slide like pages. During a back swipe the page follows the finger
       // toward the far edge and only leaves once the gesture is confirmed. Folding,
       // unfolding or resizing keeps the same destination and only swaps layouts.
+      // In a large window, opening or closing a pane reflows the list rather than
+      // replacing a page, so it cross-fades instead of sliding the list away.
       transitionSpec = {
-        if (initialState.entries.last().contentKey == targetState.entries.last().contentKey)
+        if (twoPane || initialState.entries.last().contentKey == targetState.entries.last().contentKey)
           ContentTransform(fadeIn(tween(PAGE_MILLIS)), fadeOut(tween(PAGE_MILLIS)))
         else ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { it }, slideOutHorizontally(tween(PAGE_MILLIS)) { -it / 4 })
       },
       popTransitionSpec = {
-        ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { -it / 4 }, slideOutHorizontally(tween(PAGE_MILLIS)) { it },
+        if (twoPane) ContentTransform(fadeIn(tween(PAGE_MILLIS)), fadeOut(tween(PAGE_MILLIS)))
+        else ContentTransform(slideInHorizontally(tween(PAGE_MILLIS)) { -it / 4 }, slideOutHorizontally(tween(PAGE_MILLIS)) { it },
           targetContentZIndex = -1f)
       },
       predictivePopTransitionSpec = { edge ->
         val direction = if (edge == NavigationEvent.EDGE_RIGHT) -1 else 1
-        ContentTransform(slideInHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { -direction * it / 4 },
+        if (twoPane) ContentTransform(fadeIn(tween(PAGE_MILLIS, easing = LinearEasing)),
+          fadeOut(tween(PAGE_MILLIS, easing = LinearEasing)))
+        else ContentTransform(slideInHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { -direction * it / 4 },
           slideOutHorizontally(tween(PAGE_MILLIS, easing = LinearEasing)) { direction * it }, targetContentZIndex = -1f)
       },
       entryProvider = { destination ->
         // In two panes, home is the list and every other destination opens beside it.
-        val panes = if (destination == "home") ListDetailSceneStrategy.listPane(detailPlaceholder = {
-          DetailPane(true) { NativeDetailPlaceholder(latestState.value, onNew = { navigate("new") }) }
-        }) else ListDetailSceneStrategy.detailPane()
-        NavEntry(destination, metadata = panes) {
+        val metadata = if (destination == "home") ListDetailSceneStrategy.listPane()
+          else ListDetailSceneStrategy.detailPane()
+        NavEntry(destination, metadata = metadata) {
           DetailPane(twoPane && destination != "home") {
             val sceneState = latestState.value
             if (sceneState.fatal != null) {
@@ -250,6 +262,7 @@ internal fun NativeApp(state: NativeUiState, emit: (String, Map<String, Any?>) -
             } else if (destination == "home") {
               // The list marks whatever is open beside it.
               NativeHome(sceneState, snackbar, openDetail = route.takeIf { twoPane && it != "home" },
+                grid = twoPane && route == "home",
                 onOpen = { navigate("profile:$it") },
                 onNew = { navigate("new") },
                 onKnock = { dispatch("knock", mapOf("id" to it), feedback = true) },

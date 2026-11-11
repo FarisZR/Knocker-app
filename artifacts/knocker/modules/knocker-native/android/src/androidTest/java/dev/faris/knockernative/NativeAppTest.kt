@@ -436,13 +436,21 @@ class NativeAppTest {
       "apiKey":"fake-key","autoRenew":false,"knockOnOpen":false,"pinnedToHome":false}"""))
   })
 
+  /** The gap between Knock all and the window's right edge, in the 1280dp tablet's dp. */
+  private fun knockAllInset(): Float {
+    val window = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
+    val button = compose.onNodeWithContentDescription("Knock all servers").fetchSemanticsNode().boundsInRoot
+    return (window - button.right) / window * 1280f
+  }
+
   @Test fun largeWindowsKeepTheListBesideTheOpenProfile() {
     tablet(mutableStateOf(twoProfiles()))
-    compose.onNodeWithText("Choose a server").assertIsDisplayed()
-    compose.onNodeWithContentDescription("Profile Home server").assertIsNotSelected()
+    // Nothing open: home keeps the whole window, with its actions in the corner.
+    compose.onNodeWithContentDescription("Profile Home server").assertIsDisplayed().assertIsNotSelected()
+    compose.onNodeWithContentDescription("Close").assertDoesNotExist()
+    assertTrue("Knock all must sit in the window's corner", knockAllInset() < 40f)
     compose.onNodeWithContentDescription("Edit Home server").performClick()
     compose.onAllNodesWithText("Edit profile").assertCountEquals(1)
-    compose.onNodeWithText("Choose a server").assertDoesNotExist()
     // The list stays on screen and marks the profile that is open beside it.
     compose.onNodeWithContentDescription("Profile Home server").assertIsDisplayed().assertIsSelected()
     compose.onNodeWithContentDescription("Profile NAS").assertIsDisplayed().assertIsNotSelected()
@@ -453,9 +461,11 @@ class NativeAppTest {
     compose.onNodeWithText("Name").assertTextContains("NAS")
     compose.onAllNodesWithText("Edit profile").assertCountEquals(1)
     compose.onNodeWithContentDescription("Profile NAS").assertIsSelected()
+    // Closing it gives home the whole window again.
     compose.onNodeWithContentDescription("Close").performClick()
-    compose.onNodeWithText("Choose a server").assertIsDisplayed()
     compose.onNodeWithText("Edit profile").assertDoesNotExist()
+    compose.onNodeWithContentDescription("Profile NAS").assertIsNotSelected()
+    assertTrue("Knock all must return to the window's corner", knockAllInset() < 40f)
   }
 
   @Test fun switchingProfilesBesideAnUnsavedDraftAsksFirst() {
