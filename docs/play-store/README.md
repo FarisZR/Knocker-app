@@ -12,10 +12,10 @@ The three 1080 × 1920 PNGs in `screenshots/`:
 
 ## 10-inch tablet
 
-The four 2560 × 1440 PNGs in `screenshots/tablet/`. Play asks for 16:9 landscape or 9:16 portrait with every side between 1,080 and 7,680 px, and recommends at least four tablet screenshots. Upload the same set for 7-inch tablets if that slot is used. Every capture shows the list-detail layout, with the profile list beside the open profile or Settings.
+The four 2560 × 1440 PNGs in `screenshots/tablet/`. Play asks for 16:9 landscape or 9:16 portrait with every side between 1,080 and 7,680 px, and recommends at least four tablet screenshots. Upload the same set for 7-inch tablets if that slot is used. The set shows both tablet layouts: home across the whole window when nothing is open, and the profile list beside an open profile or Settings.
 
-1. `01-what-it-is.png`: the pitch and the three steps of a knock. Three whitelisted servers in the list, Home server open beside it.
-2. `02-auto-renew.png`: the auto-renew story. Home server (auto-renew on) has knocked again from the new address `198.51.100.7`. NAS (auto-renew off) still holds its old grant and shows the amber "IP changed · not whitelisted" footer.
+1. `01-what-it-is.png`: the pitch and the three steps of a knock, over the full-window home: five whitelisted servers in columns, with Knock all and the pinned knock in the bottom-right corner.
+2. `02-auto-renew.png`: the auto-renew story, with the Auto-renew switch spotlit in Home server's open profile. Home server (auto-renew on) has knocked again from the new address `198.51.100.7`. In the dimmed list, NAS (auto-renew off) still holds its old grant and shows the amber "IP changed · not whitelisted" footer.
 3. `03-quick-settings.png`: the tablet's split shade. The Knocker tile is in Quick Settings and its result notification sits beside it.
 4. `04-your-rules.png`: light theme with Settings open: Android light/dark, Knocker yellow or wallpaper colors, opt-in crash reports and the source link.
 
@@ -25,7 +25,7 @@ Everything is laid out in `shots.html` and screenshotted by `render.py` with hea
 
 - A headline in Inter Bold with one Knocker-yellow phrase.
 - A short monospace block (JetBrains Mono) that explains the feature in a few aligned lines.
-- An upright device frame around an unaltered Android 16 emulator capture from `source/`: a Pixel 7 for phones, a Pixel Tablet in landscape (2560 × 1600) for tablets. Phone shot 3 adds one unaltered crop of the notification capture, and both tile shots add a "one tap" pointer.
+- An upright device frame around an unaltered Android 16 emulator capture from `source/`: a Pixel 7 for phones, a Pixel Tablet in landscape (2560 × 1600) for tablets. Phone shot 3 adds one unaltered crop of the notification capture, both tile shots add a "one tap" pointer, and tablet shot 2 dims the screen around the Auto-renew row (`.spot`) with a short label.
 
 Phone sources: `home.png` and `renew.png` show the native Compose design (top-bar New profile action, list-row editor with the floating Save action). `tile.png` and `notification.png` are system UI and did not change with that redesign. Recapture `home.png` and `renew.png` whenever the home screen or profile editor changes.
 
@@ -37,7 +37,7 @@ Tablet sources: `tablet-home.png`, `tablet-renew.png`, `tablet-tile.png` and `ta
 - the Knocker tile resized to its large, labelled form, and the emulator's "Serial console enabled" notice snoozed;
 - exact-alarm access allowed, so the editor does not show the "Allow precise renewal" prompt.
 
-Both fonts are vendored in `fonts/` under the SIL OFL 1.1. Addresses come from the documentation ranges (`203.0.113.42`, `198.51.100.7`). The capture profiles used a temporary demo server, so its hostname is not a production endpoint. For the tablet set, `artifacts/knocker/scripts/network-test-server.mjs` was adapted to keep one grant per endpoint path, which gives the three profiles independent states.
+Both fonts are vendored in `fonts/` under the SIL OFL 1.1. Addresses come from the documentation ranges (`203.0.113.42`, `198.51.100.7`). The capture profiles used a temporary demo server, so its hostname is not a production endpoint. For the tablet set, `artifacts/knocker/scripts/network-test-server.mjs` was adapted to keep one grant per endpoint path, which gives each profile an independent state. Only these two documentation addresses appear in the captures; the fixture reports them in place of the caller's real address.
 
 ## Regenerating
 
