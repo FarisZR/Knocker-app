@@ -28,7 +28,6 @@ TABLET_SHOTS = {
     't1': '01-what-it-is.png',
     't2': '02-auto-renew.png',
     't3': '03-quick-settings.png',
-    't4': '04-your-rules.png',
 }
 
 
