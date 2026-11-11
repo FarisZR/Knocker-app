@@ -90,6 +90,12 @@ pre .r { color: var(--red); }
 /* The camera sits in the bezel, not in the screen like the phone's punch hole. */
 .tablet .screen::before { display: none; }
 .tablet .note { font-size: 22px; }
+/* One setting in a capture, lifted out of a dimmed screen. */
+.spot {
+  position: absolute; border-radius: 18px; outline: 3px solid var(--yl); outline-offset: 0;
+  box-shadow: 0 0 0 2400px rgba(6,6,5,.62);
+}
+.spot + .note { background: #060605; padding: 6px 10px; border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -130,7 +136,7 @@ pre .r { color: var(--red); }
   <div class="card" style="left:72px;top:1500px"><div class="crop" style="--img:url(source/notification.png);--cx:42;--cy:1122;--cw:996;--ch:304;--s:.94"></div></div>
 </section>
 
-<!-- Tablet 1. What Knocker is, with the list beside the open profile -->
+<!-- Tablet 1. What Knocker is: home across the whole window, actions in the corner -->
 <section class="tshot" id="t1">
   <h1>Your homelab,<br>locked until<br><em>you knock.</em></h1>
 <pre style="top:476px">
@@ -140,7 +146,7 @@ pre .r { color: var(--red); }
   <div class="tablet" style="--w:1036px"><div class="screen" style="--img:url(source/tablet-home.png)"></div></div>
 </section>
 
-<!-- Tablet 2. Auto-renew: Home server recovered on the new network; NAS, without it, did not -->
+<!-- Tablet 2. Auto-renew: the setting itself, lit in the open profile -->
 <section class="tshot" id="t2">
   <h1>New network?<br><em>Knocker<br>knocks again.</em></h1>
 <pre style="top:476px">
@@ -150,7 +156,10 @@ pre .r { color: var(--red); }
   │    <span class="y">auto-renew knocks again</span>
 <b>5g     198.51.100.7</b>   <span class="g">✓ allowed</span>
 <b>also</b>   renews before a knock expires</pre>
-  <div class="tablet" style="--w:1036px"><div class="screen" style="--img:url(source/tablet-renew.png)"></div></div>
+  <div class="tablet" style="--w:1036px"><div class="screen" style="--img:url(source/tablet-renew.png)">
+    <div class="spot" style="left:694px;top:274px;width:324px;height:78px"></div>
+    <div class="note" style="left:694px;top:364px">▲ knocks again by itself</div>
+  </div></div>
 </section>
 
 <!-- Tablet 3. Quick Settings tile with its result notification beside it -->
