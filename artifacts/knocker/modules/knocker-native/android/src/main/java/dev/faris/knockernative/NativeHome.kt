@@ -12,6 +12,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -56,7 +60,8 @@ private fun grantClock(): Long {
 
 /** The native scaffold measures its action stack and places standard feedback above it. */
 @Composable
-internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, openDetail: String? = null, onOpen: (String) -> Unit,
+internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, openDetail: String? = null, grid: Boolean = false,
+  onOpen: (String) -> Unit,
   onNew: () -> Unit, onKnock: (String) -> Unit, onKnockAll: () -> Unit, onPreferences: () -> Unit, onRefresh: () -> Unit) {
   val now = grantClock()
   val colors = MaterialTheme.colorScheme
@@ -121,8 +126,21 @@ internal fun NativeHome(state: NativeUiState, snackbar: SnackbarHostState, openD
   ) { padding ->
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refreshing = true; onRefresh() },
       modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
-      LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = clearance),
+      val contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = clearance)
+      if (grid) {
+        // A tablet's whole window lays cards out in columns instead of one stretched list.
+        LazyVerticalStaggeredGrid(StaggeredGridCells.Adaptive(GRID_CARD_MIN_WIDTH),
+          Modifier.widthIn(max = GRID_MAX_WIDTH).fillMaxSize(), contentPadding = contentPadding,
+          verticalItemSpacing = 12.dp, horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+          if (!state.loaded) item(span = StaggeredGridItemSpan.FullLine) {
+            LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading profiles" })
+          }
+          itemsIndexed(state.profiles, key = { index, _ -> state.profileRenderKeys[index] }) { _, profile ->
+            Box(Modifier.animateItem()) { NativeProfileCard(profile, state, now, false, onOpen, onKnock) }
+          }
+        }
+      } else LazyColumn(Modifier.widthIn(max = 840.dp).fillMaxSize(), contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(12.dp)
       ) {
         if (!state.loaded) item {
@@ -286,40 +304,13 @@ private fun NativeProfileCard(profile: JSONObject, state: NativeUiState, now: Lo
   }
 }
 
+private val GRID_CARD_MIN_WIDTH = 340.dp
+private val GRID_MAX_WIDTH = 1240.dp
+
 /** Top-bar actions stay tonal while their destination is open in the other pane. */
 @Composable
 private fun BarAction(icon: ImageVector, label: String, open: Boolean, onClick: () -> Unit) {
   val modifier = Modifier.semantics { selected = open }
   if (open) FilledTonalIconButton(onClick = onClick, modifier = modifier) { Icon(icon, label) }
   else IconButton(onClick = onClick, modifier = modifier) { Icon(icon, label) }
-}
-
-/** The detail pane before a profile is chosen: what the pane is for, and a way to add a server. */
-@Composable
-internal fun NativeDetailPlaceholder(state: NativeUiState, onNew: () -> Unit) {
-  if (!state.loaded || state.fatal != null) return
-  val colors = MaterialTheme.colorScheme
-  val empty = state.profiles.isEmpty()
-  Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-    Column(Modifier.widthIn(max = 420.dp), horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      Surface(shape = MaterialShapes.Cookie9Sided.toShape(), color = colors.primaryContainer,
-        contentColor = colors.onPrimaryContainer, modifier = Modifier.size(112.dp)) {
-        Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Dns, null, Modifier.size(48.dp)) }
-      }
-      Spacer(Modifier.height(4.dp))
-      // An empty list explains itself; this pane only says what will open here.
-      Text(if (empty) "Profiles open here" else "Choose a server", style = MaterialTheme.typography.headlineSmall,
-        textAlign = TextAlign.Center)
-      Text(if (empty) "Add a profile to edit its server, renewal and shortcut settings beside your list."
-        else "Open a profile to edit its server, renewal and shortcut settings.",
-        color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-      // An empty list already offers New profile as its floating action.
-      if (!empty) FilledTonalButton(onClick = onNew, shapes = ButtonDefaults.shapes(), modifier = Modifier.padding(top = 8.dp)) {
-        Icon(Icons.Default.Add, null, Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("New profile")
-      }
-    }
-  }
 }

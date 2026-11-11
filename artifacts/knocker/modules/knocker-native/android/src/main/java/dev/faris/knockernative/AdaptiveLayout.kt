@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.toSize
 
 /**
  * Tablets, unfolded foldables and large windows show the profile list beside the open
- * profile or Settings. Two panes need room for a phone-width list and a usable editor,
+ * profile or Settings. With nothing open, home keeps the whole window. Two panes need room for a phone-width list and a usable editor,
  * and a window taller than a phone on its side, which keeps its single, full-width page.
  */
 @Composable
@@ -44,7 +44,7 @@ private val TWO_PANE_MIN_HEIGHT = 480.dp
 internal val LocalDetailPane = staticCompositionLocalOf { false }
 
 /**
- * In two panes, the open profile, Settings or the placeholder sit in one rounded
+ * In two panes, the open profile or Settings sits in one rounded
  * container beside the list. The container pads for the window edges it touches,
  * which consumes those insets, so app bars and forms inside do not pad twice.
  */

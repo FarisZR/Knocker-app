@@ -75,7 +75,9 @@ internal fun NativeEditor(id: String?, state: NativeUiState, snackbar: SnackbarH
     return
   }
   val drafts = LocalEditorDrafts.current ?: remember { EditorDrafts() }
-  val editor = drafts.get(id) { current ?: ProfileForm() }
+  // A recomposition keeps its draft even after navigation clears the shared store;
+  // a new composition, after a fold or unfold, picks the shared draft up again.
+  val editor = remember(drafts, id) { drafts.get(id) { current ?: ProfileForm() } }
   var baseline by editor::baseline
   var draft by editor::draft
   var showKey by editor::showKey
