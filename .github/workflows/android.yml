@@ -69,8 +69,6 @@ jobs:
       - name: Set temporary signing path
         run: echo "KNOCKER_KEYSTORE_PATH=$RUNNER_TEMP/upload.p12" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-android
-      - name: Release tooling tests
-        run: node --test scripts/tests/*.test.mjs
       - name: Version and publishing metadata
         id: metadata
         env:
@@ -89,17 +87,17 @@ jobs:
           done
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KNOCKER_KEYSTORE_PATH"
-      - name: JavaScript tests
-        run: pnpm --filter @workspace/knocker test
-      - name: Workspace typecheck
+      - name: App and release tooling tests
+        run: pnpm test
+      - name: App typecheck
         run: pnpm typecheck
       - name: Generate Android project
-        run: pnpm --filter @workspace/knocker android:prebuild
+        run: pnpm android:prebuild
       - name: Native tests and UI test compilation
-        working-directory: artifacts/knocker/android
+        working-directory: android
         run: ./gradlew :knocker-native:testDebugUnitTest :knocker-native:compileDebugAndroidTestKotlin -PreactNativeArchitectures="$ANDROID_ARCHITECTURES" --build-cache --console=plain --max-workers=2
       - name: Build APK and AAB with embedded JavaScript and Sentry source maps
-        working-directory: artifacts/knocker/android
+        working-directory: android
         run: ./gradlew :app:assembleRelease :app:bundleRelease -PreactNativeArchitectures="$ANDROID_ARCHITECTURES" --build-cache --console=plain --max-workers=2
       - name: Native compiler cache statistics
         run: ccache --show-stats
@@ -108,7 +106,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: knocker-apk-${{ github.run_number }}
-          path: artifacts/knocker/android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@v4
@@ -116,7 +114,7 @@ jobs:
         with:
           name: knocker-playstore-aab-${{ github.run_number }}
           path: |
-            artifacts/knocker/android/app/build/outputs/bundle/release/*.aab
+            android/app/build/outputs/bundle/release/*.aab
             play-release-notes/
           if-no-files-found: error
           retention-days: 7
@@ -124,7 +122,7 @@ jobs:
         if: always()
         with:
           name: android-test-results-${{ github.run_number }}-${{ github.event_name }}
-          path: artifacts/knocker/modules/knocker-native/android/build/test-results/
+          path: modules/knocker-native/android/build/test-results/
       - name: Remove signing key
         if: always()
         run: rm -f "$KNOCKER_KEYSTORE_PATH"
@@ -183,7 +181,7 @@ jobs:
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.fariszr.knocker
-          releaseFiles: distribution/artifacts/knocker/android/app/build/outputs/bundle/release/*.aab
+          releaseFiles: distribution/android/app/build/outputs/bundle/release/*.aab
           track: ${{ inputs.track || vars.PLAY_TRACK || 'internal' }}
           status: ${{ inputs.status || vars.PLAY_RELEASE_STATUS || 'draft' }}
           releaseName: ${{ needs.build.outputs.version }}

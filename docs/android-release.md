@@ -4,7 +4,7 @@ Related: [launch tracking issue #5](https://github.com/FarisZR/Knocker-app/issue
 
 ## Builds
 
-**Android CI and release** runs on pushes to `main`, pull requests, published GitHub releases, and manual dispatch. Feature-branch pushes use the PR run instead of building the same commit twice; use a manual dispatch for a signed build of an unmerged branch. It installs the frozen pnpm lockfile, runs all Knocker JS tests and workspace typechecks, generates Android from Expo configuration, runs native JVM tests, compiles the instrumentation tests, and builds release APK + AAB with embedded Hermes JavaScript. Compilation does not run device tests; complete the [background QA checklist](../artifacts/knocker/modules/knocker-native/README.md#background-release-qa) separately.
+**Android CI and release** runs on pushes to `main`, pull requests, published GitHub releases, and manual dispatch. Feature-branch pushes use the PR run instead of building the same commit twice; use a manual dispatch for a signed build of an unmerged branch. It installs the frozen pnpm lockfile, runs all Knocker JS tests and app typechecks, generates Android from Expo configuration, runs native JVM tests, compiles the instrumentation tests, and builds release APK + AAB with embedded Hermes JavaScript. Compilation does not run device tests; complete the [background QA checklist](../modules/knocker-native/README.md#background-release-qa) separately.
 
 Pushes, releases and manual runs use the production upload certificate. PRs build with the development certificate, have source-map uploads disabled, and never publish. Fork PRs need no credentials. Release APKs attach to the GitHub release. APKs are also Actions artifacts for 14 days; signed AABs stay in Actions for 7 days and are never attached to the public release. Actions artifacts are **not secret storage**: on this public repository, signed-in users with repository read access can download them. Signing passwords, private keys and auth tokens are never artifacts.
 
@@ -60,6 +60,6 @@ Use a semantic version tag and put **only the Play changelog (1–500 characters
 
 ## Local reproduction
 
-Install pnpm 10.28.2, Node 22, Java 21 and the Android SDK. Run `pnpm install --frozen-lockfile`, `pnpm --filter @workspace/knocker test`, `pnpm typecheck`, and `pnpm --filter @workspace/knocker android:prebuild`. In `artifacts/knocker/android`, run `./gradlew :knocker-native:testDebugUnitTest :knocker-native:compileDebugAndroidTestKotlin :app:assembleRelease :app:bundleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64`.
+Install pnpm 10.28.2, Node 22, Java 21 and the Android SDK. Run `pnpm install --frozen-lockfile`, `pnpm test`, `pnpm typecheck`, and `pnpm android:prebuild`. In `android`, run `./gradlew :knocker-native:testDebugUnitTest :knocker-native:compileDebugAndroidTestKotlin :app:assembleRelease :app:bundleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64`.
 
 For production signing export `KNOCKER_SIGN_RELEASE=true`, absolute `KNOCKER_KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`, `SENTRY_AUTH_TOKEN`, `KNOCKER_VERSION_NAME` and `KNOCKER_VERSION_CODE` **before prebuild**. The generated Gradle script reads signing credentials from the environment, not a checked-in properties file. Never commit native build output or credentials.

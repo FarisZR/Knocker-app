@@ -1,4 +1,4 @@
-name: Set up Android workspace
+name: Set up Android app
 description: Install pinned JavaScript dependencies and Android build tools
 runs:
   using: composite

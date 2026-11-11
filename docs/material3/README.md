@@ -49,9 +49,9 @@ Use Node 22.13+, pnpm, JDK 21 and the Android SDK requested by Gradle. Generated
 ```sh
 pnpm install --frozen-lockfile
 pnpm typecheck
-pnpm --filter @workspace/knocker test
-pnpm --filter @workspace/knocker exec expo prebuild --platform android --no-install
-cd artifacts/knocker/android
+pnpm test
+pnpm exec expo prebuild --platform android --no-install
+cd android
 ./gradlew :knocker-native:lintDebug :knocker-native:testDebugUnitTest
 ./gradlew :knocker-native:connectedDebugAndroidTest
 SENTRY_DISABLE_AUTO_UPLOAD=true ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64 \
@@ -74,7 +74,7 @@ Android lint was also run. It reported nine errors in unchanged network, notific
 
 ## Controlled device validation
 
-`node artifacts/knocker/scripts/ui-test-server.mjs` starts a loopback-only Caddy-shaped fixture. Use an HTTPS tunnel and fake keys. `/ok` succeeds, `/denied` returns 403, and paths containing `/slow/` wait eight seconds. `/slow/denied` combines the delay and failure. Returned IP `203.0.113.42` is documentation data. The fixture is not part of app runtime.
+`node scripts/ui-test-server.mjs` starts a loopback-only Caddy-shaped fixture. Use an HTTPS tunnel and fake keys. `/ok` succeeds, `/denied` returns 403, and paths containing `/slow/` wait eight seconds. `/slow/denied` combines the delay and failure. Returned IP `203.0.113.42` is documentation data. The fixture is not part of app runtime.
 
 Installed-release checks passed for cold-start hydration, profile opening, one editor title, native system Back, a dirty draft retained through rotation, Keep editing, save acknowledgement and grant retention after rename. Also exercised bulk mixed success/failure, successful individual renewal, new-profile single-title presentation and inline validation.
 

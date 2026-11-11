@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-app=artifacts/knocker/android/app/build/outputs
+app=android/app/build/outputs
 apk="$app/apk/release/app-release.apk"
 aab="$app/bundle/release/app-release.aab"
 build_tools="${ANDROID_HOME:?}/build-tools/37.0.0"
