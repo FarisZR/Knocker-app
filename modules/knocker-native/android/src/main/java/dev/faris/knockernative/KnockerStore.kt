@@ -32,6 +32,9 @@ data class StoredProfile(
     return endpointUrl.isNotBlank() && apiKey.isNotBlank()
   }
 
+  /** "demo" as the server address simulates a server locally, for Google Play review. */
+  val isDemo: Boolean get() = endpointUrl.trim().equals("demo", ignoreCase = true)
+
   /** Computes the next renewal using the current saved safety window, or disables it. */
   fun renewalAtMillis(): Long? {
     if (!autoRenew || expiresAt == null) return null

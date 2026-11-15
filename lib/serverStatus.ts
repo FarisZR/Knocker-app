@@ -12,11 +12,16 @@ export interface ServerStatus {
 
 /** A failed, unsupported or malformed check is unknown, never an inactive grant. */
 export async function checkServerStatus(
-  profile: Pick<Profile, "endpointUrl" | "apiKey">,
+  profile: Pick<Profile, "endpointUrl" | "apiKey"> & Partial<Pick<Profile, "expiresAt">>,
   signal: AbortSignal,
   request: typeof fetch = expoFetch,
 ): Promise<ServerStatus | null> {
   if (signal.aborted || !profile.endpointUrl || !profile.apiKey) return null;
+  // Play review demo profile ("demo" as the server address): no request is sent.
+  if (profile.endpointUrl.trim().toLowerCase() === "demo") {
+    const expiresAt = (profile.expiresAt ?? 0) > Date.now() ? profile.expiresAt! : null;
+    return { checkedAt: Date.now(), ipAddress: "203.0.113.42", whitelisted: !!expiresAt, expiresAt };
+  }
   try {
     const response = await request(
       `${profile.endpointUrl.replace(/\/+$/, "")}/status`,

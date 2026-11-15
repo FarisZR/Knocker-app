@@ -25,12 +25,21 @@ sealed interface KnockOutcome {
   ) : KnockOutcome
 }
 
+internal const val DEMO_IP = "203.0.113.42"
+
 object KnockerHttp {
   /** Sends one bounded request on the captured Android network and returns grant or failure metadata. */
   fun knock(profile: StoredProfile, context: Context, captured: KnockerNetwork.Connection = KnockerNetwork.capture(context)): KnockOutcome {
     val network = captured.identity
     if (!profile.canKnock()) {
       return KnockOutcome.Failure(null, "Profile is not fully configured")
+    }
+    if (profile.isDemo) {
+      Thread.sleep(800)
+      val ttl = profile.ttlSeconds?.takeIf { it > 0 }
+      val now = System.currentTimeMillis()
+      return KnockOutcome.Success(now + (ttl ?: 3600) * 1000L, profile.ipOverride?.trim()?.takeIf { it.isNotEmpty() } ?: DEMO_IP,
+        now, network.id, network.type, (ttl ?: 3600).toLong(), ttl, false, now)
     }
 
     val body = JSONObject().apply {

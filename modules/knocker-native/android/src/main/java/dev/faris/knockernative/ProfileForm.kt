@@ -24,7 +24,7 @@ internal data class ProfileForm(
   fun errors(): Map<String, String> = buildMap {
     if (name.isBlank()) put("name", "Enter a profile name")
     val url = runCatching { URI(endpoint.trim()) }.getOrNull()
-    if (url == null || !url.scheme.equals("https", ignoreCase = true) || url.host.isNullOrBlank() || url.rawUserInfo != null || url.rawFragment != null)
+    if (!endpoint.trim().equals("demo", ignoreCase = true) && (url == null || !url.scheme.equals("https", ignoreCase = true) || url.host.isNullOrBlank() || url.rawUserInfo != null || url.rawFragment != null))
       put("endpoint", "Enter an HTTPS URL, such as https://knock.example.com")
     if (key.isBlank()) put("key", "Enter the API key")
     if (ttl.isNotBlank() && (ttl.toIntOrNull() ?: 0) <= 0) put("ttl", "Enter positive seconds or leave blank")

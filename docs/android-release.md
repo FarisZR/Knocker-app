@@ -39,7 +39,7 @@ The public privacy policy lives in [`remal-net/terms.remal.org`](https://github.
 
 1. Create/finish the Play Console app for `com.fariszr.knocker`; enable Play App Signing using this upload certificate. Download the signed AAB artifact from a successful Actions run and perform the **first upload manually**. Google requires this before API submissions. See [Expo's first-upload guide](https://docs.expo.dev/submit/android-manual/).
 2. Enable the [Google Play Android Developer API](https://developers.google.com/android-publisher/getting_started), create a service account and grant it access to this app, including release permissions for the intended tracks. Store its JSON as `PLAY_SERVICE_ACCOUNT_JSON`.
-3. Complete the privacy policy, Data safety, store listing, app access/reviewer instructions and required account/testing/review steps in issue #5. Automation cannot bypass Google's review or production-access requirements.
+3. Complete the privacy policy, Data safety, store listing, app access/reviewer instructions ([demo mode](play-review-demo.md)) and required account/testing/review steps in issue #5. Automation cannot bypass Google's review or production-access requirements.
 4. Run the workflow from **main** with `publish=true`, version name, 1–500 character English changelog, track `internal`, status `draft`. Confirm the bundle/version/notes in Console. A draft app may only accept draft releases.
 5. When eligible, use status `completed` to submit a release. Google review and managed publishing settings still determine when it becomes visible.
 
