@@ -30,6 +30,8 @@ internal data class ConnectionStatus(val ipAddress: String, val whitelisted: Boo
 
 /** Reads status over the same captured network used to identify the observation. */
 internal fun checkConnectionStatus(profile: StoredProfile, captured: KnockerNetwork.Connection): ConnectionStatus? {
+  if (profile.isDemo) return (profile.grantNetworkId == captured.identity.id && (profile.expiresAt ?: 0L) > System.currentTimeMillis())
+    .let { ConnectionStatus(DEMO_IP, it, if (it) profile.expiresAt else null) }
   val deadline = SystemClock.elapsedRealtime() + 4000L
   var connection: HttpURLConnection? = null
   var timeout: java.util.concurrent.ScheduledFuture<*>? = null
